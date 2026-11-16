@@ -1120,9 +1120,9 @@ function Layout({
 }) {
   const t = useT();
   return (
-    <div className="mx-auto flex max-w-2xl flex-col gap-6 p-6">
+    <div className="mx-auto flex max-w-2xl flex-col gap-6 p-2">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">
+        <h1 className="text-xl font-semibold tracking-tight">
           {titulo ?? t("Atualização do sistema")}
         </h1>
       </header>

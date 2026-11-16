@@ -32,9 +32,9 @@ export default async function TeamNovoUsuarioPage() {
   const t = (texto: string) => traduzir(texto, idioma);
 
   return (
-    <div className="flex h-full flex-col gap-6 p-6">
+    <div className="flex h-full flex-col gap-5 p-2">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">{t("Criar usuário com senha")}</h1>
+        <h1 className="text-xl font-semibold tracking-tight">{t("Criar usuário com senha")}</h1>
         <p className="text-sm text-muted-foreground">
           {t(
             "A conta já nasce pronta, com uma senha provisória que aparece uma vez ao criar. No primeiro acesso a pessoa precisa escolher uma senha própria. Nenhum e-mail é enviado.",

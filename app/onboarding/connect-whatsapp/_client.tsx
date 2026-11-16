@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { skipWhatsapp, markWhatsappConfigured } from "@/app/actions/onboarding/skipWhatsapp";
 import { CanalOficialClient } from "@/components/connections/CanalOficialClient";
 import { CanalParceiroClient } from "@/components/connections/CanalParceiroClient";
+import { AvisoDoPasso, RodapeDoPasso, cartaoDeEscolha } from "../_components/Passo";
 
 interface Props {
   wahaConfigured: boolean;
@@ -132,9 +133,7 @@ function Escolha({
     <label
       data-testid={`forma-${valor}`}
       data-marcada={marcada ? "sim" : "nao"}
-      className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors ${
-        marcada ? "border-primary bg-primary/5" : "border-border hover:bg-muted/40"
-      }`}
+      className={cartaoDeEscolha(marcada)}
     >
       <input
         type="radio"
@@ -142,12 +141,12 @@ function Escolha({
         value={valor}
         checked={marcada}
         onChange={() => onEscolher(valor)}
-        className="mt-1 h-4 w-4 shrink-0 accent-primary"
+        className="mt-0.5 h-4 w-4 shrink-0 accent-accent"
         aria-label={titulo}
       />
       <span className="space-y-1">
-        <span className="block text-sm font-medium">{titulo}</span>
-        <span className="block text-xs text-muted-foreground">{corpo}</span>
+        <span className="block text-sm font-medium text-text">{titulo}</span>
+        <span className="block text-sm leading-relaxed text-text-muted">{corpo}</span>
       </span>
     </label>
   );
@@ -161,7 +160,7 @@ function VoltarParaEscolha({ onVoltar }: { onVoltar: () => void }) {
       type="button"
       data-testid="voltar-para-escolha"
       onClick={onVoltar}
-      className="text-xs text-muted-foreground underline underline-offset-4 hover:text-foreground"
+      className="inline-flex min-h-11 items-center text-xs text-text-muted underline underline-offset-4 hover:text-text lg:min-h-0"
     >
       ← {t("Escolher outra forma")}
     </button>
@@ -180,26 +179,30 @@ function Saidas({ status, sessionName }: { status: Status; sessionName: string }
   const t = useT();
   const [pending, startTransition] = useTransition();
   return (
-    <div className="flex flex-wrap gap-2 pt-2">
+    <RodapeDoPasso
+      secundaria={
+        <Button
+          type="button"
+          variant="ghost"
+          disabled={pending}
+          onClick={() =>
+            startTransition(async () => {
+              try {
+                await skipWhatsapp();
+              } catch (err) {
+                if (isRedirectError(err)) throw err;
+                toast.error(`${t("Falha ao pular:")} ${String(err)}`);
+              }
+            })
+          }
+        >
+          {t("Pular por enquanto")}
+        </Button>
+      }
+    >
       <Button
         type="button"
         variant="outline"
-        disabled={pending}
-        onClick={() =>
-          startTransition(async () => {
-            try {
-              await skipWhatsapp();
-            } catch (err) {
-              if (isRedirectError(err)) throw err;
-              toast.error(`${t("Falha ao pular:")} ${String(err)}`);
-            }
-          })
-        }
-      >
-        {t("Pular por enquanto")}
-      </Button>
-      <Button
-        type="button"
         disabled={pending || status === "WORKING"}
         onClick={() =>
           startTransition(async () => {
@@ -217,7 +220,7 @@ function Saidas({ status, sessionName }: { status: Status; sessionName: string }
       >
         {t("Conectei em outro lugar")}
       </Button>
-    </div>
+    </RodapeDoPasso>
   );
 }
 
@@ -355,15 +358,15 @@ export function ConnectWhatsappClient({
   // é o único estado em que esta tela não tem efeito colateral nenhum.
   if (forma === null) {
     return (
-      <div className="space-y-4 rounded-lg border bg-background p-6">
-        <fieldset className="space-y-3">
-          <legend className="text-sm font-medium">{t("Como você já usa esse número?")}</legend>
-          <p className="text-xs text-muted-foreground">
+      <div className="space-y-8 border-t border-border pt-8">
+        <fieldset className="space-y-4">
+          <legend className="text-base font-semibold text-text">{t("Como você já usa esse número?")}</legend>
+          <p className="max-w-prose text-sm text-text-muted">
             {t(
               "Existe mais de um jeito de ter WhatsApp para empresa, e cada um conecta de um jeito. Se você nunca ouviu falar dos outros dois, é o primeiro.",
             )}
           </p>
-          <div className="grid gap-2">
+          <div className="grid gap-3">
             <Escolha
               valor="qr"
               atual={forma}
@@ -396,20 +399,20 @@ export function ConnectWhatsappClient({
 
   if (forma === "oficial" || forma === "parceiro") {
     return (
-      <div className="space-y-4 rounded-lg border bg-background p-6">
+      <div className="space-y-6 border-t border-border pt-8">
         <VoltarParaEscolha onVoltar={() => setForma(null)} />
 
         {forma === "oficial" && !oficialPodeReceber && (
-          <div className="rounded-md border border-amber-300/60 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-950/40 dark:text-amber-100">
+          <AvisoDoPasso tom="aviso">
             <p className="font-medium">
               {t("Este servidor ainda não está pronto para RECEBER por este caminho.")}
             </p>
-            <p className="mt-1">
+            <p>
               {t(
                 "Dá para conectar e já enviar, mas as respostas do cliente não vão chegar até quem administra a instalação cadastrar o App da Meta, em Admin › API Oficial (Meta). Se você quer atender hoje, o caminho do código com o celular funciona agora — e dá para trocar depois, sem perder nada.",
               )}
             </p>
-          </div>
+          </AvisoDoPasso>
         )}
 
         {/* Os mesmos componentes da tela de Conexões, inteiros. Reescrevê-los
@@ -423,21 +426,21 @@ export function ConnectWhatsappClient({
   }
 
   return (
-    <div className="space-y-4 rounded-lg border bg-background p-6">
+    <div className="space-y-6 border-t border-border pt-8">
       <VoltarParaEscolha onVoltar={() => setForma(null)} />
       {!wahaConfigured && (
-        <div className="rounded-md border border-amber-300/60 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-950/40 dark:text-amber-100">
+        <AvisoDoPasso tom="aviso">
           <p className="font-medium">{t("O WhatsApp desta instalação ainda não subiu.")}</p>
-          <p className="mt-1">
+          <p>
             {t("Ele roda no seu próprio servidor. Dá para seguir sem ele agora e conectar o número depois, em")}{" "}
             <strong>{t("Canais › Conexões")}</strong> —{" "}
             {t("seu funcionário fica pronto de qualquer jeito, só não terá por onde atender ainda.")}
           </p>
-        </div>
+        </AvisoDoPasso>
       )}
 
       {wahaConfigured && (
-        <div className="rounded-md border bg-muted/40 p-4">
+        <div className="rounded-lg border border-border p-5">
           {/*
             O que estava aqui: "Sessão: org_f3d61bc0" e "Status: INIT".
             O primeiro é um identificador que o produto deriva do id interno da
@@ -447,8 +450,8 @@ export function ConnectWhatsappClient({
             em "INIT", sem código, sem erro e sem próximo passo. A pessoa olha
             uma palavra que não significa nada e não sabe se espera ou desiste.
           */}
-          <p className="text-sm font-medium">{rotuloDoEstado(busy ? "STARTING" : status, t)}</p>
-          <p className="mt-1 text-xs text-muted-foreground">{explicacaoDoEstado(busy ? "STARTING" : status, t)}</p>
+          <p className="text-sm font-semibold text-text">{rotuloDoEstado(busy ? "STARTING" : status, t)}</p>
+          <p className="mt-1 text-xs text-text-muted">{explicacaoDoEstado(busy ? "STARTING" : status, t)}</p>
 
           {/*
             O CÓDIGO EM SI. `showQr` já existia calculado (e o `qrTick` já era
@@ -468,7 +471,7 @@ export function ConnectWhatsappClient({
             <PairingOptions key={info.channel_session_id} sessionId={info.channel_session_id} telefoneExemplo={telefoneExemplo} qr={
             <div className="mt-3 flex flex-col items-center gap-2">
               {qrFailed ? (
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-text-muted">
                   {t(
                     "Não consegui carregar o código agora. Ele deve reaparecer sozinho em instantes — se não aparecer, gere outro abaixo.",
                   )}
@@ -479,7 +482,7 @@ export function ConnectWhatsappClient({
                   key={qrTick}
                   src={`/api/v1/onboarding/whatsapp/qr?t=${qrTick}`}
                   alt={t("Código QR para conectar o WhatsApp")}
-                  className="h-48 w-48 rounded-md border bg-white object-contain sm:h-56 sm:w-56"
+                  className="h-48 w-48 rounded-md border border-border bg-white object-contain sm:h-56 sm:w-56"
                   onError={() => setQrFailed(true)}
                   onLoad={() => setQrFailed(false)}
                 />
@@ -489,17 +492,17 @@ export function ConnectWhatsappClient({
           )}
 
           {status === "WORKING" && (
-            <p className="mt-3 text-sm font-medium text-emerald-700 dark:text-emerald-400">
+            <p className="mt-3 text-sm font-medium text-success-fg">
               ✓ {t("Conectado! Avançando…")}
             </p>
           )}
 
           {status === "FAILED" && (
             <div className="mt-3 space-y-2">
-              <p className="text-sm text-destructive">
+              <p className="text-sm text-error">
                 {t("O código expirou antes de alguém escanear. É normal — ele vale só alguns minutos.")}
               </p>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-text-muted">
                 {t("Deixe o WhatsApp já aberto em")} <strong>{t("Aparelhos conectados")}</strong>{" "}
                 {t("antes de gerar o próximo, que aí dá tempo de sobra.")}
               </p>
@@ -517,7 +520,7 @@ export function ConnectWhatsappClient({
                 )}
               </p>
               {info.error && (
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-text-muted">
                   {t("Detalhe técnico:")} <code className="break-all">{info.error}</code>
                 </p>
               )}

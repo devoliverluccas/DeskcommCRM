@@ -59,9 +59,9 @@ export default async function AcervoPage() {
   const initialSources = (sourcesRaw ?? []) as unknown as SourceRow[];
 
   return (
-    <div className="flex h-full flex-col gap-6 p-6">
+    <div className="flex h-full flex-col gap-5 p-2">
       <header className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">{t("O que o agente sabe")}</h1>
+        <h1 className="text-xl font-semibold tracking-tight">{t("O que o agente sabe")}</h1>
         <p className="text-sm text-text-muted">
           {t(
             "O material do seu negócio que os assistentes consultam antes de responder. Cada assistente escolhe, na tela dele, o que pode ler daqui.",

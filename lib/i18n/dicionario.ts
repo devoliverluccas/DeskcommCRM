@@ -4818,6 +4818,8 @@ export const DICIONARIO: Traducoes = {
   inativo: { es: "inactivo" },
   "Excluir roteador": { es: "Eliminar enrutador" },
   "Identificação": { es: "Identificación" },
+  // Ficha do contato: título da seção de origem, datas e etiquetas.
+  "Origem e atividade": { es: "Origen y actividad" },
   // #4363 — a passagem automática do roteador agora fala com o CLIENTE: a frase
   // é do dono do roteador, e a tela que a edita é esta.
   "Mensagem de passagem ao cliente": { es: "Mensaje de traspaso al cliente" },
@@ -10767,6 +10769,14 @@ export const DICIONARIO: Traducoes = {
 
   // ─── Estados vazios compartilhados (components/empty/variants.tsx) ───
   "Sem conversas por aqui": { es: "Sin conversaciones por aquí" },
+  "Quando o agente estiver atendendo alguém, a conversa aparece aqui.": {
+    es: "Cuando el agente esté atendiendo a alguien, la conversación aparece aquí.",
+  },
+  "Nenhuma conversa com você agora. As que você assumir aparecem aqui.": {
+    es: "Ninguna conversación contigo ahora. Las que asumas aparecen aquí.",
+  },
+  "As conversas fechadas ficam aqui.": { es: "Las conversaciones cerradas quedan aquí." },
+  "As conversas arquivadas ficam aqui.": { es: "Las conversaciones archivadas quedan aquí." },
   "Quando chegarem mensagens, elas aparecem aqui em tempo real.": {
     es: "Cuando lleguen mensajes, aparecerán aquí en tiempo real.",
   },
@@ -16132,6 +16142,8 @@ export const DICIONARIO: Traducoes = {
   "Confortável": { es: "Cómoda" },
   "Compacta": { es: "Compacta" },
   "Cards compactos": { es: "Tarjetas compactas" },
+  "Visão do funil": { es: "Vista del embudo" },
+  "Você está em": { es: "Estás en" },
   "Mostrar descrição nos cards": { es: "Mostrar descripción en las tarjetas" },
   "Paleta da extensão": { es: "Paleta de la extensión" },
   "Nenhuma (padrão do produto)": { es: "Ninguna (predeterminado del producto)" },

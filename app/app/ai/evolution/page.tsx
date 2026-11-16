@@ -31,9 +31,9 @@ export default async function EvolutionPage() {
   const idioma = user.idioma;
 
   return (
-    <div className="flex h-full flex-col gap-6 p-6">
+    <div className="flex h-full flex-col gap-5 p-2">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">{traduzir("Evolução da IA", idioma)}</h1>
+        <h1 className="text-xl font-semibold tracking-tight">{traduzir("Evolução da IA", idioma)}</h1>
         <p className="text-sm text-text-muted">
           {traduzir(
             "O que seu agente aprendeu no período, o que ele fez com isso, o que mudou no seu resultado — e o que ainda está travando.",

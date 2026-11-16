@@ -59,6 +59,14 @@ interface Props {
   onSelecionarTodosVisiveis?: () => void;
 }
 
+/**
+ * Ação da linha: discreta no mouse (`text-subtle`, sobe a `text` ao passar
+ * sobre a linha) e sempre visível — no toque e abaixo de `md` na cor cheia.
+ * `lg:h-9 lg:w-9`: o e2e mede 36px no computador, e o `icon` do primitivo
+ * rende 32px em `lg`. Entre `md` e `lg` fica o piso de 44px do toque.
+ */
+const ACAO_DA_LINHA = "lg:h-9 lg:w-9 md:text-text-subtle pointer-coarse:md:text-text";
+
 function displayName(c: Contact, t: (texto: string) => string = (texto) => texto): string {
   return rotuloParaAEquipe(c, t);
 }
@@ -91,15 +99,15 @@ function SortableHead({
   className?: string;
 }) {
   const active = orderBy === column;
-  const muted = "text-muted-foreground";
-  const emphasis = "text-foreground";
+  const muted = "text-text-subtle";
+  const emphasis = "text-text";
 
   return (
     <TableHead className={className}>
       <button
         type="button"
         onClick={() => onSort(column)}
-        className="inline-flex items-center gap-1 font-medium hover:text-foreground"
+        className={`inline-flex items-center gap-1 font-medium hover:text-text ${active ? "text-text" : ""}`}
         aria-sort={active ? (orderDir === "asc" ? "ascending" : "descending") : "none"}
       >
         {label}
@@ -258,13 +266,16 @@ export function ContactsTable({
             orderDir={orderDir}
             onSort={onSort}
           />
-          <TableHead>{t("Tags")}</TableHead>
+          {/* Entre 768 e 1023px saem Tags e Última atividade (só CSS), para o
+              Status nunca ser a coluna cortada. */}
+          <TableHead className="max-lg:hidden">{t("Tags")}</TableHead>
           <SortableHead
             label={t("Última atividade")}
             column="last_activity_at"
             orderBy={orderBy}
             orderDir={orderDir}
             onSort={onSort}
+            className="max-lg:hidden"
           />
           <TableHead>{t("Status")}</TableHead>
           <TableHead className="w-[88px]">
@@ -276,7 +287,7 @@ export function ContactsTable({
         {contacts.map((c) => (
           <TableRow
             key={c.id}
-            className="cursor-pointer max-md:flex max-md:flex-wrap max-md:items-center max-md:gap-x-3.5 max-md:px-4 max-md:py-2"
+            className="group cursor-pointer max-md:flex max-md:flex-wrap max-md:items-center max-md:gap-x-3.5 max-md:px-4 max-md:py-2"
           >
             {onAlternarSelecao && (
               <TableCell className="max-md:p-0">
@@ -293,7 +304,7 @@ export function ContactsTable({
                 </button>
               </TableCell>
             )}
-            <TableCell className="font-medium max-md:min-w-0 max-md:flex-1 max-md:p-0 max-md:wrap-anywhere">
+            <TableCell className="font-medium text-text max-md:min-w-0 max-md:flex-1 max-md:p-0 max-md:wrap-anywhere">
               <Link
                 href={`/app/contacts/${c.id}`}
                 className="hover:underline max-md:flex max-md:min-h-11 max-md:items-center"
@@ -301,25 +312,25 @@ export function ContactsTable({
                 {displayName(c)}
               </Link>
             </TableCell>
-            <TableCell className="text-muted-foreground max-md:hidden">
+            <TableCell className="text-text-muted max-md:hidden">
               {c.email ?? "—"}
             </TableCell>
             <TableCell
-              className={`text-muted-foreground max-md:basis-full max-md:py-0 max-md:pr-0 max-md:text-xs ${recuoSobONome}`}
+              className={`tabular-nums text-text-muted max-md:basis-full max-md:py-0 max-md:pr-0 max-md:text-xs ${recuoSobONome}`}
             >
               {c.phone_number ? phoneForDisplay(c.phone_number) : "—"}
             </TableCell>
-            <TableCell className="max-md:hidden">
+            <TableCell className="max-lg:hidden">
               <div className="flex flex-wrap gap-1">
                 {c.tags.length === 0
-                  ? <span className="text-muted-foreground text-xs">—</span>
+                  ? <span className="text-xs text-text-subtle">—</span>
                   : c.tags.map((tag) => (
                       <ChipDeEtiqueta key={tag} tag={tag} />
                     ))}
               </div>
             </TableCell>
             <TableCell
-              className={`text-muted-foreground text-sm max-md:py-0 max-md:pr-0 max-md:text-xs ${recuoSobONome}`}
+              className={`whitespace-nowrap tabular-nums text-text-muted text-sm md:max-lg:hidden max-md:whitespace-normal max-md:py-0 max-md:pr-0 max-md:text-xs ${recuoSobONome}`}
             >
               {c.last_activity_at
                 ? formatUltimaAtividade(c.last_activity_at, localeDaData)
@@ -354,7 +365,7 @@ export function ContactsTable({
             <TableCell className="max-md:p-0">
               <div className="flex items-center justify-end gap-0.5">
                 {c.conversa ? (
-                  <Button variant="ghost" size="icon" className="md:h-8 md:w-8" asChild>
+                  <Button variant="ghost" size="icon" className={`${ACAO_DA_LINHA} md:group-hover:text-text`} asChild>
                     <Link
                       href={`/app/inbox?id=${c.conversa.id}`}
                       title={t("Abrir conversa no Inbox")}
@@ -370,7 +381,7 @@ export function ContactsTable({
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="md:h-8 md:w-8"
+                    className={`${ACAO_DA_LINHA} md:group-hover:text-text`}
                     title={t("Iniciar conversa no Inbox")}
                     aria-label={`${t("Iniciar conversa com")} ${displayName(c, t)} ${t("no Inbox")}`}
                     disabled={abrindo}
@@ -385,7 +396,7 @@ export function ContactsTable({
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="md:h-8 md:w-8"
+                    className={`${ACAO_DA_LINHA} md:group-hover:text-text`}
                     title={t("Editar contato")}
                     aria-label={`${t("Editar contato")} ${displayName(c, t)}`}
                     onClick={() => setContatoEmEdicao(c)}
@@ -396,7 +407,7 @@ export function ContactsTable({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="text-muted-foreground hover:text-error-fg md:h-8 md:w-8"
+                  className={`${ACAO_DA_LINHA} hover:text-error-fg md:hover:text-error-fg`}
                   title={t("Excluir contato")}
                   aria-label={`${t("Excluir contato")} ${displayName(c, t)}`}
                   onClick={() => setAlvo(c)}

@@ -21,6 +21,8 @@ import { rotuloDoMembro } from "@/lib/users/rotulo-do-atendente";
 export function SeletorDeAtendente(props: {
   value: string | undefined;
   onChange: (atendente: string | undefined) => void;
+  /** O desenho do gatilho vem de quem monta a faixa (`InboxFilters`). */
+  className?: string;
 }) {
   // Sem o provedor de consultas (telas montadas isoladas) não há de onde ler a
   // equipe: o seletor simplesmente não aparece, em vez de derrubar a tela.
@@ -31,9 +33,11 @@ export function SeletorDeAtendente(props: {
 function SeletorComEquipe({
   value,
   onChange,
+  className,
 }: {
   value: string | undefined;
   onChange: (atendente: string | undefined) => void;
+  className?: string;
 }) {
   const t = useT();
   const { data } = useAssignableMembers(true);
@@ -45,8 +49,9 @@ function SeletorComEquipe({
     <Select value={value ?? "all"} onValueChange={(v) => onChange(v === "all" ? undefined : v)}>
       <SelectTrigger
         className={cn(
-          "h-8 min-w-0 flex-1 rounded-full border-transparent bg-surface-elevated px-3 text-xs shadow-none",
+          "h-8 min-w-0 flex-1 rounded-md border-transparent bg-surface-elevated px-3 text-xs shadow-none",
           value != null && "border-accent bg-accent-soft text-accent",
+          className,
         )}
         aria-label={t("Filtrar por atendente")}
       >

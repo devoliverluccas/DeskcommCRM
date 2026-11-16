@@ -153,7 +153,7 @@ export function SidebarContent({
     <>
       <div
         className={cn(
-          "flex h-14 items-center border-b px-4",
+          "flex h-14 items-center px-4",
           collapsed ? "justify-center" : "justify-start",
         )}
       >
@@ -326,7 +326,7 @@ export function SidebarContent({
         e nenhum destino novo apareceu aqui.
       */}
       <nav
-        className="flex-1 space-y-2 overflow-y-auto px-2 py-1"
+        className="flex-1 space-y-3 overflow-y-auto px-2 py-2"
         aria-label={t("Navegação principal")}
       >
         {grupos.map(({ group, items }) => {
@@ -340,7 +340,7 @@ export function SidebarContent({
             // aceita seletor de classe, dá cor ao menu inteiro ou a uma seção dele
             // (#4463). Renomear quebra a folha de quem já instalou; documentado em
             // docs/white-label.md.
-            <div key={group.id} className={cn("space-y-1 nav-grupo", classeDoGrupo(group.id))}>
+            <div key={group.id} className={cn("space-y-px nav-grupo", classeDoGrupo(group.id))}>
               {/* Colapsado, o sidebar tem 64px: seis rótulos ali seriam ilegíveis.
                   Vira um filete separador, que preserva o agrupamento sem texto. */}
               {collapsed ? (
@@ -351,7 +351,7 @@ export function SidebarContent({
                     type="button"
                     onClick={() => toggleGrupo(group.id)}
                     aria-expanded={aberto}
-                    className="flex w-full items-center justify-between rounded-md px-3 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent/40 hover:text-foreground"
+                    className="flex h-6 w-full items-center justify-between rounded-md px-2 text-xs font-medium text-text-subtle transition-colors duration-fast hover:text-foreground"
                   >
                     {t(group.label)}
                     <CaretDown
@@ -370,7 +370,7 @@ export function SidebarContent({
                 <ul
                   aria-labelledby={collapsed ? undefined : tituloId}
                   aria-label={collapsed ? t(group.label) : undefined}
-                  className="space-y-1"
+                  className="space-y-px"
                 >
                   {items.map((item) => {
                     const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
@@ -387,14 +387,17 @@ export function SidebarContent({
                             // A classe do DESTINO é contrato estável para o CSS da
                             // tela Marca (#4463): `nav-item-inbox`, `nav-item-kanban`…
                             classeDoItem(item.href),
-                            "relative flex items-center gap-3 rounded-md px-3 py-1 text-sm transition-colors",
+                            // Item ativo é NEUTRO (um passo de fundo + texto cheio + peso), não
+                            // um bloco na cor da marca: a accent fica para a ação primária
+                            // da tela, e o menu deixa de disputar o olho com ela.
+                            "relative flex h-7 items-center gap-2.5 rounded-md px-2 text-sm transition-colors duration-fast",
                             isActive
-                              ? "bg-accent text-accent-foreground"
-                              : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+                              ? "bg-pressed font-medium text-foreground"
+                              : "text-muted-foreground hover:bg-hover hover:text-foreground",
                             collapsed && "justify-center px-2",
                           )}
                         >
-                          <Icon size={18} weight={isActive ? "fill" : "regular"} aria-hidden />
+                          <Icon size={16} weight={isActive ? "fill" : "regular"} aria-hidden />
                           {!collapsed && <span className="truncate">{t(item.label)}</span>}
                           {item.healthDot && (
                             <ConnectionHealthDot
@@ -419,14 +422,14 @@ export function SidebarContent({
                         aria-current={pathname === group.hub.href ? "page" : undefined}
                         onClick={onNavigate}
                         className={cn(
-                          "flex items-center gap-3 rounded-md px-3 py-1 text-sm transition-colors",
+                          "flex h-7 items-center gap-2.5 rounded-md px-2 text-sm transition-colors duration-fast",
                           pathname === group.hub.href
-                            ? "bg-accent text-accent-foreground"
-                            : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+                            ? "bg-pressed font-medium text-foreground"
+                            : "text-muted-foreground hover:bg-hover hover:text-foreground",
                           collapsed && "justify-center px-2",
                         )}
                       >
-                        <ArrowRight size={18} aria-hidden />
+                        <ArrowRight size={16} aria-hidden />
                         {!collapsed && <span className="truncate">{t(group.hub.label)}</span>}
                       </Link>
                     </li>
@@ -446,15 +449,15 @@ export function SidebarContent({
             aria-current={pathname.startsWith(rodape.href) ? "page" : undefined}
             onClick={onNavigate}
             className={cn(
-              "mb-0.5 flex items-center gap-3 rounded-md px-3 py-1 text-sm transition-colors",
+              "mb-0.5 flex h-7 items-center gap-2.5 rounded-md px-2 text-sm transition-colors duration-fast",
               classeDoItem(rodape.href),
               pathname.startsWith(rodape.href)
-                ? "bg-accent text-accent-foreground"
-                : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+                ? "bg-pressed font-medium text-foreground"
+                : "text-muted-foreground hover:bg-hover hover:text-foreground",
               collapsed && "justify-center px-2",
             )}
           >
-            <Gear size={18} aria-hidden />
+            <Gear size={16} aria-hidden />
             {!collapsed && <span className="truncate">{t(rodape.label)}</span>}
           </Link>
         )}
@@ -470,15 +473,15 @@ export function SidebarContent({
             aria-current={pathname.startsWith(ajuda.href) ? "page" : undefined}
             onClick={onNavigate}
             className={cn(
-              "mb-0.5 flex items-center gap-3 rounded-md px-3 py-1 text-sm transition-colors",
+              "mb-0.5 flex h-7 items-center gap-2.5 rounded-md px-2 text-sm transition-colors duration-fast",
               classeDoItem(ajuda.href),
               pathname.startsWith(ajuda.href)
-                ? "bg-accent text-accent-foreground"
-                : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+                ? "bg-pressed font-medium text-foreground"
+                : "text-muted-foreground hover:bg-hover hover:text-foreground",
               collapsed && "justify-center px-2",
             )}
           >
-            <BookOpen size={18} aria-hidden />
+            <BookOpen size={16} aria-hidden />
             {!collapsed && <span className="truncate">{t(ajuda.label)}</span>}
           </Link>
         )}
@@ -523,7 +526,7 @@ function BotaoDeRecolher({
       onClick={onClick}
       disabled={isPending}
       className={cn(
-        "flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+        "flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs text-muted-foreground hover:bg-hover hover:text-foreground",
         (collapsed || soIcone) && "justify-center px-2",
       )}
       aria-label={rotulo}
@@ -546,6 +549,12 @@ export function Sidebar({ collapsed }: { collapsed: boolean }) {
       // escolhido nenhuma regra os usa, e o menu é exatamente o de antes.
       data-casca="menu"
       data-casca-lugar="lateral"
+      // Redesign v2: o menu lateral é SEMPRE escuro. Em vez de um segundo jogo de
+      // cores, a subárvore recebe o tema escuro inteiro — os mesmos tokens que a
+      // página usa no escuro, então contraste, logo do tema escuro e estados de
+      // cursor já vêm medidos. A gaveta do celular não passa por aqui e segue o
+      // tema da página.
+      data-theme="dark"
       className={cn(
         // ⚠️ `sticky`, e NUNCA `fixed`.
         //
@@ -582,7 +591,7 @@ export function Sidebar({ collapsed }: { collapsed: boolean }) {
         // `duration-base` em vez do `duration-200` literal: 200ms é o mesmo
         // número, mas vindo de `--duration-base`. A Lei de movimento fecha a
         // tabela de durações, e número solto é o que a faz apodrecer.
-        "sticky top-[var(--faixas-de-cima,0px)] z-30 flex h-[calc(100dvh-var(--faixas-de-cima,0px))] shrink-0 flex-col border-r bg-card transition-[width] duration-base",
+        "sticky top-[var(--faixas-de-cima,0px)] z-30 flex h-[calc(100dvh-var(--faixas-de-cima,0px))] shrink-0 flex-col bg-bg transition-[width] duration-base",
         collapsed ? "w-16" : "w-60",
       )}
     >

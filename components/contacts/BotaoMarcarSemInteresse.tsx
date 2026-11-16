@@ -30,6 +30,9 @@ export function BotaoMarcarSemInteresse({
   compacto = false,
   className,
   onMarcado,
+  aberto,
+  onAbertoChange,
+  semGatilho = false,
 }: {
   contactId: string;
   /** O tamanho dos botões do painel da conversa. */
@@ -37,22 +40,32 @@ export function BotaoMarcarSemInteresse({
   className?: string;
   /** Chamado depois de gravar: o painel da conversa relê os negócios. */
   onMarcado?: () => void;
+  /**
+   * Modo controlado: a ficha do contato desenha o gatilho no próprio cabeçalho
+   * (botão no computador, item do "⋯" no celular) e só pede a confirmação daqui
+   * — o texto continua num lugar só.
+   */
+  aberto?: boolean;
+  onAbertoChange?: (aberto: boolean) => void;
+  semGatilho?: boolean;
 }) {
   const t = useT();
   const marcar = useMarcarSemInteresse(contactId);
   return (
-    <AlertDialog>
-      <AlertDialogTrigger asChild>
-        <Button
-          variant="outline"
-          size={compacto ? "sm" : "default"}
-          disabled={marcar.isPending}
-          className={cn("shrink-0", compacto && "h-11 px-2 text-xs lg:h-7", className)}
-          data-testid="marcar-sem-interesse"
-        >
-          <span>{t("Marcar sem interesse")}</span>
-        </Button>
-      </AlertDialogTrigger>
+    <AlertDialog open={aberto} onOpenChange={onAbertoChange}>
+      {!semGatilho && (
+        <AlertDialogTrigger asChild>
+          <Button
+            variant="outline"
+            size={compacto ? "sm" : "default"}
+            disabled={marcar.isPending}
+            className={cn("shrink-0", compacto && "h-11 px-2 text-xs lg:h-7", className)}
+            data-testid="marcar-sem-interesse"
+          >
+            <span>{t("Marcar sem interesse")}</span>
+          </Button>
+        </AlertDialogTrigger>
+      )}
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{t("Marcar este contato como sem interesse?")}</AlertDialogTitle>
@@ -64,7 +77,9 @@ export function BotaoMarcarSemInteresse({
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>{t("Cancelar")}</AlertDialogCancel>
-          <AlertDialogAction onClick={() => marcar.mutate(undefined, { onSuccess: () => onMarcado?.() })}>
+          <AlertDialogAction
+            onClick={() => marcar.mutate(undefined, { onSuccess: () => onMarcado?.() })}
+          >
             {t("Marcar sem interesse")}
           </AlertDialogAction>
         </AlertDialogFooter>

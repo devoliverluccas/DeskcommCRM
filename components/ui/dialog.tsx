@@ -26,7 +26,7 @@ const DialogOverlay = React.forwardRef<
       // do plugin `tailwindcss-animate`, que nunca foi instalado neste repo, e
       // classe inexistente no Tailwind não gera CSS nem erro. A régua está em
       // `app/globals.css`.
-      "ds-cortina fixed inset-0 z-50 bg-black/80",
+      "ds-cortina fixed inset-0 z-50 bg-overlay",
       className,
     )}
     {...props}
@@ -60,7 +60,7 @@ const DialogContent = React.forwardRef<
           // `ds-modal` animam a mesma propriedade `translate` e terminam no
           // mesmo `-50% -50%`, então o modal nunca sai do centro — o porquê
           // inteiro está no bloco do modal em `app/globals.css`.
-          "ds-modal fixed top-[50%] left-[50%] z-50 grid max-h-[calc(100dvh-2rem)] w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 overflow-y-auto border bg-background p-6 shadow-lg sm:rounded-lg",
+          "ds-modal fixed top-[50%] left-[50%] z-50 grid max-h-[calc(100dvh-2rem)] w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 overflow-y-auto border bg-surface p-5 shadow-xl sm:rounded-xl",
           className,
         )}
         {...props}
@@ -108,7 +108,7 @@ const DialogTitle = React.forwardRef<
     // modal ainda alarga até caber a palavra inteira, e o texto sai cortado.
     // `leading-tight` porque, quebrando, `leading-none` encosta as linhas.
     className={cn(
-      "text-lg leading-tight font-semibold tracking-tight [overflow-wrap:anywhere]",
+      "text-base leading-tight font-semibold [overflow-wrap:anywhere]",
       className,
     )}
     {...props}

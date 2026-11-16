@@ -1,6 +1,8 @@
 import type { RetratoDaInstalacao } from "@/lib/instalacao/retrato";
 import type { Idioma } from "@/lib/i18n/idiomas";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { Check } from "@/lib/ui/icons";
+import { cn } from "@/lib/utils";
 
 /**
  * A primeira coisa que a pessoa lê no wizard: o que ela JÁ tem.
@@ -59,28 +61,27 @@ export function JaEstaPronto({
   const faltando = itens.filter((i) => !i.pronto).length;
 
   return (
-    <section
-      aria-labelledby="ja-pronto"
-      className="rounded-lg border bg-background p-5"
-    >
-      <h3 id="ja-pronto" className="text-sm font-medium">
+    <section aria-labelledby="ja-pronto" className="space-y-3 border-t border-border py-8">
+      <h3 id="ja-pronto" className="text-sm font-semibold text-text">
         {t("Você já instalou o sistema. Isto aqui já está de pé:")}
       </h3>
-      <ul className="mt-3 space-y-1.5 text-sm">
+      <ul className="divide-y divide-border rounded-lg border border-border">
         {itens.map((it) => (
-          <li key={it.texto} className="flex items-start gap-2">
+          <li key={it.texto} className="flex items-start gap-3 px-4 py-3 text-sm">
             <span
               aria-hidden
-              className={
-                "mt-1.5 inline-block h-1.5 w-1.5 shrink-0 rounded-full " +
-                (it.pronto ? "bg-emerald-500" : "bg-amber-500")
-              }
-            />
-            <span className={it.pronto ? "" : "text-muted-foreground"}>{it.texto}</span>
+              className={cn(
+                "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full",
+                it.pronto ? "bg-success-bg text-success-fg" : "bg-warning-bg text-warning-fg",
+              )}
+            >
+              {it.pronto ? <Check size={10} weight="bold" /> : <span className="h-1.5 w-1.5 rounded-full bg-current" />}
+            </span>
+            <span className={it.pronto ? "text-text" : "text-text-muted"}>{it.texto}</span>
           </li>
         ))}
       </ul>
-      <p className="mt-3 text-xs text-muted-foreground">
+      <p className="text-xs text-text-muted">
         {faltando === 0
           ? t("Agora é montar quem vai atender por você.")
           : t("O que falta a gente resolve nos próximos passos.")}

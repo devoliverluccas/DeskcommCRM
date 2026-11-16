@@ -14,10 +14,11 @@ import { MetaDoMesPanel, type EstadoDaMeta } from "./MetaDoMesPanel";
 import { PerdasPanel } from "./PerdasPanel";
 import { PrevisaoPanel } from "./PrevisaoPanel";
 import { SeriePanel } from "./SeriePanel";
+import { CABECALHO_DE_CARTAO, TituloDeSecao } from "./Secao";
 import { useMetasDoMes } from "@/hooks/metrics/useMetasDoMes";
 import { janelaDoMes, mesLocal } from "@/lib/metas/periodo";
 import { useTeamMembers } from "@/hooks/team/useTeamMembers";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -131,12 +132,16 @@ export function MetricsClient({ canCompare, currentUserId }: Props) {
   const maxCount = Math.max(1, ...metrics.funnel.map((s) => s.count));
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col">
+      {/* Barra de controles: só o filtro de atendente, direto na página e sem
+          moldura. A régua do abandono NÃO sobe para cá de propósito: ela mora
+          no cabeçalho do Atrito, ao lado do número que governa, e o Atrito não
+          segue este filtro — juntar os dois diria o contrário. */}
       {canCompare ? (
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="text-sm text-muted-foreground">{t("Atendente")}</span>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border pb-4">
+          <span className="text-xs text-text-muted">{t("Atendente")}</span>
           <Select value={owner} onValueChange={setOwner}>
-            <SelectTrigger className="w-full max-w-64">
+            <SelectTrigger className="w-full sm:w-60">
               <SelectValue placeholder={t("Todos os atendentes")} />
             </SelectTrigger>
             <SelectContent>
@@ -154,95 +159,99 @@ export function MetricsClient({ canCompare, currentUserId }: Props) {
         </div>
       ) : null}
 
-      {/* Acima do funil e da performance de propósito: é o número do sistema
-          inteiro, ao qual as métricas de área se subordinam (doutrina §3.6).
-          Não filtra por atendente — atrito é propriedade do sistema, e quebrá-lo
-          por pessoa convida a otimização local que degrada o todo. */}
-      <AtritoPanel podeEditarRegua={canCompare} />
+      {/* Os painéis são separados por espaço e uma divisória, não por caixa:
+          cartão só onde agrupa tabela ou gráfico. */}
+      <div className="flex flex-col divide-y divide-border *:py-8 *:first:pt-6 *:last:pb-2">
+        {/* Acima do funil e da performance de propósito: é o número do sistema
+            inteiro, ao qual as métricas de área se subordinam (doutrina §3.6).
+            Não filtra por atendente — atrito é propriedade do sistema, e quebrá-lo
+            por pessoa convida a otimização local que degrada o todo. */}
+        <AtritoPanel podeEditarRegua={canCompare} />
 
-      {/* Relatório "Perdas" (#1537): manager+, porque é o funil inteiro — o
-          mesmo critério do /metrics para quem compara. */}
-      {canCompare ? <PerdasPanel /> : null}
+        {/* Relatório "Perdas" (#1537): manager+, porque é o funil inteiro — o
+            mesmo critério do /metrics para quem compara. */}
+        {canCompare ? <PerdasPanel /> : null}
 
-      {/* Previsão ponderada do funil (issue #1535): por mês × moeda, com os
-          baldes "sem data" e "sem probabilidade" à parte. Depois do atrito de
-          propósito — é o número da EQUIPE comercial, que se subordina ao do
-          sistema inteiro acima. */}
-      <PrevisaoPanel />
+        {/* Previsão ponderada do funil (issue #1535): por mês × moeda, com os
+            baldes "sem data" e "sem probabilidade" à parte. Depois do atrito de
+            propósito — é o número da EQUIPE comercial, que se subordina ao do
+            sistema inteiro acima. */}
+        <PrevisaoPanel />
 
-      {/* A meta do mês (issue #3025, fatia 1) logo acima do funil: é o ALVO, e
-          as barras do funil abaixo são o caminho até ele. O denominador é da
-          empresa (não do atendente filtrado), então este painel não segue o
-          `Select` — o alvo é um só, e o realizado é o que a empresa fechou.
-          `canCompare` (manager+) abre a porta do cadastro, a mesma régua da
-          action. */}
-      <MetaDoMesPanel
-        estado={estadoDaMeta}
-        periodo={metasDoMes.data?.data.periodo ?? null}
-        metas={metasDoMes.data?.data.metas ?? []}
-        podeConfigurar={canCompare}
-        valores={metasDoMes.data?.data.valores_do_periodo ?? null}
-      />
+        {/* A meta do mês (issue #3025, fatia 1) logo acima do funil: é o ALVO, e
+            as barras do funil abaixo são o caminho até ele. O denominador é da
+            empresa (não do atendente filtrado), então este painel não segue o
+            `Select` — o alvo é um só, e o realizado é o que a empresa fechou.
+            `canCompare` (manager+) abre a porta do cadastro, a mesma régua da
+            action. */}
+        <MetaDoMesPanel
+          estado={estadoDaMeta}
+          periodo={metasDoMes.data?.data.periodo ?? null}
+          metas={metasDoMes.data?.data.metas ?? []}
+          podeConfigurar={canCompare}
+          valores={metasDoMes.data?.data.valores_do_periodo ?? null}
+        />
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">
-            {t("Funil")} {selectedOwner ? t("do atendente") : ""} · {funnelTotal}{" "}
-            {funnelTotal === 1 ? t("aberto") : t("abertos")}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3">
+        <section className="flex flex-col gap-4">
+          <TituloDeSecao titulo={`${t("Funil")}${selectedOwner ? ` ${t("do atendente")}` : ""}`} />
+          <div>
+            <p className="text-3xl font-semibold tracking-tight tabular-nums">{funnelTotal}</p>
+            <p className="text-xs text-text-muted">
+              {funnelTotal === 1 ? t("aberto") : t("abertos")}
+            </p>
+          </div>
           {metrics.funnel.length === 0 ? (
-            <p className="text-sm text-muted-foreground">{t("Nenhuma etapa configurada.")}</p>
+            <p className="text-sm text-text-muted">{t("Nenhuma etapa configurada.")}</p>
           ) : (
-            metrics.funnel.map((s) => (
-              <div key={s.stage_id} className="flex items-center gap-3">
-                <span className="w-24 shrink-0 truncate text-sm md:w-40">{s.stage_name}</span>
-                <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
-                  <div
-                    className="h-full rounded-full bg-primary transition-[width]"
-                    style={{ width: `${(s.count / maxCount) * 100}%` }}
-                  />
-                </div>
-                <span className="w-8 shrink-0 text-right text-sm tabular-nums">{s.count}</span>
-              </div>
-            ))
+            <ul className="flex max-w-3xl flex-col gap-2.5">
+              {metrics.funnel.map((s) => (
+                <li key={s.stage_id} className="flex items-center gap-3">
+                  <span className="w-24 shrink-0 truncate text-sm md:w-40">{s.stage_name}</span>
+                  <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-elevated">
+                    <div
+                      className="h-full rounded-full bg-accent transition-[width]"
+                      style={{ width: `${(s.count / maxCount) * 100}%` }}
+                    />
+                  </div>
+                  <span className="w-10 shrink-0 text-right text-sm font-medium tabular-nums">
+                    {s.count}
+                  </span>
+                </li>
+              ))}
+            </ul>
           )}
-        </CardContent>
-      </Card>
+        </section>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">
-            {canCompare ? t("Performance por atendente") : t("Sua performance")}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
+        <Card>
+          <TituloDeSecao
+            className={CABECALHO_DE_CARTAO}
+            titulo={canCompare ? t("Performance por atendente") : t("Sua performance")}
+          />
           {metrics.attendants.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
+            <p className="px-4 py-6 text-sm text-text-muted">
               {t("Sem atividade no período (ganhos/perdidos, conversas ou respostas).")}
             </p>
           ) : (
             <Table className="max-md:block">
               <TableHeader className="max-md:hidden">
-                <TableRow>
-                  <TableHead>{t("Atendente")}</TableHead>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="pl-4">{t("Atendente")}</TableHead>
                   <TableHead className="text-right">{t("Ganhos")}</TableHead>
                   <TableHead className="text-right">{t("Perdidos")}</TableHead>
                   <TableHead className="text-right">{t("Conversas")}</TableHead>
-                  <TableHead className="text-right">{t("1ª resposta (média / mediana)")}</TableHead>
+                  <TableHead className="pr-4 text-right">{t("1ª resposta (média / mediana)")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody className="max-md:block">
                 {metrics.attendants.map((a) => (
                   <TableRow
                     key={a.user_id}
-                    className="max-md:grid max-md:grid-cols-2 max-md:gap-x-3 max-md:py-2"
+                    className="max-md:grid max-md:grid-cols-2 max-md:gap-x-3 max-md:px-4 max-md:py-3"
                   >
-                    <TableCell className="font-medium max-md:col-span-2 max-md:p-0">
+                    <TableCell className="pl-4 font-medium max-md:col-span-2 max-md:p-0">
                       {attendantLabel(a, t)}
                       {a.user_id === currentUserId ? (
-                        <span className="text-muted-foreground"> {t("(você)")}</span>
+                        <span className="font-normal text-text-muted"> {t("(você)")}</span>
                       ) : null}
                     </TableCell>
                     <TableCell data-rotulo={t("Ganhos")} className={CELULA_DE_NUMERO}>
@@ -256,7 +265,7 @@ export function MetricsClient({ canCompare, currentUserId }: Props) {
                     </TableCell>
                     <TableCell
                       data-rotulo={t("1ª resposta (média / mediana)")}
-                      className={`${CELULA_DE_NUMERO} max-md:col-span-2`}
+                      className={`${CELULA_DE_NUMERO} pr-4 max-md:col-span-2`}
                     >
                       {formatarDuracao(a.avg_first_response_seconds)} ·{" "}
                       {formatarDuracao(a.median_first_response_seconds)}
@@ -266,15 +275,15 @@ export function MetricsClient({ canCompare, currentUserId }: Props) {
               </TableBody>
             </Table>
           )}
-        </CardContent>
-      </Card>
+        </Card>
 
-      {/* Relatório "Por canal" (issue #2390): o mesmo corte de período e de
-          atendente da página, agora pelo NÚMERO — a unidade de trabalho da
-          operação (rodízio #1330). Fora do filtro de atendente a RLS é quem
-          escopa: agent vê as próprias conversas, manager+ a organização. */}
-      <CanaisPanel owner={selectedOwner} />
-      <SeriePanel />
+        {/* Relatório "Por canal" (issue #2390): o mesmo corte de período e de
+            atendente da página, agora pelo NÚMERO — a unidade de trabalho da
+            operação (rodízio #1330). Fora do filtro de atendente a RLS é quem
+            escopa: agent vê as próprias conversas, manager+ a organização. */}
+        <CanaisPanel owner={selectedOwner} />
+        <SeriePanel />
+      </div>
     </div>
   );
 }

@@ -10,7 +10,7 @@ import { channelLabel, useChannelSessions } from "@/hooks/channels/useChannelSes
 import { apiClient } from "@/lib/api/client";
 import { rotuloDoContato, type ContatoNomeavel } from "@/lib/contacts/rotulo-do-contato";
 import { automaticoNoComando, consultasDoPainel, haQuantoTempo, montarColunas, type ConversaDoPainel } from "@/lib/inbox/painel-de-atendimento";
-import { Robot } from "@/lib/ui/icons";
+import { Robot, Tray } from "@/lib/ui/icons";
 
 interface Conversa extends ConversaDoPainel {
   last_message_preview: string | null;
@@ -41,30 +41,43 @@ function Coluna<C extends Conversa>({
   automaticoDaOrg: boolean | undefined;
   rotuloIA: string;
 }) {
+  // Coluna sem caixa: o cabeçalho forte (nome + contagem) e a divisória fazem a
+  // separação; cada item é um alvo inteiro, com o retorno neutro do cursor.
+  const urgente = destaque && itens.length > 0;
   return (
-    <section className="flex max-h-[28rem] min-h-0 flex-col rounded-lg border border-border bg-surface md:max-h-none">
-      <header className="flex items-center justify-between border-b border-border px-4 py-3">
+    <section className="flex max-h-[28rem] min-h-0 flex-col md:max-h-none">
+      <header className="flex items-baseline gap-2 border-b border-border-strong px-1 pb-2.5">
         <h2 className="text-sm font-semibold">{titulo}</h2>
         <span
-          className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-            destaque && itens.length > 0 ? "bg-red-600 text-white" : "bg-surface-elevated text-text-muted"
+          className={`rounded-sm px-1.5 text-sm font-semibold tabular-nums ${
+            urgente ? "bg-error-bg text-error-fg" : "text-text-muted"
           }`}
         >
           {itens.length}
         </span>
       </header>
-      <ul className="min-h-0 flex-1 divide-y divide-border overflow-y-auto">
-        {itens.length === 0 && <li className="px-4 py-6 text-center text-sm text-text-muted">{vazio}</li>}
+      <ul className="flex min-h-0 flex-1 flex-col gap-px overflow-y-auto py-2">
+        {itens.length === 0 && (
+          <li className="flex flex-col items-center gap-2 px-4 py-10 text-center text-sm text-text-muted">
+            <Tray className="size-5 text-text-subtle" aria-hidden />
+            {vazio}
+          </li>
+        )}
         {itens.map((c) => (
           <li key={c.id}>
-            <Link href={`/app/inbox?id=${c.id}`} className="block px-4 py-3 hover:bg-surface-elevated">
-              <div className="flex items-center justify-between gap-2">
+            <Link
+              href={`/app/inbox?id=${c.id}`}
+              className="flex min-h-11 flex-col justify-center rounded-md px-2.5 py-2 transition-colors duration-fast hover:bg-hover"
+            >
+              <div className="flex items-baseline justify-between gap-2">
                 <span className="truncate text-sm font-medium">{rotulo(c)}</span>
-                <span className={`shrink-0 text-xs ${destaque ? "font-semibold text-red-500" : "text-text-muted"}`}>
+                <span
+                  className={`shrink-0 text-xs tabular-nums ${destaque ? "font-medium text-error-fg" : "text-text-subtle"}`}
+                >
                   {tempo(c)}
                 </span>
               </div>
-              <p className="mt-1 line-clamp-2 text-xs text-text-muted">
+              <p className="mt-0.5 line-clamp-2 text-xs text-text-muted">
                 {automaticoNoComando(c, automaticoDaOrg) && <Robot className="mr-1 inline h-3 w-3" aria-label={rotuloIA} />}
                 {c.last_message_preview ?? ""}
               </p>
@@ -124,14 +137,14 @@ export function PainelDeAtendimento() {
   const truncado = [abertas, fila, encerradas].some((lista) => lista.data?.meta?.has_more === true);
 
   return (
-    <div className="flex h-full flex-col gap-4 overflow-y-auto p-4 md:h-[calc(100dvh-var(--faixas-de-cima,0px)-3.5rem-var(--space-6)-max(var(--space-6),var(--rodape-ocupado,0px)))] md:overflow-visible md:p-6">
+    <div className="flex h-full flex-col gap-4 overflow-y-auto p-4 md:h-[calc(100dvh-var(--faixas-de-cima,0px)-3.5rem-var(--casca-recuo,0px)-var(--space-6)-max(var(--space-6),var(--rodape-ocupado,0px)))] md:overflow-visible md:p-2">
       <header className="flex flex-wrap items-center gap-3">
-        <h1 className="mr-auto text-2xl font-semibold tracking-tight">{t("Painel de atendimento")}</h1>
+        <h1 className="mr-auto text-xl font-semibold tracking-tight">{t("Painel de atendimento")}</h1>
         <select
           aria-label={t("Número")}
           value={numero}
           onChange={(e) => setNumero(e.target.value)}
-          className="h-9 min-w-0 max-w-full rounded-md border border-border bg-background px-3 text-sm"
+          className="h-11 min-w-0 max-w-full rounded-md border border-border bg-surface px-2.5 text-sm transition-colors duration-fast hover:border-border-strong lg:h-8"
         >
           <option value="">{t("Todos os números")}</option>
           {(numeros ?? []).map((n) => (
@@ -144,8 +157,8 @@ export function PainelDeAtendimento() {
         {casos.isSuccess && (
           <Link
             href="/app/ai/cases"
-            className={`h-9 rounded-md border px-3 text-sm leading-9 ${
-              casosAbertos > 0 ? "border-red-600 font-semibold text-red-500" : "border-border text-text-muted"
+            className={`inline-flex h-11 items-center rounded-md border px-2.5 text-sm transition-colors duration-fast hover:bg-hover lg:h-8 ${
+              casosAbertos > 0 ? "border-error font-semibold text-error-fg" : "border-border text-text-muted"
             }`}
           >
             {t("Casos da IA")}: {casosAbertos}
@@ -153,14 +166,14 @@ export function PainelDeAtendimento() {
         )}
       </header>
       {(abertas.isError || fila.isError || encerradas.isError) && (
-        <p className="text-sm text-red-500">{t("Não deu para carregar as conversas agora.")}</p>
+        <p className="text-sm text-error-fg">{t("Não deu para carregar as conversas agora.")}</p>
       )}
       {truncado && (
         <p className="text-xs text-text-muted">
           {t("Há mais de 100 conversas em alguma lista. Quem espera sem dono são as 100 com mais tempo de espera; as demais são as 100 com a mensagem mais recente.")}
         </p>
       )}
-      <div className="grid grid-cols-1 gap-4 md:min-h-0 md:flex-1 md:grid-cols-3 md:grid-rows-[minmax(0,1fr)]">
+      <div className="grid grid-cols-1 gap-8 md:min-h-0 md:flex-1 md:grid-cols-3 md:grid-rows-[minmax(0,1fr)] md:gap-6">
         <Coluna
           titulo={t("Aguardando atendimento")}
           itens={colunas.aguardando}

@@ -1,10 +1,17 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useT } from "@/hooks/i18n/useT";
-import { Plus, DownloadSimple, MagnifyingGlass, UploadSimple, UsersThree, ArrowsClockwise } from "@/lib/ui/icons";
+import {
+  Plus,
+  DownloadSimple,
+  MagnifyingGlass,
+  UploadSimple,
+  UsersThree,
+  ArrowsClockwise,
+  Warning,
+} from "@/lib/ui/icons";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   DropdownMenu,
@@ -33,7 +40,9 @@ import { ORIGEM_AGENDA_DO_CELULAR } from "@/lib/leads/origem-do-contato";
 import { type ModoDeEtiqueta } from "@/lib/inbox/marcador-da-conversa";
 import { useActiveOrg, usePermission } from "@/hooks/auth/AuthProvider";
 import { MergeDialog } from "@/components/contacts/MergeDialog";
-import { EmptyContacts } from "@/components/empty";
+import { EmptyContacts, EmptyFilterResults, EmptyState } from "@/components/empty";
+import { PageHeader } from "@/components/app/PageHeader";
+import { cn } from "@/lib/utils";
 import type { ContactOrderBy } from "@/lib/schemas/contacts";
 
 const SOURCE_OPTIONS = [
@@ -55,6 +64,14 @@ const SOURCE_OPTIONS = [
 ];
 
 const PAGE_SIZE_OPTIONS = [25, 50, 100] as const;
+
+/** Chip de filtro: compacto no mouse, 44px no toque; ativo em `accent-soft`. */
+function chip(ativo: boolean) {
+  return cn(
+    "bg-surface lg:h-8",
+    ativo && "border-accent/40 bg-accent-soft text-accent hover:bg-accent-soft hover:border-accent/60",
+  );
+}
 
 export function ContactsListClient() {
   const t = useT();
@@ -184,89 +201,65 @@ export function ContactsListClient() {
     [search, tags, tagMode, source, soPessoais, orderBy, orderDir],
   );
 
+  const filtrando = Boolean(search || tags.length > 0 || source || soPessoais);
+  const limparFiltros = useCallback(() => {
+    setSearchInput("");
+    setSearch("");
+    setTags([]);
+    setTagMode(undefined);
+    setSource(undefined);
+    setSoPessoais(false);
+  }, []);
+
   return (
-    <div className="space-y-4 md:p-6">
-      <header className="flex flex-wrap items-center justify-between gap-3 sm:gap-4">
-        <div className="min-w-0">
-          <h1 className="text-2xl font-semibold tracking-tight">{t("Contatos")}</h1>
-          <p className="text-sm text-muted-foreground">
-            {t("Customer 360 — busque, filtre e gerencie contatos.")}
-          </p>
-        </div>
-        {/*
-          A estrutura é a da main (o "Importar CSV" do PR #313). Os botões
-          QUEBRAM linha em vez de passar da tela: o `whitespace-nowrap` do
-          Button impede o rótulo de comprimir, e sem `flex-wrap` a fila
-          estourava em 390px (medido: "Novo contato" em 446–585). O `shrink-0`
-          do PR #267 saiu por outro motivo: com o header em linha (sm+), ele
-          esmagava o título até largura 0. O `flex-wrap` do header faz o mesmo
-          um nível acima: quando título e botões não cabem lado a lado, os
-          botões descem de linha e o título não é espremido. Onde cabem
-          (1280px), nada muda.
-        */}
-        <div className="flex flex-wrap items-center gap-2">
-          {/*
-            A porta do recurso de duplicados fica AQUI, na tela que já existe, e
-            não num item de menu novo: quem descobre que tem contato repetido
-            descobre olhando a lista, e a barra lateral não precisa crescer para
-            um trabalho que se faz de vez em quando.
-          */}
-          <Button variant="outline" onClick={() => setDuplicadosOpen(true)}>
-            <UsersThree size={16} weight="bold" aria-hidden />
-            <span>{t("Duplicados")}</span>
-          </Button>
-          <Button variant="outline" onClick={() => setImportOpen(true)}>
-            <UploadSimple size={16} weight="bold" aria-hidden />
-            <span>{t("Importar CSV")}</span>
-          </Button>
-          {/*
-            O lado de cá do mesmo gesto (#2736): a base que a equipe já tem
-            mora na agenda do celular pareado, e ela não passa por CSV nenhum.
-            Colado ao "Importar CSV" de propósito — os dois são "trazer base de
-            fora", e separá-los em cantos diferentes da tela faria cada um
-            parecer um recurso que o outro não é.
-          */}
-          <Button variant="outline" onClick={() => setSyncOpen(true)}>
-            <ArrowsClockwise size={16} weight="bold" aria-hidden />
-            <span>{t("Sincronizar agenda")}</span>
-          </Button>
-          {/*
-            A porta de VOLTA do mesmo dado: importar sem exportar deixava o CRM
-            como saída única (SSH + psql), e o celular nem importa CSV — importa
-            vCard. Os dois formatos moram num menu porque são dois arquivos
-            diferentes para dois destinos diferentes, e um botão por formato
-            dobraria a largura do header numa tela de 390px.
-          */}
-          {podeExportar && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline">
-                  <DownloadSimple size={16} weight="bold" aria-hidden />
-                  <span>{t("Exportar")}</span>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => exportar("csv")}>
-                  {t("Exportar CSV")}
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => exportar("vcf")}>
-                  {t("Exportar vCard")}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
+    <div className="space-y-4 md:p-2">
+      {/*
+        As ações SECUNDÁRIAS (duplicados, importar, sincronizar, exportar) moram
+        no "⋯" abaixo de `md`: antes eram cinco botões empilhados em três linhas
+        de 44px antes do primeiro contato. De `md` para cima continuam botões com
+        o mesmo nome. "Novo contato" fica sozinho e visível em toda largura.
+        - Duplicados: a porta fica nesta tela porque é olhando a lista que se
+          descobre contato repetido.
+        - Sincronizar agenda (#2736) ao lado do Importar CSV: os dois trazem base
+          de fora.
+        - Exportar: dois formatos, dois destinos (CSV e vCard) num menu.
+      */}
+      <PageHeader
+        title={t("Contatos")}
+        subtitle={t("Customer 360 — busque, filtre e gerencie contatos.")}
+        secondaryActions={[
+          { label: t("Duplicados"), icon: UsersThree, onSelect: () => setDuplicadosOpen(true) },
+          { label: t("Importar CSV"), icon: UploadSimple, onSelect: () => setImportOpen(true) },
+          { label: t("Sincronizar agenda"), icon: ArrowsClockwise, onSelect: () => setSyncOpen(true) },
+          // O MESMO gate da rota de exportação (`requireRole("manager")`).
+          ...(podeExportar
+            ? [
+                {
+                  label: t("Exportar"),
+                  icon: DownloadSimple,
+                  items: [
+                    { label: t("Exportar CSV"), onSelect: () => exportar("csv") },
+                    { label: t("Exportar vCard"), onSelect: () => exportar("vcf") },
+                  ],
+                },
+              ]
+            : []),
+        ]}
+        actions={
           <Button onClick={() => setCreateOpen(true)}>
             <Plus size={16} weight="bold" aria-hidden />
             <span>{t("Novo contato")}</span>
           </Button>
-        </div>
-      </header>
+        }
+      />
 
-      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-surface p-2">
+      {/* Filtros sem moldura, numa linha que quebra: busca e chips. Chip ativo
+          em `accent-soft` (seleção de dado), parado em `bg-surface`. */}
+      <div className="flex flex-wrap items-center gap-2">
         <div className="relative w-full sm:w-72">
           <MagnifyingGlass
             size={16}
-            className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground"
+            className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-subtle"
             aria-hidden
           />
           <Input
@@ -274,13 +267,18 @@ export function ContactsListClient() {
             placeholder={t("Buscar por nome, email ou telefone…")}
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
-            className="h-9 w-full pl-8"
+            className="w-full pl-8"
           />
         </div>
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm" disabled={tagOptions.length === 0}>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={tagOptions.length === 0}
+              className={chip(tags.length > 0)}
+            >
               {tags[0] ? <PontoDaEtiqueta tag={tags[0]} className="mr-2" /> : null}
               {/* Resumo, e não a lista inteira: o gatilho tem a largura do filtro de
                   origem ao lado. Uma etiqueta mostra o nome; duas mostram a
@@ -348,7 +346,7 @@ export function ContactsListClient() {
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" className={chip(source !== undefined)}>
               {t(SOURCE_OPTIONS.find((s) => s.value === source)?.label ?? "Origem")}
             </Button>
           </DropdownMenuTrigger>
@@ -365,8 +363,9 @@ export function ContactsListClient() {
             desmarcar em lote mental (abre a ficha e desmarca um a um). O
             `data-testid` é contrato do e2e da spec. */}
         <Button
-          variant={soPessoais ? "default" : "outline"}
+          variant="outline"
           size="sm"
+          className={chip(soPessoais)}
           data-testid="filtro-pessoais"
           aria-pressed={soPessoais}
           onClick={() => setSoPessoais((v) => !v)}
@@ -376,7 +375,7 @@ export function ContactsListClient() {
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" className={chip(false)}>
               {limit} {t("por página")}
             </Button>
           </DropdownMenuTrigger>
@@ -391,18 +390,12 @@ export function ContactsListClient() {
           </DropdownMenuContent>
         </DropdownMenu>
 
-        {(search || tags.length > 0 || source || soPessoais) && (
+        {filtrando && (
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => {
-              setSearchInput("");
-              setSearch("");
-              setTags([]);
-              setTagMode(undefined);
-              setSource(undefined);
-              setSoPessoais(false);
-            }}
+            className="text-text-muted lg:h-8"
+            onClick={limparFiltros}
           >
             {t("Limpar filtros")}
           </Button>
@@ -433,21 +426,19 @@ export function ContactsListClient() {
           ))}
         </div>
       ) : q.isError ? (
-        <Card className="p-6 text-center">
-          <p className="text-sm text-error-fg">{t("Erro ao carregar contatos.")}</p>
-          <Button
-            size="sm"
-            variant="outline"
-            className="mt-2"
-            onClick={() => q.refetch()}
-          >
-            {t("Tentar novamente")}
-          </Button>
-        </Card>
+        <EmptyState
+          icon={Warning}
+          headline={t("Erro ao carregar contatos.")}
+          primary={{ label: t("Tentar novamente"), onClick: () => void q.refetch() }}
+        />
       ) : allContacts.length === 0 ? (
-        <Card className="p-2">
+        // Com filtro, "nenhum contato ainda" mentiria: a base existe, o filtro
+        // é que não casa. A saída é limpar, não esperar contato chegar.
+        filtrando ? (
+          <EmptyFilterResults primary={{ label: t("Limpar filtros"), onClick: limparFiltros }} />
+        ) : (
           <EmptyContacts />
-        </Card>
+        )
       ) : (
         <>
           {/* Abaixo de `md` a tabela vira cartão e o cabeçalho some, levando a
@@ -462,7 +453,9 @@ export function ContactsListClient() {
               {t("Selecionar todos os contatos visíveis")}
             </Button>
           )}
-          <Card className="overflow-hidden">
+          {/* Sem cartão em volta: a tabela ocupa a largura útil e a borda de
+              cima separa do filtro. */}
+          <div className="border-t border-border">
             <ContactsTable
               contacts={allContacts}
               orderBy={orderBy}
@@ -479,9 +472,9 @@ export function ContactsListClient() {
                   : undefined
               }
             />
-          </Card>
+          </div>
           <div className="flex flex-col items-center gap-2 sm:flex-row sm:justify-between">
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm tabular-nums text-text-muted">
               {allContacts.length} {allContacts.length === 1 ? t("contato") : t("contatos")}
               {q.hasNextPage ? ` ${t("carregados — há mais resultados")}` : ""}
             </p>

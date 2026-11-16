@@ -79,7 +79,7 @@ export default async function RecursosOpcionaisPage() {
   };
 
   return (
-    <div className="flex h-full flex-col gap-8 overflow-y-auto p-6">
+    <div className="flex h-full flex-col gap-8 overflow-y-auto p-2">
       <CabecalhoDaSubTela className="space-y-1" titulo={traduzir("Recursos opcionais", idioma)} idioma={idioma}>
         <p className="max-w-2xl text-sm text-muted-foreground">
           {traduzir(

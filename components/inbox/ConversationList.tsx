@@ -14,10 +14,10 @@ import { useAutomaticoAtivo } from "@/hooks/ai/useAutomaticoAtivo";
 import { useMarcarComoExemplo } from "@/hooks/inbox/useMarcarComoExemplo";
 
 import { ConversationListItem } from "./ConversationListItem";
-import { EmptyInbox } from "@/components/empty";
 import { EmptyPorFiltro } from "./EmptyPorFiltro";
 import { filtrosAuxiliaresAtivos } from "@/lib/inbox/filtros-ativos";
 import { textoDaFalhaDaLista } from "@/lib/inbox/falha-da-lista";
+import type { InboxTab } from "./InboxFilters";
 import type {
   ConversationsFilters,
   ConversationWithContact,
@@ -52,6 +52,38 @@ interface Props {
    * controle: o leitor veria um botão que só devolve 403.
    */
   podeMarcarExemplo?: boolean;
+  /** A aba aberta: o vazio diz o que costuma aparecer NELA, não uma frase geral. */
+  aba?: InboxTab;
+}
+
+/**
+ * O VAZIO POR AUSÊNCIA, dito pela aba (redesign v2).
+ *
+ * O título continua "Sem conversas por aqui" (o e2e e o onboarding o procuram);
+ * a segunda linha é o que muda: cada aba responde a uma pergunta diferente, e
+ * "quando chegarem mensagens" é mentira na aba Fechadas. Sem ícone e sem
+ * cartão — é uma linha de lista vazia, não uma tela de boas-vindas.
+ */
+function VazioDaCaixa({ aba }: { aba?: InboxTab }) {
+  const t = useT();
+  const detalhe =
+    aba === "ai"
+      ? t("Quando o agente estiver atendendo alguém, a conversa aparece aqui.")
+      : aba === "unassigned"
+        ? t("Ninguém esperando.")
+        : aba === "mine"
+          ? t("Nenhuma conversa com você agora. As que você assumir aparecem aqui.")
+          : aba === "closed"
+            ? t("As conversas fechadas ficam aqui.")
+            : aba === "archived"
+              ? t("As conversas arquivadas ficam aqui.")
+              : t("Quando chegarem mensagens, elas aparecem aqui em tempo real.");
+  return (
+    <div className="px-6 pt-12 text-center">
+      <p className="text-sm font-medium text-text">{t("Sem conversas por aqui")}</p>
+      <p className="mt-1 text-xs text-text-muted">{detalhe}</p>
+    </div>
+  );
 }
 
 export function ConversationList({
@@ -65,6 +97,7 @@ export function ConversationList({
   onAlternarSelecao,
   onSelecionarTodosVisiveis,
   podeMarcarExemplo = false,
+  aba,
 }: Props) {
   const t = useT();
   /**
@@ -177,9 +210,15 @@ export function ConversationList({
   // dado), então a regra do #2366 segue de pé: sem dado é primeira carga.
   if (q.isPending && items.length === 0) {
     return (
-      <div className="space-y-3 p-3">
+      <div className="p-1.5">
         {[1, 2, 3, 4, 5].map((i) => (
-          <Skeleton key={i} className="h-16 w-full" />
+          <div key={i} className="flex items-center gap-3 px-1.5 py-2.5">
+            <Skeleton className="h-9 w-9 shrink-0 rounded-full" />
+            <div className="min-w-0 flex-1 space-y-1.5">
+              <Skeleton className="h-3 w-1/2" />
+              <Skeleton className="h-3 w-4/5" />
+            </div>
+          </div>
         ))}
       </div>
     );
@@ -200,15 +239,15 @@ export function ConversationList({
   // que era timeout recarregando a página e perdendo filtro e conversa aberta.
   if (q.isError && q.data === undefined) {
     return (
-      <div className="space-y-2 p-4 text-center text-sm text-muted-foreground" role="alert">
-        <p className="text-foreground">{textoDaFalhaDaLista(q.error, t)}</p>
+      <div className="space-y-1 px-6 pt-12 text-center text-xs text-text-muted" role="alert">
+        <p className="text-sm font-medium text-text">{textoDaFalhaDaLista(q.error, t)}</p>
         {/* A frase que impede a leitura de "perdi os dados" — o banco continua
             com tudo, é a LEITURA que não voltou. */}
         <p>{t("As conversas continuam salvas. Nada foi perdido.")}</p>
         <Button
           size="sm"
           variant="outline"
-          className="mt-2"
+          className="mt-3"
           onClick={() => q.refetch()}
         >
           {t("Tentar novamente")}
@@ -223,9 +262,7 @@ export function ConversationList({
   const filtrosAtivos = filtrosAuxiliaresAtivos(filters);
   if (items.length === 0 && filtrosAtivos.length === 0) {
     return (
-      <div className="flex h-full items-center justify-center p-6">
-        <EmptyInbox />
-      </div>
+      <VazioDaCaixa aba={aba} />
     );
   }
 
@@ -253,7 +290,7 @@ export function ConversationList({
             está na tela. Some com a lista vazia — oferecer "selecionar todas"
             quando não há nenhuma é botão de mentira. */}
         {onAlternarSelecao && items.length > 0 && (
-          <div className="flex items-center gap-2 border-b border-border/70 px-3 py-1.5">
+          <div className="flex items-center gap-2 px-3 py-1.5">
             <button
               type="button"
               role="checkbox"

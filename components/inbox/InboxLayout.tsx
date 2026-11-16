@@ -43,9 +43,9 @@ import { EncaminharDialog } from "./EncaminharDialog";
 import { useEncaminharMensagem } from "@/hooks/inbox/useEncaminharMensagem";
 import { OpenConversationProvider } from "@/hooks/notifications/OpenConversationContext";
 // ADR-05: ícone de feature sai do mapa canônico, nunca do pacote direto.
-import { CaretLeft, ChatCircle, IdentificationCard, MagnifyingGlass, X } from "@/lib/ui/icons";
+import { CaretLeft, IdentificationCard, MagnifyingGlass, X } from "@/lib/ui/icons";
 import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { comandosDaFila } from "@/lib/inbox/comando-da-conversa";
 import { togglePainelDoContato } from "@/app/actions/inbox/togglePainelDoContato";
@@ -871,22 +871,21 @@ export function InboxLayout({
   // Altura da grade: a conta desconta TUDO que fica acima e abaixo dela.
   //   --faixas-de-cima  as faixas do topo (canal caído etc., `FaixasDeCima`)
   //   3.5rem            TopBar (`h-14`, em components/shell/TopBar.tsx)
-  //   2 * --space-6     padding do <main> do AppShell (`p-6`, em cima e embaixo)
+  //   --casca-recuo     o recuo do painel de conteúdo da casca (`md+`)
+  //   embaixo           o que a reserva do rodapé deixa SOBRAR
   //
-  // Com `100vh-3.5rem` o padding ficava de fora e a grade media 48px a MAIS que a
-  // tela. Quem pagava a diferença era o composer, que fica no rodapé: nascia
-  // parcialmente abaixo da borda, atrapalhando justo na hora de escrever.
+  // DE PONTA A PONTA (redesign v2): o wrapper em volta da grade devolve o padding
+  // do <main> com margem negativa (`-mx-4 -mt-4` / `sm:-mx-6 sm:-mt-6` em cima e
+  // dos lados; `-mb-6` embaixo, que é o piso `pb-area-segura` em qualquer
+  // largura). Por isso a conta não desconta mais o padding: em cima e dos lados
+  // ele foi devolvido, e embaixo o wrapper só recupera o PISO (`--space-6`).
+  // O que passar do piso continua reservado: uma peça fixa registrada no
+  // contrato do rodapé (`--rodape-ocupado`) ou a área segura do iPhone acima de
+  // 24px. Com nenhuma das duas, o `max()` dá 0 e a grade encosta na borda.
   //
-  // As duas parcelas NÃO estão na mesma unidade, e por isso o padding entra pelo
-  // token e não como `3rem`: o `@theme inline` de `app/globals.css` remapeia a
-  // escala de spacing para `var(--space-N)` — `--space-6` é `24px` LITERAL —, mas
-  // não remapeia o `14`, que o Tailwind 4 calcula pelo multiplicador `--spacing`
-  // e segue sendo `3.5rem` de verdade. (Até o Tailwind 4 quem remapeava era o
-  // `tailwind.config.ts`; o arquivo não existe mais, o efeito é o mesmo.)
-  // Escrever a soma como
-  // `6.5rem` só acerta enquanto a raiz for 16px; com acessibilidade de fonte maior
-  // ou menor o composer sai da tela de novo. Pelo token, a conta se auto-corrige
-  // se a escala de espaçamento mudar.
+  // `3.5rem` e o `--space-6` não estão na mesma unidade: o `@theme inline` de
+  // `app/globals.css` remapeia a escala de spacing para `var(--space-N)`
+  // (`--space-6` é `24px` LITERAL), mas não o `14`, que segue `3.5rem`.
   //
   // `dvh` em vez de `vh` porque no celular a `vh` ignora a barra do navegador — o
   // mesmo corte, só que pior e mudando conforme se rola a página.
@@ -911,10 +910,11 @@ export function InboxLayout({
   // deixava. Margem de 2px não é margem, é sorte.
   return (
     <OpenConversationProvider conversationId={selectedId}>
+    <div className="-mx-4 -mt-4 -mb-6 sm:-mx-6 sm:-mt-6">
     <div
       ref={gradeRef}
       className={cn(
-        "grid relative h-[calc(100dvh-var(--faixas-de-cima,0px)-3.5rem-var(--space-6)-max(var(--space-6),var(--rodape-ocupado,0px)))] w-full grid-cols-1 md:grid-cols-[300px_1fr]",
+        "grid relative h-[calc(100dvh-var(--faixas-de-cima,0px)-3.5rem-var(--casca-recuo,0px)-max(var(--rodape-ocupado,0px),env(safe-area-inset-bottom,0px)-var(--space-6)))] w-full grid-cols-1 md:grid-cols-[300px_1fr]",
         // Recolhido (issue #3004), a terceira trilha vira o trilho estreito do
         // botão de expandir e a conversa fica com o que era da ficha. Duas
         // listas em vez de uma classe com valor em variável: o Tailwind precisa
@@ -967,11 +967,11 @@ export function InboxLayout({
           colunas.lista,
         )}
       >
-        <BotaoIniciarConversa />
         <InboxFilters
           value={filterValue}
           onChange={setFilterValue}
           filas={filasDaOrganizacao?.data ?? []}
+          acao={<BotaoIniciarConversa />}
         />
         {podeAgirEmLote && (
           <BarraDeAcoesEmLote
@@ -1005,6 +1005,7 @@ export function InboxLayout({
                 : undefined
             }
             podeMarcarExemplo={podeMarcarExemplo}
+            aba={filterValue.tab}
           />
         </div>
       </div>
@@ -1048,21 +1049,17 @@ export function InboxLayout({
             </Button>
             <div className="flex-1" />
             {selectedConversation && (
-              <Sheet open={fichaAberta} onOpenChange={setFichaAberta}>
-                <SheetTrigger asChild>
-                  <Button variant="ghost" size="sm" className="gap-1 px-2 xl:hidden">
-                    <IdentificationCard size={16} />
-                    {t("Ficha")}
-                  </Button>
-                </SheetTrigger>
-                <SheetContent side="right" className="w-[min(22rem,90vw)] overflow-y-auto p-0">
-                  <SheetTitle className="sr-only">{t("Ficha do contato")}</SheetTitle>
-                  <CRMSidePanel
-                    conversation={selectedConversation}
-                    modulosIniciais={modulosDaLateral}
-                  />
-                </SheetContent>
-              </Sheet>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="gap-1 px-2 xl:hidden"
+                aria-haspopup="dialog"
+                aria-expanded={fichaAberta}
+                onClick={() => setFichaAberta(true)}
+              >
+                <IdentificationCard size={16} />
+                {t("Ficha")}
+              </Button>
             )}
           </div>
         )}
@@ -1081,6 +1078,21 @@ export function InboxLayout({
               }
               buscaAberta={buscaAberta}
               botaoBuscaRef={botaoBuscaRef}
+              // Entre `md` e `xl` a ficha não tem coluna e a barra do celular
+              // está escondida: sem este gatilho o tablet não abria a ficha.
+              gatilhoDaFicha={
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="hidden gap-1 px-2 md:inline-flex xl:hidden"
+                  aria-haspopup="dialog"
+                  aria-expanded={fichaAberta}
+                  onClick={() => setFichaAberta(true)}
+                >
+                  <IdentificationCard size={16} aria-hidden />
+                  {t("Ficha")}
+                </Button>
+              }
             />
             {buscaAberta && (
               <div className="flex items-center gap-2 border-b border-border px-4 py-1.5">
@@ -1199,9 +1211,8 @@ export function InboxLayout({
             {t("Conversa não encontrada ou fora do seu acesso.")}
           </div>
         ) : (
-          <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center">
-            <ChatCircle size={36} weight="thin" className="text-text-subtle" aria-hidden />
-            <p className="text-sm font-medium text-text-muted">{t("Selecione uma conversa")}</p>
+          <div className="flex h-full flex-col items-center justify-center gap-1 px-6 text-center">
+            <p className="text-sm font-medium text-text">{t("Selecione uma conversa")}</p>
             <p className="text-xs text-text-muted">{t("Ou navegue com J e K")}</p>
           </div>
         )}
@@ -1247,7 +1258,7 @@ export function InboxLayout({
           >
             <span
               aria-hidden
-              className="w-px bg-border transition-colors group-hover:bg-primary group-focus-visible:bg-primary"
+              className="w-0.5 bg-transparent transition-colors group-hover:bg-border-strong group-focus-visible:bg-accent"
             />
           </span>
           {faixa?.temFicha && !painelRecolhido && (
@@ -1269,7 +1280,7 @@ export function InboxLayout({
             >
               <span
                 aria-hidden
-                className="w-px bg-border transition-colors group-hover:bg-primary group-focus-visible:bg-primary"
+                className="w-0.5 bg-transparent transition-colors group-hover:bg-border-strong group-focus-visible:bg-accent"
               />
             </span>
           )}
@@ -1286,6 +1297,20 @@ export function InboxLayout({
         onToggleHelp={() => setHelpOpen((v) => !v)}
       />
       <ShortcutsHelpDialog open={helpOpen} onOpenChange={setHelpOpen} />
+      {/* A FICHA EM FOLHA — uma só, para o celular e o tablet. Os dois gatilhos
+          (o da barra do celular e o do cabeçalho entre `md` e `xl`) só abrem;
+          a folha mora aqui para não depender de qual deles está visível. */}
+      {selectedConversation && (
+        <Sheet open={fichaAberta} onOpenChange={setFichaAberta}>
+          <SheetContent side="right" className="w-[min(22rem,90vw)] overflow-y-auto p-0">
+            <SheetTitle className="sr-only">{t("Ficha do contato")}</SheetTitle>
+            <CRMSidePanel
+              conversation={selectedConversation}
+              modulosIniciais={modulosDaLateral}
+            />
+          </SheetContent>
+        </Sheet>
+      )}
       <EncaminharDialog
         open={encaminhando !== null}
         onOpenChange={(aberto) => {
@@ -1307,6 +1332,7 @@ export function InboxLayout({
           );
         }}
       />
+    </div>
     </div>
     </OpenConversationProvider>
   );

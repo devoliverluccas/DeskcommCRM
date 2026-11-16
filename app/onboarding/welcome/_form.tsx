@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/select";
 import { FUSO_PADRAO, FUSOS_DO_ONBOARDING } from "@/lib/tempo/fusos";
 import { fusoDoNavegador } from "@/lib/tempo/fuso-do-navegador";
+import { RodapeDoPasso } from "../_components/Passo";
 
 export function WelcomeForm({ defaultOrgName, orgId }: { defaultOrgName: string; orgId: string }) {
   const t = useT();
@@ -42,7 +43,7 @@ export function WelcomeForm({ defaultOrgName, orgId }: { defaultOrgName: string;
 
   return (
     <form
-      className="space-y-5 rounded-lg border bg-background p-6"
+      className="space-y-6 border-t border-border pt-8"
       action={(formData) => {
         if (!accepted) {
           toast.error(t("Aceite os termos para continuar."));
@@ -71,7 +72,7 @@ export function WelcomeForm({ defaultOrgName, orgId }: { defaultOrgName: string;
           maxLength={120}
           required
         />
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs text-text-muted">
           {t(
             "É o nome que aparece para o seu time e nos relatórios. Pode ser clínica, loja, escritório — o que for seu.",
           )}
@@ -95,7 +96,7 @@ export function WelcomeForm({ defaultOrgName, orgId }: { defaultOrgName: string;
           maxLength={280}
           placeholder={t("Ex.: clínica odontológica, ou venda de roupa fitness pelo WhatsApp")}
         />
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs text-text-muted">
           {t(
             "Uma linha basta. É com isso que seu funcionário aprende com quem ele está falando — e que a gente monta o quadro de clientes do seu jeito.",
           )}
@@ -121,37 +122,37 @@ export function WelcomeForm({ defaultOrgName, orgId }: { defaultOrgName: string;
             resolve por ela (validada como membership), não pela org ativa do
             momento — que outra aba pode ter trocado. */}
         <input type="hidden" name="organization_id" value={orgId} />
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs text-text-muted">
           {t("Decide o horário em que seu funcionário pode falar com clientes.")}
         </p>
       </div>
 
-      <label className="flex items-start gap-2 text-sm">
+      <label className="flex min-h-11 cursor-pointer items-start gap-3 rounded-lg border border-border p-4 text-sm hover:bg-hover">
         <input
           type="checkbox"
           checked={accepted}
           onChange={(e) => setAccepted(e.target.checked)}
-          className="mt-1"
+          className="mt-0.5 h-4 w-4 shrink-0 accent-accent"
           required
         />
         <span>
           {t("Li e aceito os")}{" "}
-          <a className="underline" href="/legal/terms" target="_blank" rel="noreferrer">
+          <a className="text-text underline underline-offset-2" href="/legal/terms" target="_blank" rel="noreferrer">
             {t("Termos de Uso")}
           </a>{" "}
           {t("e a")}{" "}
-          <a className="underline" href="/legal/privacy" target="_blank" rel="noreferrer">
+          <a className="text-text underline underline-offset-2" href="/legal/privacy" target="_blank" rel="noreferrer">
             {t("Política de Privacidade")}
           </a>
           .
         </span>
       </label>
 
-      <div className="flex sm:justify-end">
-        <Button type="submit" disabled={pending || !accepted} className="w-full sm:w-auto">
+      <RodapeDoPasso>
+        <Button type="submit" size="lg" disabled={pending || !accepted}>
           {pending ? t("Salvando...") : t("Continuar")}
         </Button>
-      </div>
+      </RodapeDoPasso>
     </form>
   );
 }

@@ -350,9 +350,9 @@ export function ProdutosClient({
   }
 
   return (
-    <div className="mx-auto w-full max-w-5xl p-6" data-testid="tela-produtos">
+    <div className="mx-auto w-full max-w-5xl p-2" data-testid="tela-produtos">
       <header className="mb-6">
-        <h1 className="text-2xl font-semibold">{textos.titulo}</h1>
+        <h1 className="text-xl font-semibold">{textos.titulo}</h1>
         <p className="mt-1 text-sm text-muted-foreground">{textos.subtitulo}</p>
       </header>
 

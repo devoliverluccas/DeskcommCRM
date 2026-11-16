@@ -4,6 +4,7 @@ import { marcaDaSaida } from "@/lib/branding/saida";
 import { createClient } from "@/lib/supabase/server";
 import { IdiomaProvider } from "@/lib/i18n/IdiomaProvider";
 import { idiomaDoVisitante } from "@/lib/i18n/idiomaAnonimo";
+import { traduzir } from "@/lib/i18n/dicionario";
 
 /**
  * A casca das telas de acesso — login, cadastro, recuperação, MFA, confirmar acesso.
@@ -59,10 +60,18 @@ export default async function PublicLayout({ children }: { children: React.React
 
   return (
     <IdiomaProvider locale={locale}>
-      <div className="flex min-h-screen items-center justify-center bg-background p-6">
-        <div className="w-full max-w-sm space-y-6">
+      {/*
+        Painel de marca + formulário. Abaixo de `lg`, uma coluna: o logo em
+        cima e o formulário embaixo. De `lg` para cima, a marca ocupa o trilho
+        da esquerda (no fundo da casca) e o formulário fica no painel branco
+        destacado, a mesma linguagem da casca do app e do onboarding.
+        O logo é UM elemento só nos dois tamanhos — duplicá-lo quebraria o
+        `data-testid` que `tests/e2e/marca-logo.spec.ts` procura.
+      */}
+      <div className="flex min-h-dvh flex-col bg-bg lg:grid lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+        <aside data-theme="dark" className="flex flex-col items-center bg-bg px-6 pt-10 max-lg:pb-8 lg:items-start lg:justify-between lg:p-12">
           {marca.logoUrl || marca.logoDarkUrl ? (
-            <div className="flex justify-center">
+            <div className="flex justify-center lg:justify-start">
               {/*
                 <img> em vez de next/image pelo mesmo motivo da barra lateral: a URL
                 é de quem hospeda e o `next/image` exige allowlist de domínios
@@ -113,11 +122,18 @@ export default async function PublicLayout({ children }: { children: React.React
               </div>
             </div>
           ) : marcaEhADoProduto({ name: marca.nome, logoUrl: null }) ? (
-            <div className="flex justify-center">
-              <LogotipoDoProduto nome={marca.nome} className="h-12 w-auto" />
+            <div className="flex justify-center lg:justify-start">
+              <LogotipoDoProduto nome={marca.nome} className="h-12 w-auto lg:h-10" />
             </div>
-          ) : null}
-          {children}
+          ) : (
+            <p className="hidden text-lg font-semibold tracking-tight text-text lg:block">{marca.nome}</p>
+          )}
+          <p className="hidden max-w-xs text-2xl font-semibold leading-snug tracking-tight text-text lg:block">
+            {traduzir("Atendimento e vendas pelo WhatsApp, com agentes de inteligência artificial.", locale)}
+          </p>
+        </aside>
+        <div className="flex flex-1 justify-center px-6 py-10 lg:m-2 lg:items-center lg:rounded-xl lg:border lg:border-border lg:bg-surface lg:py-16">
+          <div className="w-full max-w-sm">{children}</div>
         </div>
       </div>
     </IdiomaProvider>

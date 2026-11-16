@@ -510,14 +510,16 @@ export function MessageBubble({
           isBareSticker
             ? "px-0 py-0"
             : cn(
-                "rounded-2xl px-3 py-2 shadow-sm",
+                // Raio de superfície (8px) e sem sombra (redesign v2): a bolha
+                // não flutua, e a cor já diz de que lado ela está.
+                "rounded-lg px-3 py-2",
                 temMenu && "pr-8",
                 // A área de toque da seta ocupa 48px. O documento precisa
                 // terminar antes dela, inclusive quando o cartão encolhe.
                 temMenu && cartaoDeDocumentoVisivel && "pointer-coarse:pr-12 pointer-coarse:max-w-[85%]",
                 isOutbound
-                  ? "rounded-br-sm bg-primary text-primary-foreground"
-                  : "rounded-bl-sm bg-muted text-foreground",
+                  ? "rounded-br-sm bg-accent text-accent-foreground"
+                  : "rounded-bl-sm bg-surface-elevated text-text",
               ),
           // O pulo da agenda não é falha: o selo diz isso, e a moldura de erro
           // diria o contrário (#3850).

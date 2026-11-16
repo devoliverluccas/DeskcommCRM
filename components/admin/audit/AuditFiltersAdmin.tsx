@@ -64,7 +64,7 @@ function MultiSelectPopover({
         <Button
           variant="outline"
           size="sm"
-          className="h-9 gap-1.5 text-sm font-normal"
+          className="gap-1.5 text-sm font-normal"
           aria-label={label}
         >
           {label}
@@ -87,7 +87,7 @@ function MultiSelectPopover({
           {selected.length > 0 && (
             <button
               onClick={() => { onClear(); setSearch(""); }}
-              className="w-full rounded-md px-2 py-1 text-left text-xs text-muted-foreground hover:bg-accent"
+              className="w-full rounded-md px-2 py-1 text-left text-xs text-muted-foreground hover:bg-hover"
             >
               {t("Limpar seleção")} ({selected.length})
             </button>
@@ -105,7 +105,7 @@ function MultiSelectPopover({
                 className={`w-full rounded-md px-2 py-1.5 text-left text-sm transition-colors ${
                   selected.includes(o.value)
                     ? "bg-accent font-medium"
-                    : "hover:bg-accent/50"
+                    : "hover:bg-hover"
                 }`}
               >
                 {o.label}
@@ -237,7 +237,7 @@ export function AuditFiltersAdmin({
         <Input
           id="audit-from"
           type="datetime-local"
-          className="h-9 w-48 text-sm"
+          className="w-48 text-sm"
           onChange={(e) => handleFromChange(e.target.value)}
           aria-label={t("Data de início")}
         />
@@ -249,7 +249,7 @@ export function AuditFiltersAdmin({
         <Input
           id="audit-to"
           type="datetime-local"
-          className="h-9 w-48 text-sm"
+          className="w-48 text-sm"
           onChange={(e) => handleToChange(e.target.value)}
           aria-label={t("Data de fim")}
         />
@@ -258,7 +258,7 @@ export function AuditFiltersAdmin({
         <Button
           variant="ghost"
           size="sm"
-          className="h-9 gap-1 text-muted-foreground"
+          className="gap-1 text-muted-foreground"
           onClick={clearAll}
         >
           <X size={14} aria-hidden />

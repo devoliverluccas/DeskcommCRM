@@ -263,7 +263,7 @@ export default async function ConversoesPage({
   )}`;
 
   return (
-    <div className="flex h-full flex-col gap-6 overflow-y-auto p-6">
+    <div className="flex h-full flex-col gap-5 overflow-y-auto p-2">
       <CabecalhoDaSubTela titulo={t("Conversões")} idioma={idioma}>
         <p className="max-w-2xl text-sm text-muted-foreground">
           {t(

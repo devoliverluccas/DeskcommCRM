@@ -108,7 +108,7 @@ export default async function TiposDeAgendamentoPage() {
   const identidades = await rotulosDosResponsaveisDaAgenda((pessoas ?? []).map((p) => String(p.user_id)), t);
 
   return (
-    <div className="flex h-full flex-col gap-6 p-6">
+    <div className="flex h-full flex-col gap-5 p-2">
       <CabecalhoDaSubTela titulo={tituloDaAgenda(org?.settings) ?? t("Agendamentos")} idioma={user.idioma}>
         <p className="mt-1 text-sm text-text-muted">
           {t(

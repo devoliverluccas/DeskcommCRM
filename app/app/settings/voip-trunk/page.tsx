@@ -31,7 +31,7 @@ export default async function TrunkSettingsPage() {
   const canWrite = ROLE_RANK[activeOrg.role] >= ROLE_RANK.admin;
 
   return (
-    <div className="flex h-full flex-col gap-6 p-6">
+    <div className="flex h-full flex-col gap-5 p-2">
       <CabecalhoDaSubTela titulo={traduzir("Trunk SIP", idioma)} idioma={idioma}>
         <p className="text-sm text-muted-foreground">
           {traduzir(

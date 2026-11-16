@@ -24,9 +24,9 @@ export default async function WebhooksPage({
   const abaInicial = ABAS.find((a) => a === pedida);
 
   return (
-    <div className="flex h-full flex-col gap-6 p-6">
+    <div className="flex h-full flex-col gap-5 p-2">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">Webhooks</h1>
+        <h1 className="text-xl font-semibold tracking-tight">Webhooks</h1>
         <p className="text-sm text-muted-foreground">
           {traduzir(
             "Receba contatos de fora (landing pages, formulários) e crie automações que agem sozinhas.",

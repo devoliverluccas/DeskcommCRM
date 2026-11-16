@@ -20,9 +20,9 @@ export default async function AuditPage() {
   const t = (texto: string) => traduzir(texto, user.idioma);
 
   return (
-    <div className="flex h-full flex-col gap-6 p-6">
+    <div className="flex h-full flex-col gap-5 p-2">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">{t("Audit Log")}</h1>
+        <h1 className="text-xl font-semibold tracking-tight">{t("Audit Log")}</h1>
         <p className="text-sm text-muted-foreground">
           {traduzir("Histórico append-only de mutações na organização. Manager+.", idioma)}
         </p>

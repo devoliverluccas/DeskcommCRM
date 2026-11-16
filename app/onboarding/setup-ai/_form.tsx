@@ -10,8 +10,9 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { createDefaultAgent, skipAi } from "@/app/actions/onboarding/createDefaultAgent";
 import type { PromptTemplate } from "@/lib/schemas/onboarding";
-import { cn } from "@/lib/utils";
 import { PROVEDOR_POR_ID } from "@/lib/ai/pontos/provedores";
+import { Check, X } from "@/lib/ui/icons";
+import { AvisoDoPasso, RodapeDoPasso, cartaoDeEscolha } from "../_components/Passo";
 
 /**
  * O jeito de falar, não o "estilo de prompt".
@@ -70,7 +71,7 @@ export function SetupAiForm({ capacidades, conferencias }: Props) {
 
   return (
     <form
-      className="space-y-6"
+      className="space-y-8"
       action={(formData) => {
         startTransition(async () => {
           setNaoPublicado(null);
@@ -111,7 +112,7 @@ export function SetupAiForm({ capacidades, conferencias }: Props) {
         });
       }}
     >
-      <div className="space-y-5 rounded-lg border bg-background p-6">
+      <div className="space-y-6 border-t border-border pt-8">
         <div className="space-y-2">
           <Label htmlFor="name">{t("Como ele vai se chamar")}</Label>
           <Input
@@ -123,21 +124,18 @@ export function SetupAiForm({ capacidades, conferencias }: Props) {
             maxLength={80}
             required
           />
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-text-muted">
             {t("É o nome que aparece para o seu time. O cliente vê só a conversa.")}
           </p>
         </div>
 
         <fieldset className="space-y-2">
-          <legend className="text-sm font-medium">{t("O jeito dele falar")}</legend>
-          <div className="grid gap-2">
+          <legend className="pb-2 text-sm font-medium text-text">{t("O jeito dele falar")}</legend>
+          <div className="grid gap-3 sm:grid-cols-3">
             {JEITOS.map((j) => (
               <label
                 key={j.id}
-                className={cn(
-                  "flex cursor-pointer items-start gap-3 rounded-md border p-3 transition-colors",
-                  jeito === j.id ? "border-primary bg-primary/5" : "hover:bg-muted/40",
-                )}
+                className={cartaoDeEscolha(jeito === j.id)}
               >
                 <input
                   type="radio"
@@ -145,11 +143,11 @@ export function SetupAiForm({ capacidades, conferencias }: Props) {
                   value={j.id}
                   checked={jeito === j.id}
                   onChange={() => setJeito(j.id)}
-                  className="mt-1"
+                  className="mt-0.5 h-4 w-4 shrink-0 accent-accent"
                 />
                 <span>
-                  <span className="block text-sm font-medium">{t(j.titulo)}</span>
-                  <span className="block text-xs text-muted-foreground">{t(j.desc)}</span>
+                  <span className="block text-sm font-medium text-text">{t(j.titulo)}</span>
+                  <span className="mt-1 block text-xs leading-relaxed text-text-muted">{t(j.desc)}</span>
                 </span>
               </label>
             ))}
@@ -171,7 +169,7 @@ export function SetupAiForm({ capacidades, conferencias }: Props) {
               t("Sempre chame o cliente pelo primeiro nome.")
             }
           />
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-text-muted">
             {t(
               "O que vale para qualquer atendimento aqui. Pode deixar em branco agora e escrever depois — ele aprende com você ao longo do tempo.",
             )}
@@ -185,49 +183,49 @@ export function SetupAiForm({ capacidades, conferencias }: Props) {
         é capaz de fazer — e a primeira pergunta de quem contrata alguém é
         exatamente essa.
       */}
-      <div className="grid gap-3 sm:grid-cols-2">
-        <section className="rounded-lg border bg-background p-4">
-          <h3 className="text-sm font-medium">{t("Ele já vem sabendo")}</h3>
-          <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
+      <div className="grid gap-8 border-t border-border pt-8 sm:grid-cols-2">
+        <section className="space-y-3">
+          <h3 className="text-sm font-semibold text-text">{t("Ele já vem sabendo")}</h3>
+          <ul className="space-y-2 text-sm text-text-muted">
             {capacidades.map((c) => (
-              <li key={c}>· {c}</li>
+              <li key={c} className="flex items-start gap-2">
+                <Check size={14} weight="bold" aria-hidden className="mt-0.5 shrink-0 text-success-fg" />
+                <span>{c}</span>
+              </li>
             ))}
           </ul>
         </section>
-        <section className="rounded-lg border bg-background p-4">
-          <h3 className="text-sm font-medium">{t("E nunca vai fazer")}</h3>
-          <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
+        <section className="space-y-3">
+          <h3 className="text-sm font-semibold text-text">{t("E nunca vai fazer")}</h3>
+          <ul className="space-y-2 text-sm text-text-muted">
             {conferencias.map((c) => (
-              <li key={c}>· {c}</li>
+              <li key={c} className="flex items-start gap-2">
+                <X size={14} weight="bold" aria-hidden className="mt-0.5 shrink-0 text-error" />
+                <span>{c}</span>
+              </li>
             ))}
           </ul>
-          <p className="mt-2 text-xs text-muted-foreground">
+          <p className="text-xs text-text-subtle">
             {t("Essas conferências acontecem antes de cada mensagem sair, e não têm interruptor.")}
           </p>
         </section>
       </div>
 
       {regrasNaoSalvas && (
-        <div
-          role="alert"
-          className="space-y-2 rounded-md border border-amber-300/60 bg-amber-50 p-4 dark:border-amber-500/30 dark:bg-amber-950/20"
-        >
+        <AvisoDoPasso tom="aviso" role="alert" className="space-y-3">
           <p className="text-sm font-medium">
             {t("O atendente foi criado, mas as")} <strong>{t("regras da casa")}</strong>{" "}
             {t("não foram gravadas. Copie o que você escreveu antes de sair — e salve de novo em")}{" "}
             <strong>{t("IA › Memória")}</strong>.
           </p>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs">
             {t("Erro do banco de dados:")} <code className="break-all">{regrasNaoSalvas}</code>
           </p>
-        </div>
+        </AvisoDoPasso>
       )}
 
       {causa === "chave" && (
-        <div
-          role="alert"
-          className="space-y-3 rounded-md border border-amber-300/60 bg-amber-50 p-4 dark:border-amber-500/30 dark:bg-amber-950/20"
-        >
+        <AvisoDoPasso tom="aviso" role="alert" className="space-y-3">
           <p className="text-sm font-medium">
             {t("Seu atendente foi criado, mas ficou como")} <strong>{t("rascunho")}</strong>{" "}
             {t("— ele ainda não tem com o que pensar.")}
@@ -267,14 +265,11 @@ export function SetupAiForm({ capacidades, conferencias }: Props) {
               {t("Continuar sem publicar")}
             </Button>
           </div>
-        </div>
+        </AvisoDoPasso>
       )}
 
       {causa === "modelo" && (
-        <div
-          role="alert"
-          className="space-y-3 rounded-md border border-amber-300/60 bg-amber-50 p-4 dark:border-amber-500/30 dark:bg-amber-950/20"
-        >
+        <AvisoDoPasso tom="aviso" role="alert" className="space-y-3">
           <p className="text-sm font-medium">
             {t("Seu atendente foi criado, mas ficou como")} <strong>{t("rascunho")}</strong>{" "}
             {t("— e rascunho não responde mensagem.")}
@@ -312,21 +307,18 @@ export function SetupAiForm({ capacidades, conferencias }: Props) {
               {t("Continuar sem publicar")}
             </Button>
           </div>
-        </div>
+        </AvisoDoPasso>
       )}
 
       {naoPublicado && (
-        <div
-          role="alert"
-          className="space-y-3 rounded-md border border-amber-300/60 bg-amber-50 p-4 dark:border-amber-500/30 dark:bg-amber-950/20"
-        >
+        <AvisoDoPasso tom="aviso" role="alert" className="space-y-3">
           <p className="text-sm font-medium">
             {t("Seu agente foi criado, mas ficou como")} <strong>{t("rascunho")}</strong>:{" "}
             {t(
               "não consegui ler os números de WhatsApp desta instalação, então não dá pra dizer em qual número ele atenderia — e rascunho não responde mensagem.",
             )}
           </p>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs">
             {t("Erro do banco de dados:")} <code className="break-all">{naoPublicado}</code>
           </p>
           <p className="text-sm">
@@ -345,22 +337,25 @@ export function SetupAiForm({ capacidades, conferencias }: Props) {
               {t("Continuar sem publicar")}
             </Button>
           </div>
-        </div>
+        </AvisoDoPasso>
       )}
 
-      <div className="flex flex-wrap justify-between gap-2">
-        <Button
-          type="button"
-          variant="ghost"
-          disabled={pending}
-          onClick={() => startTransition(() => void skipAi())}
-        >
-          {t("Pular")}
-        </Button>
-        <Button type="submit" disabled={pending}>
+      <RodapeDoPasso
+        secundaria={
+          <Button
+            type="button"
+            variant="ghost"
+            disabled={pending}
+            onClick={() => startTransition(() => void skipAi())}
+          >
+            {t("Pular")}
+          </Button>
+        }
+      >
+        <Button type="submit" size="lg" disabled={pending}>
           {pending ? t("Criando...") : t("Criar e continuar")}
         </Button>
-      </div>
+      </RodapeDoPasso>
     </form>
   );
 }

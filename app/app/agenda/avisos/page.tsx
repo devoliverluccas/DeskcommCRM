@@ -32,9 +32,9 @@ export default async function AvisoDeAgendamentoPage() {
   const idioma = user.idioma;
 
   return (
-    <div className="flex h-full flex-col gap-6 p-6">
+    <div className="flex h-full flex-col gap-5 p-2">
       <header className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">{traduzir("Aviso de agendamento", idioma)}</h1>
+        <h1 className="text-xl font-semibold tracking-tight">{traduzir("Aviso de agendamento", idioma)}</h1>
         <p className="text-sm text-muted-foreground">
           {traduzir(
             "Receba no WhatsApp cada horário marcado, remarcado ou cancelado, e às 7h o resumo do dia.",

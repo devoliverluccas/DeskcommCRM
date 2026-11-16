@@ -4,6 +4,7 @@ import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { dadosDoPasso } from "@/app/actions/onboarding/montarQuadro";
 import { QuadroClient } from "./_client";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { CabecalhoDoPasso } from "../_components/Passo";
 
 export const dynamic = "force-dynamic";
 
@@ -28,18 +29,14 @@ export default async function FunilPage() {
   const { atual, sugestao } = await dadosDoPasso(activeOrg.orgId, activeOrg.name);
 
   return (
-    <div className="space-y-6">
-      <header>
-        <h2 className="text-2xl font-semibold tracking-tight">
-          {traduzir("Onde ele organiza seus clientes", idioma)}
-        </h2>
-        <p className="text-sm text-muted-foreground">
-          {traduzir(
-            "Cada cliente vira um cartão que anda por essas colunas. Ele mesmo move o cartão conforme a conversa avança — por isso cada coluna diz também quando ele deve usá-la.",
-            idioma,
-          )}
-        </p>
-      </header>
+    <div>
+      <CabecalhoDoPasso
+        titulo={traduzir("Onde ele organiza seus clientes", idioma)}
+        subtitulo={traduzir(
+          "Cada cliente vira um cartão que anda por essas colunas. Ele mesmo move o cartão conforme a conversa avança — por isso cada coluna diz também quando ele deve usá-la.",
+          idioma,
+        )}
+      />
       <QuadroClient atual={atual} sugestao={sugestao} />
     </div>
   );

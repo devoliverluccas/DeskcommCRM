@@ -23,7 +23,7 @@ export default async function LgpdRequestDetailPage({
   if (!isAllowed) redirect("/app");
 
   return (
-    <div className="flex h-full flex-col gap-0 p-6">
+    <div className="flex h-full flex-col gap-0 p-2">
       <LgpdRequestDetail id={id} />
     </div>
   );

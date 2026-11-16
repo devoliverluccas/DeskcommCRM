@@ -89,7 +89,11 @@ export function AppShell({ sidebarCollapsed, podeAtender, children }: AppShellPr
       */}
       <div
         data-casca="conteudo"
-        className="flex min-h-[calc(100dvh-var(--faixas-de-cima,0px))] min-w-0 flex-1 flex-col"
+        // De `md` para cima o conteúdo é um PAINEL sobre a casca: superfície
+        // branca, borda e raio, com 8px de respiro. `overflow-clip` e não
+        // `hidden`: `hidden` criaria contêiner de rolagem e a barra do topo,
+        // que é `sticky`, deixaria de grudar na janela.
+        className="flex min-h-[calc(100dvh-var(--faixas-de-cima,0px)-var(--casca-recuo,0px))] min-w-0 flex-1 flex-col md:my-2 md:mr-2 md:overflow-clip md:rounded-xl md:border md:bg-surface md:shadow-xs"
       >
         <TopBar />
         {/*

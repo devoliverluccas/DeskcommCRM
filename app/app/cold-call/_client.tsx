@@ -882,7 +882,7 @@ function Sessao({
         <span className="flex size-11 items-center justify-center rounded-xl border border-accent/30 bg-accent-soft text-accent">
           <Phone size={22} weight="fill" aria-hidden />
         </span>
-        <h1 className="!text-2xl">{t("Cold Call")}</h1>
+        <h1 className="!text-xl">{t("Cold Call")}</h1>
         <span className="border-b-2 border-accent px-1 pb-1 text-sm font-semibold text-accent">{t("Ligando")}</span>
         <span className="pb-1 text-sm tabular-nums text-text-muted">
           {t("Lead")} {posicao + 1} {t("de")} {ordem.length}

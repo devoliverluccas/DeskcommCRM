@@ -686,7 +686,7 @@ export function AgendaClient({
       data-testid="tela-agenda"
       data-fonte={agendamentosIniciais.length > 0 ? "api" : "api-sem-dado"}
       data-fuso={fusoDeApresentacao ?? "organizacao"}
-      className="flex h-full flex-col gap-4 p-6"
+      className="flex h-full flex-col gap-4 p-2"
     >
       {tiposIniciais.some((tipo) => tipo.servicoColetivo) && <ReservasColetivas today={hojeNaOrganizacao} zone={fusoDaAgenda} canWrite={podeMarcar}/>}
       {/*
@@ -709,7 +709,7 @@ export function AgendaClient({
 
       <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
         <div className="min-w-0">
-          <h1 className="text-2xl font-semibold tracking-tight">{tituloDaAgenda ?? t("Agendamentos")}</h1>
+          <h1 className="text-xl font-semibold tracking-tight">{tituloDaAgenda ?? t("Agendamentos")}</h1>
           <p className="text-sm text-muted-foreground">
             {t("O que está marcado, com quem, e quem atende — seu e da equipe.")}
           </p>

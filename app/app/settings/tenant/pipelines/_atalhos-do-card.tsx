@@ -210,7 +210,7 @@ export function EditorDeAtalhos({
             <button
               type="button"
               aria-label={`${t("Remover atalho")} ${atalho.rotulo || i + 1}`}
-              className="justify-self-start rounded-md border border-border px-2 py-1 text-xs hover:bg-accent/10 disabled:opacity-50"
+              className="justify-self-start rounded-md border border-border px-2 py-1 text-xs hover:bg-hover disabled:opacity-50"
               disabled={!podeEditar}
               onClick={() => onChange(valor.filter((_, j) => j !== i))}
             >
@@ -227,7 +227,7 @@ export function EditorDeAtalhos({
 
       <button
         type="button"
-        className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs hover:bg-accent/10 disabled:opacity-50"
+        className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs hover:bg-hover disabled:opacity-50"
         disabled={!podeEditar || cheio}
         onClick={() => onChange([...valor, { rotulo: "", icone: "link", url: "" }])}
       >

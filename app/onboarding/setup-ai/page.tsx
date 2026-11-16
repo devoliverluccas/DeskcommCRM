@@ -9,6 +9,7 @@ import { capacidadesPadraoDoOnboarding } from "@/lib/ai/agents/capacidades-padra
 import { TOOL_CATALOG } from "@/lib/mcp/tools/catalog";
 import { CONFERENCIAS_DE_SAIDA } from "@/lib/ai/guardrails/lista-de-conferencia";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { CabecalhoDoPasso } from "../_components/Passo";
 
 export const dynamic = "force-dynamic";
 
@@ -44,13 +45,11 @@ export default async function SetupAiPage() {
   const conferencias = CONFERENCIAS_DE_SAIDA.map((c) => traduzir(c.rotulo, idioma));
 
   return (
-    <div className="space-y-6">
-      <header>
-        <h2 className="text-2xl font-semibold tracking-tight">{traduzir("Treine seu funcionário", idioma)}</h2>
-        <p className="text-sm text-muted-foreground">
-          {traduzir("Quem ele é, como fala e o que pode prometer. Dá para mudar tudo depois.", idioma)}
-        </p>
-      </header>
+    <div>
+      <CabecalhoDoPasso
+        titulo={traduzir("Treine seu funcionário", idioma)}
+        subtitulo={traduzir("Quem ele é, como fala e o que pode prometer. Dá para mudar tudo depois.", idioma)}
+      />
       {/*
         O cérebro vem ANTES do resto do formulário: sem chave, nada do que a
         pessoa preencher abaixo produz um funcionário que responde. E é aqui que

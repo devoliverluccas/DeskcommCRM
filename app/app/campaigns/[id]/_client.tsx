@@ -63,7 +63,7 @@ export function DetalheDaCampanha({ id }: { id: string }) {
 
   if (campanha.isLoading) {
     return (
-      <div className="space-y-3 p-6">
+      <div className="space-y-3 p-2">
         <Skeleton className="h-8 w-64" />
         <Skeleton className="h-32 w-full" />
       </div>
@@ -71,7 +71,7 @@ export function DetalheDaCampanha({ id }: { id: string }) {
   }
   if (campanha.isError || !campanha.data) {
     return (
-      <div className="p-6">
+      <div className="p-2">
         <Card className="p-6 text-center">
           <p className="text-sm text-error-fg">{t("Não foi possível carregar a campanha.")}</p>
           <Button size="sm" variant="outline" className="mt-2" onClick={() => campanha.refetch()}>
@@ -106,7 +106,7 @@ export function DetalheDaCampanha({ id }: { id: string }) {
   disponiveis.push("duplicar");
 
   return (
-    <div className="space-y-4 p-6">
+    <div className="space-y-4 p-2">
       <div>
         <Link
           href="/app/campaigns"
@@ -120,7 +120,7 @@ export function DetalheDaCampanha({ id }: { id: string }) {
       <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-2xl font-semibold tracking-tight">{c.name}</h1>
+            <h1 className="text-xl font-semibold tracking-tight">{c.name}</h1>
             <EstadoDaCampanha status={c.status} />
           </div>
           {c.failure_code && (

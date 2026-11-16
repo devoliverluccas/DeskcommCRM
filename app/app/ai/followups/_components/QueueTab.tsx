@@ -163,7 +163,7 @@ export function QueueTab({ canWrite }: Props) {
         </div>
 
         <Select value={status} onValueChange={(v) => setStatus(v as FollowupEnrollmentStatus | "all")}>
-          <SelectTrigger className="h-9 w-48 text-sm" aria-label={t("Filtrar por status")}>
+          <SelectTrigger className="w-48 text-sm" aria-label={t("Filtrar por status")}>
             <SelectValue placeholder={t("Todos os status")} />
           </SelectTrigger>
           <SelectContent>
@@ -177,7 +177,7 @@ export function QueueTab({ canWrite }: Props) {
         </Select>
 
         <Select value={pointerId} onValueChange={setPointerId}>
-          <SelectTrigger className="h-9 w-48 text-sm" aria-label={t("Filtrar por fluxo")}>
+          <SelectTrigger className="w-48 text-sm" aria-label={t("Filtrar por fluxo")}>
             <SelectValue placeholder={t("Todos os fluxos")} />
           </SelectTrigger>
           <SelectContent>

@@ -171,32 +171,32 @@ export function ListaDoFunil({ pipelineId, pipeline: funil, stages, filtros = SE
       {error ? (
         // Erro do banco NÃO vira "nenhum negócio": dizer que o funil está vazio
         // quando não se sabe ler é a resposta que o operador acredita.
-        <div className="rounded-md border border-destructive/30 bg-destructive/10 p-4 text-sm">
+        <div className="rounded-md bg-error-bg px-3 py-2 text-sm text-error-fg">
           {t("Não consegui carregar os negócios desta lista.")}
         </div>
       ) : isLoading && leads.length === 0 ? (
-        <div className="flex flex-1 animate-pulse items-center justify-center text-muted-foreground">
+        <div className="flex flex-1 animate-pulse items-center justify-center text-sm text-text-muted">
           {t("Carregando…")}
         </div>
       ) : leads.length === 0 ? (
-        <div className="rounded-md border p-6 text-center text-sm text-muted-foreground">
+        <div className="rounded-md border border-dashed border-border p-8 text-center text-sm text-text-muted">
           {chaveDoFiltro ? t("Nenhum negócio com este filtro.") : t("Nenhum negócio nesta página.")}
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-md border">
+        <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
-              <tr>
-                <th scope="col" className="p-3 font-medium">
+            <thead className="text-left text-xs text-text-muted">
+              <tr className="border-b border-border">
+                <th scope="col" className="h-9 px-3 font-medium whitespace-nowrap">
                   {t("Negócio")}
                 </th>
-                <th scope="col" className="p-3 font-medium">
+                <th scope="col" className="h-9 px-3 font-medium whitespace-nowrap">
                   {t("Etapa")}
                 </th>
-                <th scope="col" className="p-3 text-right font-medium">
+                <th scope="col" className="h-9 px-3 text-right font-medium whitespace-nowrap">
                   {t("Valor")}
                 </th>
-                <th scope="col" className="p-3 font-medium">
+                <th scope="col" className="h-9 px-3 font-medium whitespace-nowrap">
                   {t("Última atividade")}
                 </th>
               </tr>
@@ -205,32 +205,34 @@ export function ListaDoFunil({ pipelineId, pipeline: funil, stages, filtros = SE
               {leads.map((l) => (
                 <tr
                   key={l.id}
-                  className="border-t transition-colors hover:bg-muted/40"
+                  className="border-b border-border transition-colors hover:bg-hover"
                   data-testid={`lista-negocio-${l.id}`}
                 >
-                  <td className="p-3">
+                  <td className="px-3 py-1">
                     {/* O clique abre a MESMA ficha do quadro. É um botão, e não
                         a linha inteira: quem navega por teclado precisa de um
                         alvo focável por negócio. */}
                     <button
                       type="button"
                       onClick={() => setDossieId(l.id)}
-                      className="text-left font-medium underline-offset-2 hover:underline"
+                      className="inline-flex min-h-11 items-center text-left font-medium text-text underline-offset-2 hover:underline lg:min-h-8"
                     >
                       {l.title}
                     </button>
                   </td>
-                  <td className="p-3 text-muted-foreground">{nomeDaEtapa(l.stage_id)}</td>
-                  <td className="p-3 text-right tabular-nums">
+                  <td className="px-3 py-1 whitespace-nowrap text-text-muted">
+                    {nomeDaEtapa(l.stage_id)}
+                  </td>
+                  <td className="px-3 py-1 text-right font-medium whitespace-nowrap tabular-nums">
                     {valorUnico(l) ?? (recorrente(l) ? "" : "—")}
                     {recorrente(l) && (
-                      <span className="block text-xs font-normal text-muted-foreground">
+                      <span className="block text-xs font-normal text-text-muted">
                         {valorUnico(l) ? "+ " : ""}
                         {recorrente(l)}
                       </span>
                     )}
                   </td>
-                  <td className="p-3 text-muted-foreground">
+                  <td className="px-3 py-1 whitespace-nowrap text-text-muted tabular-nums">
                     {l.last_activity_at
                       ? diaCurto.format(new Date(l.last_activity_at))
                       : t("Sem atividade")}
@@ -257,7 +259,7 @@ export function ListaDoFunil({ pipelineId, pipeline: funil, stages, filtros = SE
               ver o cabeçalho da rota). Chave de dicionário com placeholder,
               literal, nunca template: chave montada em runtime não existe em
               dicionário nenhum e sairia em português para quem lê espanhol. */}
-          <span className="text-xs text-muted-foreground">
+          <span className="text-xs text-text-muted tabular-nums">
             {t("página {atual}").replace("{atual}", String(pagina))}
           </span>
           <Button

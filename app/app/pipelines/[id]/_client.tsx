@@ -64,6 +64,20 @@ type Visao = "quadro" | "calendario" | "lista";
  * cai no `e` (`lib/kanban/filters.ts`): a URL é deep-link, e um parâmetro colado
  * à mão não derruba a tela.
  */
+/**
+ * As abas da visão como grupo de botões encostados: cada uma tem a altura dos
+ * outros controles do cabeçalho (44px no toque, 32px no cursor) em vez de um
+ * trilho com abas menores dentro, que no toque ficaria abaixo dos 44px.
+ */
+function abaDaVisao(ativa: boolean): string {
+  return cn(
+    "-ml-px h-11 border border-border px-3 text-xs font-medium transition-colors first:ml-0 first:rounded-l-md last:rounded-r-md lg:h-8",
+    ativa
+      ? "relative z-10 border-border-strong bg-pressed text-text"
+      : "text-text-muted hover:bg-hover hover:text-text",
+  );
+}
+
 function visaoDoParam(bruto: string | null): Visao {
   return bruto === "lista" || bruto === "calendario" ? bruto : "quadro";
 }
@@ -302,7 +316,7 @@ export function PipelinePageClient({
       // `components/inbox/InboxLayout.tsx`, e é o que o gate
       // `tests/unit/altura-fixa-le-a-reserva-do-rodape.test.ts` cobra: altura
       // fixa não desconta número próprio, lê a reserva.
-      className="flex h-[calc(100dvh-3.5rem-var(--space-6)-max(var(--space-6),var(--rodape-ocupado,0px)))] min-h-[28rem] flex-col gap-4"
+      className="flex h-[calc(100dvh-3.5rem-var(--casca-recuo,0px)-var(--space-6)-max(var(--space-6),var(--rodape-ocupado,0px)))] min-h-[28rem] flex-col gap-4"
       // OBSERVÁVEL de propósito, e é a razão de existir desta linha: "a
       // assinatura morreu" e "nada aconteceu" produzem o MESMO silêncio na
       // tela, e sem este valor nem o produto nem o teste conseguem separar as
@@ -336,7 +350,7 @@ export function PipelinePageClient({
         */}
         <h1
           className={
-            podeTrocar ? "sr-only" : "min-w-0 truncate text-2xl font-semibold tracking-tight"
+            podeTrocar ? "sr-only" : "min-w-0 truncate text-xl font-semibold tracking-tight"
           }
         >
           {nomeAtual}
@@ -351,7 +365,7 @@ export function PipelinePageClient({
             <SelectTrigger
               aria-label={`${t("Trocar de funil")}: ${nomeAtual}`}
               data-testid="trocar-funil"
-              className="h-auto w-auto max-w-full min-w-0 gap-1.5 border-0 bg-transparent p-0 text-2xl font-semibold tracking-tight shadow-none focus:ring-1 focus:ring-ring sm:max-w-[60%] [&>span]:truncate"
+              className="-ml-1.5 h-11 w-auto max-w-full min-w-0 gap-1.5 rounded-md border-0 bg-transparent px-1.5 py-0 text-xl font-semibold tracking-tight shadow-none hover:bg-hover focus:ring-1 focus:ring-ring sm:max-w-[60%] lg:h-8 [&>span]:truncate"
             >
               <SelectValue placeholder={nomeAtual} />
             </SelectTrigger>
@@ -375,7 +389,7 @@ export function PipelinePageClient({
           (#3172, item 4 do CR), e é o endereço que faz a aba ser alcançável sem
           passar pelo quadro.
         */}
-        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+        <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
           {/* A DENSIDADE DOS CARDS (issue #3461, item 2) mora AO LADO das abas
               da visão, e só no Quadro: é a mesma família de escolha ("como eu
               olho este funil"), mas ela não muda o que se vê — muda quanto cabe.
@@ -385,8 +399,8 @@ export function PipelinePageClient({
           {visao === "quadro" && (
             <Button
               variant="outline"
-              size="sm"
               aria-pressed={cardsCompactos}
+              className="text-xs aria-pressed:border-border-strong aria-pressed:bg-pressed"
               title={t("Cards compactos")}
               data-testid="densidade-do-quadro"
               onClick={alternarDensidade}
@@ -399,18 +413,13 @@ export function PipelinePageClient({
               funil que não recebe mais escrita seria a mesma promessa falsa
               que o "Novo negócio" apagado. Por isso as abas nem aparecem. */}
           {!arquivado && (
-            <div className="flex items-center gap-0.5 rounded-md border bg-muted p-0.5">
+            <div className="flex items-center" role="group" aria-label={t("Visão do funil")}>
               <button
                 type="button"
                 data-testid="visao-quadro"
                 aria-pressed={visao === "quadro"}
                 onClick={() => mudarVisao("quadro")}
-                className={cn(
-                  "rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors",
-                  visao === "quadro"
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
+                className={abaDaVisao(visao === "quadro")}
               >
                 {t("Quadro")}
               </button>
@@ -419,12 +428,7 @@ export function PipelinePageClient({
                 data-testid="visao-lista"
                 aria-pressed={visao === "lista"}
                 onClick={() => mudarVisao("lista")}
-                className={cn(
-                  "rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors",
-                  visao === "lista"
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
+                className={abaDaVisao(visao === "lista")}
               >
                 {t("Lista")}
               </button>
@@ -433,12 +437,7 @@ export function PipelinePageClient({
                 data-testid="visao-calendario"
                 aria-pressed={visao === "calendario"}
                 onClick={() => mudarVisao("calendario")}
-                className={cn(
-                  "rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors",
-                  visao === "calendario"
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
+                className={abaDaVisao(visao === "calendario")}
               >
                 {t("Calendário")}
               </button>
@@ -452,16 +451,16 @@ export function PipelinePageClient({
             <Button
               onClick={() => setNewOpen(true)}
               disabled={etapasIniciais.length === 0}
-              className="shrink-0"
+              className="shrink-0 max-sm:flex-1"
             >
-              <Plus size={16} className="mr-2" /> {t("Novo negócio")}
+              <Plus size={14} /> {t("Novo negócio")}
             </Button>
           )}
         </div>
       </header>
       {arquivado && (
         <p
-          className="rounded-md border border-border bg-surface-elevated/40 p-3 text-sm leading-relaxed text-text-muted"
+          className="rounded-md bg-surface-elevated px-3 py-2 text-sm leading-relaxed text-text-muted"
           data-testid="funil-arquivado-aviso"
         >
           {t(
@@ -524,11 +523,11 @@ export function PipelinePageClient({
           filtros={filters}
         />
       ) : error ? (
-        <div className="rounded-md border border-destructive/30 bg-destructive/10 p-4 text-sm">
+        <div className="rounded-md bg-error-bg px-3 py-2 text-sm text-error-fg">
           {t("Não consegui carregar este funil:")} {formatError(error, t)}
         </div>
       ) : isLoading || !data ? (
-        <div className="flex flex-1 animate-pulse items-center justify-center text-muted-foreground">
+        <div className="flex flex-1 animate-pulse items-center justify-center text-sm text-text-muted">
           {t("Carregando…")}
         </div>
       ) : visaoEfetiva === "calendario" ? (

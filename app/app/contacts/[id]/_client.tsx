@@ -8,6 +8,7 @@ import { format } from "date-fns";
 import { ShieldCheck, PencilSimple, LockOpen } from "@/lib/ui/icons";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
+import { PageHeader, type AcaoSecundaria } from "@/components/app/PageHeader";
 import { FichasDoModulo } from "@/components/modulos/FichasDoModulo";
 import { ChipDeEtiqueta } from "@/components/tags/ChipDeEtiqueta";
 import { Badge } from "@/components/ui/badge";
@@ -103,6 +104,10 @@ export function ContactDetailClient({
   // antes dos early returns pelo mesmo motivo dos hooks acima.
   const podeJuntar = roleAtLeast(activeOrg?.role, "manager");
   const [juntarOpen, setJuntarOpen] = useState(false);
+  // Qual confirmação do cabeçalho está aberta (uma por vez).
+  const [confirmacao, setConfirmacao] = useState<
+    "desbloquear" | "pessoal" | "sempre-humano" | "sem-interesse" | null
+  >(null);
   // Desfazer o descadastro é o override da regra W-02 — só admin, e auditado.
   // O hook fica ANTES dos early returns: chamá-lo depois mudaria a ordem dos
   // hooks entre renderizações e o React reprova.
@@ -140,7 +145,7 @@ export function ContactDetailClient({
 
   if (q.isLoading) {
     return (
-      <div className="space-y-4 p-6">
+      <div className="space-y-4 p-2">
         <Skeleton className="h-8 w-64" />
         <Skeleton className="h-32 w-full" />
       </div>
@@ -149,7 +154,7 @@ export function ContactDetailClient({
 
   if (q.isError || !q.data) {
     return (
-      <div className="p-6">
+      <div className="p-2">
         <Card className="p-6 text-center text-sm text-error-fg">{t("Erro ao carregar contato.")}</Card>
       </div>
     );
@@ -198,8 +203,82 @@ export function ContactDetailClient({
     contact.source,
   );
 
+  // Quem age no cabeçalho: nem a ficha anonimizada, nem o suporte só-leitura.
+  const podeAgir = !contact.is_anonymized && user.support?.access_mode !== "support_readonly";
+
+  /*
+    As ações de marca e fusão, na ordem de antes, cada uma com o seu gate:
+    - DESBLOQUEAR é o caminho de volta do descadastro (regra W-02: "Tenant admin
+      pode desbloquear manualmente; ação auditada"). Só ADMIN — reabre um canal
+      que o cliente fechou — e confirma antes, porque nenhum caminho do produto
+      bloqueia de novo à mão (o único escritor de is_blocked=true é o STOP do
+      cliente, em lib/channels/pos-entrada.ts).
+    - PESSOAL (spec 21, etapa 15): gerente marca (confirma: esconde da operação)
+      e desmarca direto.
+    - SEMPRE ATENDIMENTO HUMANO (issue 2379): a marca que a devolução NÃO desfaz.
+      Marcar confirma; remover é direto e NÃO devolve o atendimento.
+    - SEM INTERESSE (decisão D3): quem ouviu o "não" registra; confirma porque
+      só um administrador desfaz (aba LGPD). Não bloqueia o contato.
+    - JUNTAR (spec 31): gestor, mesmo gate da fusão.
+  */
+  const acoesSecundarias: AcaoSecundaria[] = [];
+  if (contact.is_blocked && isAdmin) {
+    acoesSecundarias.push({
+      label: t("Desbloquear"),
+      icon: LockOpen,
+      disabled: desbloquear.isPending,
+      onSelect: () => setConfirmacao("desbloquear"),
+    });
+  }
+  if (podeMarcarPessoal) {
+    acoesSecundarias.push(
+      contact.is_personal
+        ? {
+            label: desmarcarPessoal.isPending ? t("Desmarcando...") : t("Desmarcar pessoal"),
+            disabled: desmarcarPessoal.isPending,
+            testId: "desmarcar-pessoal",
+            onSelect: () => desmarcarPessoal.mutate(),
+          }
+        : {
+            label: t("Marcar como pessoal"),
+            disabled: marcarPessoal.isPending,
+            testId: "marcar-pessoal",
+            onSelect: () => setConfirmacao("pessoal"),
+          },
+      contact.ai_opt_out
+        ? {
+            label: desmarcarSempreHumano.isPending
+              ? t("Removendo...")
+              : t("Remover marca de humano"),
+            disabled: desmarcarSempreHumano.isPending,
+            testId: "desmarcar-sempre-humano",
+            onSelect: () => desmarcarSempreHumano.mutate(),
+          }
+        : {
+            label: t("Marcar como sempre humano"),
+            disabled: marcarSempreHumano.isPending,
+            testId: "marcar-sempre-humano",
+            onSelect: () => setConfirmacao("sempre-humano"),
+          },
+    );
+  }
+  if (!recusouOfertas && podeMarcarSemInteresse) {
+    acoesSecundarias.push({
+      label: t("Marcar sem interesse"),
+      testId: "marcar-sem-interesse",
+      onSelect: () => setConfirmacao("sem-interesse"),
+    });
+  }
+  if (podeJuntar) {
+    acoesSecundarias.push({
+      label: t("Juntar com outra ficha"),
+      testId: "juntar-com-outra-ficha",
+      onSelect: () => setJuntarOpen(true),
+    });
+  }
+
   return (
-    <div className="space-y-4 p-6">
+    <div className="space-y-4 p-2">
       {contact.is_anonymized && (
         <div
           role="alert"
@@ -215,196 +294,129 @@ export function ContactDetailClient({
         </div>
       )}
 
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-        <div className="min-w-0">
-          {/* Sem truncar: nome é dado que a tela existe pra mostrar, e cortar
-              com reticências sem um jeito de ver o resto violaria o princípio
-              de nunca esconder informação crítica. Deixa quebrar linha. */}
-          <h1 className="break-words text-2xl font-semibold tracking-tight">{displayName}</h1>
-          <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-            {contact.email && <span>{contact.email}</span>}
-            {contact.email && contact.phone_number && <span>•</span>}
-            {contact.phone_number && <span>{phoneForDisplay(contact.phone_number)}</span>}
-          </div>
-          <div className="mt-2 flex flex-wrap gap-1">
-            {contact.tags.map((t) => (
-              <ChipDeEtiqueta key={t} tag={t} />
-            ))}
-            {contact.is_blocked && <Badge variant="warning">{t("Bloqueado")}</Badge>}
-            {/* Selo lido da COLUNA, nunca da etiqueta (critério 5): editar
-                etiquetas não apaga o selo — mesma regra do "Bloqueado" acima. */}
-            {contact.is_personal && <Badge variant="secondary">{t("Pessoal")}</Badge>}
-            {/* O TIPO DO CONTATO (issue 3005, fatia 1): selo lido da COLUNA
-                (`contacts.contact_type`), mesma regra dos de cima — a etiqueta
-                `fornecedor` é de trabalho e removível; o selo não. Só o
-                fornecedor aparece: cliente é o padrão da coluna. */}
-            {contact.contact_type === "fornecedor" && (
-              <Badge variant="secondary">{t("Fornecedor")}</Badge>
+      {/*
+        Identidade à esquerda (nome sem truncar — é o dado que a tela existe pra
+        mostrar —, contato, selos); à direita "Chamar" e "Editar" sempre à vista,
+        e as ações de marca e fusão como botões de `md` para cima e no "⋯" abaixo.
+        Os selos leem a COLUNA, nunca a etiqueta: etiqueta se edita, coluna não.
+      */}
+      <PageHeader
+        title={displayName}
+        subtitle={
+          <>
+            {(contact.email || contact.phone_number) && (
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                {contact.email && <span className="break-all">{contact.email}</span>}
+                {contact.email && contact.phone_number && (
+                  <span aria-hidden className="text-text-subtle">
+                    •
+                  </span>
+                )}
+                {contact.phone_number && (
+                  <span className="tabular-nums">{phoneForDisplay(contact.phone_number)}</span>
+                )}
+              </div>
             )}
-            {/* A marca PERMANENTE (issue 2379): lida da COLUNA, mesma régua do
-                "Bloqueado" e do "Pessoal" — a devolução não a apaga, então o selo
-                continua a verdade mesmo quando a conversa já voltou ao automático. */}
-            {contact.ai_opt_out && <Badge variant="secondary">{t("Sempre atendimento humano")}</Badge>}
-            {semInteresse && <Badge variant="secondary">{t("Sem interesse em ofertas")}</Badge>}
-            {contact.is_anonymized && <Badge variant="destructive">{t("Anonimizado")}</Badge>}
-          </div>
-        </div>
-        {!contact.is_anonymized && user.support?.access_mode !== "support_readonly" && (
-          <div className="flex shrink-0 flex-wrap items-center gap-2">
-            {/* O CAMINHO DE VOLTA do descadastro. Sem ele, o contato que pediu
-                para sair — ou que caiu num falso positivo — ficava preso para
-                sempre: `before-send` recusa todo envio, o funil não cria lead,
-                o follow-up não retoma. A regra W-02 previu o override
-                ("Tenant admin pode desbloquear manualmente; ação auditada") e o
-                produto não tinha porta nenhuma para exercê-lo.
+            <div className="mt-2 flex flex-wrap gap-1 empty:hidden">
+              {contact.tags.map((t) => (
+                <ChipDeEtiqueta key={t} tag={t} />
+              ))}
+              {contact.is_blocked && <Badge variant="warning">{t("Bloqueado")}</Badge>}
+              {contact.is_personal && <Badge variant="secondary">{t("Pessoal")}</Badge>}
+              {/* O TIPO (issue 3005): só o fornecedor aparece; cliente é o padrão. */}
+              {contact.contact_type === "fornecedor" && (
+                <Badge variant="secondary">{t("Fornecedor")}</Badge>
+              )}
+              {/* A marca PERMANENTE (issue 2379): a devolução não a apaga. */}
+              {contact.ai_opt_out && (
+                <Badge variant="secondary">{t("Sempre atendimento humano")}</Badge>
+              )}
+              {semInteresse && <Badge variant="secondary">{t("Sem interesse em ofertas")}</Badge>}
+              {contact.is_anonymized && <Badge variant="destructive">{t("Anonimizado")}</Badge>}
+            </div>
+          </>
+        }
+        secondaryActions={podeAgir ? acoesSecundarias : undefined}
+        actions={
+          podeAgir ? (
+            <>
+              <DialButton contactId={contactId} hasPhone={!!contact.phone_number} />
+              <Button onClick={() => setEditOpen(true)}>
+                <PencilSimple size={16} weight="bold" aria-hidden />
+                <span>{t("Editar")}</span>
+              </Button>
+            </>
+          ) : undefined
+        }
+      />
 
-                Só ADMIN, como a regra nomeia: desfazer um pedido de descadastro
-                não é editar cadastro, é reabrir um canal que o cliente fechou —
-                e quem clica responde pela decisão. */}
-            {/* Confirmação antes do clique: nenhum caminho do produto bloqueia
-                de novo à mão (o único escritor de is_blocked=true é o STOP do
-                próprio cliente, em lib/channels/pos-entrada.ts), então um clique
-                errado ao lado do "Editar" reabriria um canal que só o cliente
-                consegue fechar outra vez. */}
-            {contact.is_blocked && isAdmin && (
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button variant="outline" disabled={desbloquear.isPending} className="shrink-0">
-                    <LockOpen size={16} weight="bold" aria-hidden />
-                    <span>{t("Desbloquear")}</span>
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>{t("Desbloquear este contato?")}</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      {t("Este contato pediu para não receber mais mensagens. Desbloquear volta a permitir campanhas, follow-ups e respostas da IA para ele, e a ação fica registrada na auditoria em seu nome.")}
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>{t("Cancelar")}</AlertDialogCancel>
-                    <AlertDialogAction onClick={() => desbloquear.mutate()}>
-                      {t("Desbloquear")}
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            )}
-            {/* PESSOAL (spec 21, etapa 15): gerente marca e desmarca; sem
-                exceção de envio — quem é pessoal não recebe por nenhum caminho.
-                Marcar confirma (esconde da operação); desmarcar é direto. */}
-            {!contact.is_personal && podeMarcarPessoal && (
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button
-                    variant="outline"
-                    disabled={marcarPessoal.isPending}
-                    className="shrink-0"
-                    data-testid="marcar-pessoal"
-                  >
-                    <span>{t("Marcar como pessoal")}</span>
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>{t("Marcar este contato como pessoal?")}</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      {t("O contato sai da operação: conversas fecham, IA, follow-ups, campanha e envios param. O histórico continua no banco e volta à vista ao desmarcar; follow-ups e campanhas cancelados não voltam.")}
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>{t("Cancelar")}</AlertDialogCancel>
-                    <AlertDialogAction onClick={() => marcarPessoal.mutate()}>
-                      {t("Marcar como pessoal")}
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            )}
-            {contact.is_personal && podeMarcarPessoal && (
-              <Button
-                variant="outline"
-                disabled={desmarcarPessoal.isPending}
-                className="shrink-0"
-                data-testid="desmarcar-pessoal"
-                onClick={() => desmarcarPessoal.mutate()}
-              >
-                <span>
-                  {desmarcarPessoal.isPending ? t("Desmarcando...") : t("Desmarcar pessoal")}
-                </span>
-              </Button>
-            )}
-            {/* SEMPRE ATENDIMENTO HUMANO (issue 2379): a marca que a devolução
-                NÃO desfaz — nem a manual, nem a automática do cron. Marcar
-                confirma (a IA para de vez); remover é direto e NÃO devolve o
-                atendimento, que continua sendo gesto do botão "Devolver ao
-                automático". Mesmo gate de pessoal: decisão operacional. */}
-            {!contact.ai_opt_out && podeMarcarPessoal && (
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button
-                    variant="outline"
-                    disabled={marcarSempreHumano.isPending}
-                    className="shrink-0"
-                    data-testid="marcar-sempre-humano"
-                  >
-                    <span>{t("Marcar como sempre humano")}</span>
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>
-                      {t("Marcar este contato como sempre humano?")}
-                    </AlertDialogTitle>
-                    <AlertDialogDescription>
-                      {t("A IA deixa de responder este contato para sempre: a devolução automática e o botão de devolver ao automático passam a recusar, e a marca só sai por aqui. A conversa atual continua com a equipe.")}
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>{t("Cancelar")}</AlertDialogCancel>
-                    <AlertDialogAction onClick={() => marcarSempreHumano.mutate()}>
-                      {t("Marcar como sempre humano")}
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            )}
-            {contact.ai_opt_out && podeMarcarPessoal && (
-              <Button
-                variant="outline"
-                disabled={desmarcarSempreHumano.isPending}
-                className="shrink-0"
-                data-testid="desmarcar-sempre-humano"
-                onClick={() => desmarcarSempreHumano.mutate()}
-              >
-                <span>
-                  {desmarcarSempreHumano.isPending
-                    ? t("Removendo...")
-                    : t("Remover marca de humano")}
-                </span>
-              </Button>
-            )}
-            {/* SEM INTERESSE (decisão D3): quem ouviu o "não" registra. Confirma antes,
-                porque só um administrador desfaz (aba LGPD). Não bloqueia o contato. */}
-            {!recusouOfertas && podeMarcarSemInteresse && <BotaoMarcarSemInteresse contactId={contactId} />}
-            <DialButton contactId={contactId} hasPhone={!!contact.phone_number} />
-            {podeJuntar && (
-              <Button
-                variant="outline"
-                onClick={() => setJuntarOpen(true)}
-                className="shrink-0"
-                data-testid="juntar-com-outra-ficha"
-              >
-                <span>{t("Juntar com outra ficha")}</span>
-              </Button>
-            )}
-            <Button variant="outline" onClick={() => setEditOpen(true)} className="shrink-0">
-              <PencilSimple size={16} weight="bold" aria-hidden />
-              <span>{t("Editar")}</span>
-            </Button>
-          </div>
-        )}
-      </header>
+      {/* As confirmações das ações do cabeçalho moram fora dele: o gatilho é
+          botão no computador e item do "⋯" no celular, e o diálogo é um só. */}
+      <AlertDialog
+        open={confirmacao === "desbloquear"}
+        onOpenChange={(aberto) => !aberto && setConfirmacao(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("Desbloquear este contato?")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("Este contato pediu para não receber mais mensagens. Desbloquear volta a permitir campanhas, follow-ups e respostas da IA para ele, e a ação fica registrada na auditoria em seu nome.")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("Cancelar")}</AlertDialogCancel>
+            <AlertDialogAction onClick={() => desbloquear.mutate()}>
+              {t("Desbloquear")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog
+        open={confirmacao === "pessoal"}
+        onOpenChange={(aberto) => !aberto && setConfirmacao(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("Marcar este contato como pessoal?")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("O contato sai da operação: conversas fecham, IA, follow-ups, campanha e envios param. O histórico continua no banco e volta à vista ao desmarcar; follow-ups e campanhas cancelados não voltam.")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("Cancelar")}</AlertDialogCancel>
+            <AlertDialogAction onClick={() => marcarPessoal.mutate()}>
+              {t("Marcar como pessoal")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog
+        open={confirmacao === "sempre-humano"}
+        onOpenChange={(aberto) => !aberto && setConfirmacao(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("Marcar este contato como sempre humano?")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("A IA deixa de responder este contato para sempre: a devolução automática e o botão de devolver ao automático passam a recusar, e a marca só sai por aqui. A conversa atual continua com a equipe.")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("Cancelar")}</AlertDialogCancel>
+            <AlertDialogAction onClick={() => marcarSempreHumano.mutate()}>
+              {t("Marcar como sempre humano")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      {podeAgir && !recusouOfertas && podeMarcarSemInteresse && (
+        <BotaoMarcarSemInteresse
+          contactId={contactId}
+          semGatilho
+          aberto={confirmacao === "sem-interesse"}
+          onAbertoChange={(aberto) => !aberto && setConfirmacao(null)}
+        />
+      )}
 
       <ConversaNoDossie conversa={contact.conversa} />
 
@@ -412,7 +424,7 @@ export function ContactDetailClient({
           tela que PEDE uma ação. Enterrado numa aba, viraria pendência que só
           quem já sabe que existe encontra — e a fila deixaria de ser fila.
           Some sozinho quando não há nada aguardando. */}
-      {!contact.is_anonymized && user.support?.access_mode !== "support_readonly" && (
+      {podeAgir && (
         <PropostasDeDado
           contactId={contactId}
           podeDecidir={Boolean(activeOrg && ROLE_RANK[activeOrg.role] >= ROLE_RANK.agent)}
@@ -429,140 +441,158 @@ export function ContactDetailClient({
         </TabsList>
 
         <TabsContent value="overview" className="mt-4">
-          <Card className="p-4">
-            <dl className="grid grid-cols-1 gap-4 text-sm md:grid-cols-2">
-              <div>
-                <dt className="text-xs uppercase text-muted-foreground">{t("Nome")}</dt>
-                <dd className="mt-1">{contact.name ?? "—"}</dd>
-              </div>
-              <div>
-                <dt className="text-xs uppercase text-muted-foreground">{t("Nome")} · WhatsApp</dt>
-                <dd className="mt-1">{contact.display_name ?? "—"}</dd>
-              </div>
-              {contact.address_book_name && (
+          {/* O resumo em SEÇÕES, sem cartão: título pequeno e divisória, lado a
+              lado de `lg` para cima. Quem é a pessoa à esquerda; de onde veio e
+              quando à direita. */}
+          <div className="grid grid-cols-1 gap-6 border-t border-border pt-4 lg:grid-cols-2 lg:gap-10">
+            <section aria-labelledby="ficha-identificacao">
+              <h2 id="ficha-identificacao" className="text-xs font-medium uppercase tracking-wide text-text-subtle">
+                {t("Identificação")}
+              </h2>
+              <dl className="mt-3 grid grid-cols-1 gap-4 text-sm">
                 <div>
-                  {/* Só a equipe vê: nenhuma mensagem usa este nome (PR #2439). */}
-                  <dt className="text-xs uppercase text-muted-foreground">{t("Nome na agenda do celular")}</dt>
-                  <dd className="mt-1">{contact.address_book_name}</dd>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
-                    {t("Só a equipe vê. Para usar em mensagens, copie para o nome.")}
-                  </p>
+                  <dt className="text-xs uppercase text-muted-foreground">{t("Nome")}</dt>
+                  <dd className="mt-1">{contact.name ?? "—"}</dd>
                 </div>
-              )}
-              <div>
-                <dt className="text-xs uppercase text-muted-foreground">Email</dt>
-                <dd className="mt-1">{contact.email ?? "—"}</dd>
-              </div>
-              {/*
-                Os telefones da ficha (Spec 31). Sem extra, a linha segue como hoje
-                ("Telefone", com o tipo ao lado); com extra, "Telefones" lista o
-                principal e os extras. Quem tem papel `agent` ou acima edita aqui.
-              */}
-              <TelefonesDaFicha
-                contato={contact}
-                podeEditar={Boolean(activeOrg && ROLE_RANK[activeOrg.role] >= ROLE_RANK.agent)}
-              />
-              {linksDoContato.length > 0 && (
                 <div>
-                  <dt className="text-xs uppercase text-muted-foreground">{t("Links")}</dt>
-                  <dd className="mt-1">
-                    <ListaDeLinks links={linksDoContato} />
-                  </dd>
+                  <dt className="text-xs uppercase text-muted-foreground">{t("Nome")} · WhatsApp</dt>
+                  <dd className="mt-1">{contact.display_name ?? "—"}</dd>
                 </div>
-              )}
-              {/*
-                A data gravada pelo "Editar contato" (e pela proposta aprovada),
-                enxergada aqui — é ela que o cron `contact-birthdays` lê para
-                emitir `contact.birthday`. A string vira `dd/MM/yyyy` PELOS
-                PEDAÇOS: `new Date("1990-09-14")` nasce à meia-noite em UTC, e
-                `format` no fuso da tela (UTC-3) devolveria 13/09 — o
-                aniversário de ontem para quem olha.
-              */}
-              <div>
-                <dt className="text-xs uppercase text-muted-foreground">
-                  {t("Data de nascimento")}
-                </dt>
-                <dd className="mt-1">
-                  {contact.birthdate ? contact.birthdate.split("-").reverse().join("/") : "—"}
-                </dd>
-              </div>
-              {(contact.zip_code || contact.street || contact.city || contact.state) && (
-                <div className="sm:col-span-2">
-                  <dt className="text-xs uppercase text-muted-foreground">{t("Endereço")}</dt>
-                  <dd className="mt-1">
-                    {[contact.street, contact.number, contact.complement, contact.district, contact.city, contact.state, contact.zip_code]
-                      .filter(Boolean)
-                      .join(", ")}
-                  </dd>
-                </div>
-              )}
-              {/*
-                A origem sai do `source_metadata` quando ele tem algo melhor a
-                dizer, e cai na coluna `source` quando não tem. Antes esta linha
-                lia só a coluna, e a resposta era `site` para quem chegou pelo
-                link do site, ou o nome da plataforma para quem clicou num
-                anúncio — mesmo com o `utm_source` da campanha gravado ao lado.
-              */}
-              <div>
-                <dt className="text-xs uppercase text-muted-foreground">{t("Origem")}</dt>
-                <dd className="mt-1">
-                  {origem.origem === ORIGEM_AGENDA_DO_CELULAR ? t("Agenda do celular") : origem.origem}
-                </dd>
-                {origem.inferidaPorHorario && (
-                  <dd className="mt-1 text-sm text-muted-foreground">
-                    {t(
-                      "Provável: deduzida pelo horário do clique. A mensagem chegou sem o código do link.",
-                    )}
-                  </dd>
+                {contact.address_book_name && (
+                  <div>
+                    {/* Só a equipe vê: nenhuma mensagem usa este nome (PR #2439). */}
+                    <dt className="text-xs uppercase text-muted-foreground">{t("Nome na agenda do celular")}</dt>
+                    <dd className="mt-1">{contact.address_book_name}</dd>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {t("Só a equipe vê. Para usar em mensagens, copie para o nome.")}
+                    </p>
+                  </div>
                 )}
-              </div>
-              <NiveisDaOrigem origem={origem} />
-              <div>
-                <dt className="text-xs uppercase text-muted-foreground">{t("Última atividade")}</dt>
-                <dd className="mt-1">
-                  {contact.last_activity_at
-                    ? format(new Date(contact.last_activity_at), "dd/MM/yyyy HH:mm", {
-                        locale: localeDaData,
-                      })
-                    : "—"}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-xs uppercase text-muted-foreground">{t("Criado em")}</dt>
-                <dd className="mt-1">
-                  {format(new Date(contact.created_at), "dd/MM/yyyy", { locale: localeDaData })}
-                </dd>
-              </div>
-              {/*
-                Escondido quando nulo, em vez de mostrar "—": aqui a ausência não
-                é dado faltando, é "ainda não é cliente". Um travessão nesta
-                linha leria como falha de cadastro. E escondido com a regra
-                "Clientes pela agenda" desligada: a data está congelada.
-              */}
-              {clientesLigado && contact.first_service_at && (
+                <div>
+                  <dt className="text-xs uppercase text-muted-foreground">Email</dt>
+                  <dd className="mt-1">{contact.email ?? "—"}</dd>
+                </div>
+                {/*
+                  Os telefones da ficha (Spec 31). Sem extra, a linha segue como hoje
+                  ("Telefone", com o tipo ao lado); com extra, "Telefones" lista o
+                  principal e os extras. Quem tem papel `agent` ou acima edita aqui.
+                */}
+                <TelefonesDaFicha
+                  contato={contact}
+                  podeEditar={Boolean(activeOrg && ROLE_RANK[activeOrg.role] >= ROLE_RANK.agent)}
+                />
+                {linksDoContato.length > 0 && (
+                  <div>
+                    <dt className="text-xs uppercase text-muted-foreground">{t("Links")}</dt>
+                    <dd className="mt-1">
+                      <ListaDeLinks links={linksDoContato} />
+                    </dd>
+                  </div>
+                )}
+                {/*
+                  A data gravada pelo "Editar contato" (e pela proposta aprovada),
+                  enxergada aqui — é ela que o cron `contact-birthdays` lê para
+                  emitir `contact.birthday`. A string vira `dd/MM/yyyy` PELOS
+                  PEDAÇOS: `new Date("1990-09-14")` nasce à meia-noite em UTC, e
+                  `format` no fuso da tela (UTC-3) devolveria 13/09 — o
+                  aniversário de ontem para quem olha.
+                */}
                 <div>
                   <dt className="text-xs uppercase text-muted-foreground">
-                    {t("Cliente desde")}
+                    {t("Data de nascimento")}
                   </dt>
                   <dd className="mt-1">
-                    {format(new Date(contact.first_service_at), "dd/MM/yyyy", {
-                      locale: localeDaData,
-                    })}
+                    {contact.birthdate ? contact.birthdate.split("-").reverse().join("/") : "—"}
                   </dd>
                 </div>
-              )}
-              <div>
-                <dt className="text-xs uppercase text-muted-foreground">Tags</dt>
-                <dd className="mt-1 flex flex-wrap gap-1">
-                  {contact.tags.length === 0
-                    ? "—"
-                    : contact.tags.map((t) => (
-                        <ChipDeEtiqueta key={t} tag={t} />
-                      ))}
-                </dd>
-              </div>
-            </dl>
-          </Card>
+                {(contact.zip_code || contact.street || contact.city || contact.state) && (
+                  <div>
+                    <dt className="text-xs uppercase text-muted-foreground">{t("Endereço")}</dt>
+                    <dd className="mt-1">
+                      {[contact.street, contact.number, contact.complement, contact.district, contact.city, contact.state, contact.zip_code]
+                        .filter(Boolean)
+                        .join(", ")}
+                    </dd>
+                  </div>
+                )}
+              </dl>
+            </section>
+            <section
+              aria-labelledby="ficha-origem-e-atividade"
+              className="border-t border-border pt-4 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-10"
+            >
+              <h2 id="ficha-origem-e-atividade" className="text-xs font-medium uppercase tracking-wide text-text-subtle">
+                {t("Origem e atividade")}
+              </h2>
+              <dl className="mt-3 grid grid-cols-1 gap-4 text-sm">
+                {/*
+                  A origem sai do `source_metadata` quando ele tem algo melhor a
+                  dizer, e cai na coluna `source` quando não tem. Antes esta linha
+                  lia só a coluna, e a resposta era `site` para quem chegou pelo
+                  link do site, ou o nome da plataforma para quem clicou num
+                  anúncio — mesmo com o `utm_source` da campanha gravado ao lado.
+                */}
+                <div>
+                  <dt className="text-xs uppercase text-muted-foreground">{t("Origem")}</dt>
+                  <dd className="mt-1">
+                    {origem.origem === ORIGEM_AGENDA_DO_CELULAR ? t("Agenda do celular") : origem.origem}
+                  </dd>
+                  {origem.inferidaPorHorario && (
+                    <dd className="mt-1 text-sm text-muted-foreground">
+                      {t(
+                        "Provável: deduzida pelo horário do clique. A mensagem chegou sem o código do link.",
+                      )}
+                    </dd>
+                  )}
+                </div>
+                <NiveisDaOrigem origem={origem} />
+                <div>
+                  <dt className="text-xs uppercase text-muted-foreground">{t("Última atividade")}</dt>
+                  <dd className="mt-1">
+                    {contact.last_activity_at
+                      ? format(new Date(contact.last_activity_at), "dd/MM/yyyy HH:mm", {
+                          locale: localeDaData,
+                        })
+                      : "—"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs uppercase text-muted-foreground">{t("Criado em")}</dt>
+                  <dd className="mt-1">
+                    {format(new Date(contact.created_at), "dd/MM/yyyy", { locale: localeDaData })}
+                  </dd>
+                </div>
+                {/*
+                  Escondido quando nulo, em vez de mostrar "—": aqui a ausência não
+                  é dado faltando, é "ainda não é cliente". Um travessão nesta
+                  linha leria como falha de cadastro. E escondido com a regra
+                  "Clientes pela agenda" desligada: a data está congelada.
+                */}
+                {clientesLigado && contact.first_service_at && (
+                  <div>
+                    <dt className="text-xs uppercase text-muted-foreground">
+                      {t("Cliente desde")}
+                    </dt>
+                    <dd className="mt-1">
+                      {format(new Date(contact.first_service_at), "dd/MM/yyyy", {
+                        locale: localeDaData,
+                      })}
+                    </dd>
+                  </div>
+                )}
+                <div>
+                  <dt className="text-xs uppercase text-muted-foreground">Tags</dt>
+                  <dd className="mt-1 flex flex-wrap gap-1">
+                    {contact.tags.length === 0
+                      ? "—"
+                      : contact.tags.map((t) => (
+                          <ChipDeEtiqueta key={t} tag={t} />
+                        ))}
+                  </dd>
+                </div>
+              </dl>
+            </section>
+          </div>
           {/* DE QUEM É ESTE TELEFONE (issue #3198): só com o módulo "Empresas e
               pessoas" ligado. Desligado, nada é montado e nenhuma rota B2B é
               chamada — a ficha fica exatamente como era. Logo abaixo dos dados do

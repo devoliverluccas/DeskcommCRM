@@ -51,7 +51,7 @@ export function ProposalsSettingsClient() {
   if (!cfg) return <div className="p-6">{t("Carregando…")}</div>;
 
   return (
-    <div className="mx-auto w-full max-w-2xl space-y-4 p-6">
+    <div className="mx-auto w-full max-w-2xl space-y-4 p-2">
       <h1 className="text-xl font-semibold">{t("Propostas")}</h1>
       {enabledSalvo ? (
         <p className="text-sm">

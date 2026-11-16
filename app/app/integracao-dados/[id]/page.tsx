@@ -72,9 +72,9 @@ export default async function ConexaoExternaPage({
   const abertoInicial = fontes === "1" || (conexao.source_mode === "list" && conexao.sources_count === 0);
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-4 overflow-y-auto p-6">
+    <div className="flex h-full min-h-0 flex-col gap-4 overflow-y-auto p-2">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">{conexao.label}</h1>
+        <h1 className="text-xl font-semibold tracking-tight">{conexao.label}</h1>
         <p className="text-sm text-muted-foreground">
           {conexao.host}:{conexao.port}/{conexao.database_name} · {conexao.username} ·{" "}
           {traduzir("somente leitura", idioma)}

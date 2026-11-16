@@ -87,7 +87,7 @@ export default async function MarcaDaOrganizacaoPage() {
   const dominioDoRemetente = dominioDeEndereco(contaResend?.from_email);
 
   return (
-    <div className="flex h-full flex-col gap-6 overflow-y-auto p-6">
+    <div className="flex h-full flex-col gap-5 overflow-y-auto p-2">
       <CabecalhoDaSubTela titulo={traduzir("Marca", idioma)} idioma={idioma}>
         <p className="max-w-2xl text-sm text-muted-foreground">
           {traduzir("O nome e a cor que a sua empresa mostra para quem trabalha aqui dentro.", idioma)}

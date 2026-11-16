@@ -1,5 +1,7 @@
 # 03 — Tipografia
 
+> ⚠️ **Superado em parte pelo [Redesign v2](./10-redesign-v2.md)** (proposta). Os valores em vigor estão em `app/globals.css`.
+
 > **Source of truth:** `app/design/lib/fonts.ts` (`atkinson`, `plexMono`), `app/design/lib/tokens.ts` → `TYPOS.atkinson`
 
 ## Por que Atkinson Hyperlegible

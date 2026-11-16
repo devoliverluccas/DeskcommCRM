@@ -88,8 +88,8 @@ export default async function ManifestacaoDaOuvidoriaPage({
 
   if (!resultado.ok) {
     return (
-      <main className="flex h-full flex-col gap-4 md:p-6">
-        <h1 className="text-2xl font-semibold tracking-tight">{t("Ouvidoria")}</h1>
+      <main className="flex h-full flex-col gap-4 md:p-2">
+        <h1 className="text-xl font-semibold tracking-tight">{t("Ouvidoria")}</h1>
         <p className="text-sm text-muted-foreground">
           {resultado.error === "not_found"
             ? t("Manifestação não encontrada.")
@@ -106,7 +106,7 @@ export default async function ManifestacaoDaOuvidoriaPage({
   const opcoes = proximosStatus(m.status);
 
   return (
-    <main className="flex h-full flex-col gap-6 md:p-6">
+    <main className="flex h-full flex-col gap-5 md:p-2">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs text-muted-foreground">{t("Protocolo")}</p>

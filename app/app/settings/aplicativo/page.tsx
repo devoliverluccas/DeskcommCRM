@@ -15,7 +15,7 @@ export default async function AplicativoPage() {
   const user = await requireAuth();
   const t = (texto: string) => traduzir(texto, user.idioma);
   return (
-    <div className="flex h-full flex-col gap-6 p-6">
+    <div className="flex h-full flex-col gap-5 p-2">
       <CabecalhoDaSubTela titulo={t("App no celular")} idioma={user.idioma}>
         <p className="text-sm text-muted-foreground">
           {t("Instale o sistema na tela de início do celular e receba os avisos.")}

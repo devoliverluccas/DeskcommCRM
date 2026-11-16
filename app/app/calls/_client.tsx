@@ -138,10 +138,10 @@ export function CallsClient() {
   const [selected, setSelected] = useState<CallRow | null>(null);
 
   return (
-    <div className="flex h-full flex-col gap-6 p-6">
+    <div className="flex h-full flex-col gap-5 p-2">
       <header className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{t("Chamadas")}</h1>
+          <h1 className="text-xl font-semibold tracking-tight">{t("Chamadas")}</h1>
           <p className="text-sm text-muted-foreground">
             {t("Histórico de ligações (voz por IA) com transcrição.")}
           </p>

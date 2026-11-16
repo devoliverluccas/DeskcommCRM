@@ -66,15 +66,15 @@ export function ClientesDaAgencia() {
   if (lista.isPending) return <p className="p-6">{t("Carregando organizações…")}</p>;
   if (lista.isError)
     return (
-      <div className="space-y-4 p-6">
+      <div className="space-y-4 p-2">
         <p role="alert">{t("Não foi possível carregar as organizações.")}</p>
         <Button onClick={() => void lista.refetch()}>{t("Tentar novamente")}</Button>
       </div>
     );
   const dados = lista.data.data;
   return (
-    <div className="space-y-6 p-6">
-      <h1 className="text-2xl font-semibold">{t("Organizações clientes")}</h1>
+    <div className="space-y-6 p-2">
+      <h1 className="text-xl font-semibold">{t("Organizações clientes")}</h1>
       <p>
         {t("Organizações vinculadas")}: {dados.utilizadas} / {dados.limite_clientes}
       </p>

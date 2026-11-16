@@ -17,7 +17,7 @@ const AlertDialogOverlay = React.forwardRef<
   React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Overlay>
 >(({ className, ...props }, ref) => (
   <AlertDialogPrimitive.Overlay
-    className={cn("ds-cortina fixed inset-0 z-50 bg-black/80", className)}
+    className={cn("ds-cortina fixed inset-0 z-50 bg-overlay", className)}
     {...props}
     ref={ref}
   />
@@ -40,7 +40,7 @@ const AlertDialogContent = React.forwardRef<
         // ⚠️ `translate-x-[-50%] translate-y-[-50%]` FICAM: é a centralização, e
         // ela não pode depender de a animação rodar. Os keyframes animam a
         // mesma propriedade `translate` e terminam no mesmo `-50% -50%`.
-        "ds-modal fixed top-[50%] left-[50%] z-50 grid max-h-[calc(100dvh-2rem)] w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 overflow-y-auto border bg-background p-6 shadow-lg sm:rounded-lg",
+        "ds-modal fixed top-[50%] left-[50%] z-50 grid max-h-[calc(100dvh-2rem)] w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 overflow-y-auto border bg-surface p-5 shadow-xl sm:rounded-xl",
         className,
       )}
       {...props}
@@ -68,7 +68,7 @@ const AlertDialogTitle = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <AlertDialogPrimitive.Title
     ref={ref}
-    className={cn("text-lg font-semibold", className)}
+    className={cn("text-base font-semibold", className)}
     {...props}
   />
 ));

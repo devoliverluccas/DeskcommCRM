@@ -55,10 +55,10 @@ export function ListaDeCadencias() {
   const [paraExcluir, setParaExcluir] = useState<Cadencia | null>(null);
 
   return (
-    <div className="space-y-4 p-6">
+    <div className="space-y-4 p-2">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
-          <h1 className="text-2xl font-semibold tracking-tight">{t("Cadências")}</h1>
+          <h1 className="text-xl font-semibold tracking-tight">{t("Cadências")}</h1>
           <p className="text-sm text-muted-foreground">
             {t("Sequências de e-mail com inscrição manual, janela de envio e descadastro.")}
           </p>

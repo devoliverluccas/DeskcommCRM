@@ -1,5 +1,5 @@
 "use client";
-import { useState, type RefObject } from "react";
+import { useState, type ReactNode, type RefObject } from "react";
 import { useT } from "@/hooks/i18n/useT";
 import Link from "next/link";
 import {
@@ -71,6 +71,12 @@ interface Props {
   botaoBuscaRef?: RefObject<HTMLButtonElement | null>;
   /** Seleciona outra conversa no Inbox — a aba Número do Transferir abre a do outro número. */
   onAbrirConversa?: (id: string) => void;
+  /**
+   * O gatilho da ficha do contato para a faixa em que ela não tem coluna
+   * (`md` até `xl`). Quem o desenha e decide a largura em que aparece é o
+   * `InboxLayout`; aqui ele só ocupa o fim da barra de ações.
+   */
+  gatilhoDaFicha?: ReactNode;
 }
 
 /**
@@ -105,6 +111,7 @@ export function ConversationHeader({
   onBuscar,
   buscaAberta,
   botaoBuscaRef,
+  gatilhoDaFicha,
 }: Props) {
   const t = useT();
   const { user, activeOrg } = useAuth();
@@ -365,7 +372,7 @@ export function ConversationHeader({
     // fileira que rola na horizontal — a mesma régua de não esconder ação, sem
     // pagar em altura. `py-2` pelo mesmo motivo: cada pixel de altura ali é
     // tirado da conversa.
-    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-background px-3 py-2 md:gap-3 md:px-4 md:py-3">
+    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border bg-background px-3 py-2 md:px-4 md:py-2.5">
       {/* FAIXA DA CARTEIRA (#2591, regra 2): "este cliente pertence à carteira de
           A". `w-full` a põe numa linha própria acima da identidade, sem disputar
           espaço com a barra de ações — a faixa só existe quando o dono é OUTRA
@@ -374,10 +381,14 @@ export function ConversationHeader({
         <FaixaDaCarteira contactId={c.id} quemAtendeId={conversation.assigned_to_user_id} />
       )}
       <div className="min-w-0">
+        {/* IDENTIDADE EM DUAS LINHAS (redesign v2): o nome com o estado do
+            episódio, e embaixo UMA linha de metadados — quem manda, telefone e
+            por qual número da empresa a conversa entrou. Antes eram até quatro
+            linhas soltas (nome, dono, telefone, resposta). */}
         <div className="flex min-w-0 items-center gap-1.5">
-          <ChannelLogo channel={conversation.channel_sessions} size={20} />
-          <h2 className="min-w-0 truncate text-sm font-semibold" title={displayName}>{displayName}</h2>
-          <Badge variant="outline" className="h-4 shrink-0 px-1.5 text-[10px]">
+          <ChannelLogo channel={conversation.channel_sessions} size={18} />
+          <h2 className="min-w-0 truncate text-[15px] font-semibold tracking-tight" title={displayName}>{displayName}</h2>
+          <Badge variant="outline" className="h-4 shrink-0 px-1.5 text-[10px] font-normal text-text-muted">
             {t(STATUS_LABEL[status] ?? status)}
           </Badge>
           {/* Ao lado do estado, não escondido num painel: a pergunta "dá para
@@ -387,6 +398,32 @@ export function ConversationHeader({
             provider={conversation.channel_sessions?.provider ?? null}
             lastInboundAt={conversation.last_inbound_at}
           />
+        </div>
+
+        {/* QUEM ESTÁ NO COMANDO, com nome e por GEOMETRIA — disco cheio para
+            pessoa, anel vazado para o automático. É o mesmo componente do card do
+            funil e do dossiê: um terceiro jeito de dizer "quem manda", por cor ou
+            por texto, faria a mesma pergunta ter três respostas diferentes na
+            mesma tela. Cor não sobrevive ao daltonismo nem ao teste do metro. */}
+        <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-text-muted">
+          <div className="flex items-center" data-testid="comando-da-conversa">
+            {comando.quem === "humano" ? (
+              <OwnerBadge ownerKind="user" ownerName={comando.nome ?? t("Atendente")} />
+            ) : comando.quem === "automatico" ? (
+              <OwnerBadge ownerKind="ai" ownerName={t("Automático")} />
+            ) : (
+              // `ninguem`, `aguardando` e `encerrada` sem dono caem aqui: o disco
+              // TRACEJADO do OwnerBadge, que é como o funil já desenha "ninguém".
+              <OwnerBadge ownerKind={null} ownerName={null} />
+            )}
+          </div>
+          {phone && (
+            // No celular o telefone sai: cada linha do cabeçalho é altura tirada
+            // do fio, e o número continua na Ficha.
+            <p className="flex min-w-0 items-center gap-1 truncate text-xs text-text-muted max-md:hidden">
+              <Phone size={11} weight="regular" aria-hidden /> {phone}
+            </p>
+          )}
           {/* #2383: O CANAL DESTA CONVERSA, NO CABEÇALHO — a acepção que faltava
               da issue: a lista já dizia por onde a conversa entrou, a conversa
               ABERTA não dizia. O logo ao lado nomeia o provedor, não o número:
@@ -413,30 +450,6 @@ export function ConversationHeader({
             </Badge>
           )}
         </div>
-
-        {/* QUEM ESTÁ NO COMANDO, com nome e por GEOMETRIA — disco cheio para
-            pessoa, anel vazado para o automático. É o mesmo componente do card do
-            funil e do dossiê: um terceiro jeito de dizer "quem manda", por cor ou
-            por texto, faria a mesma pergunta ter três respostas diferentes na
-            mesma tela. Cor não sobrevive ao daltonismo nem ao teste do metro. */}
-        <div className="mt-1 flex items-center gap-2" data-testid="comando-da-conversa">
-          {comando.quem === "humano" ? (
-            <OwnerBadge ownerKind="user" ownerName={comando.nome ?? t("Atendente")} />
-          ) : comando.quem === "automatico" ? (
-            <OwnerBadge ownerKind="ai" ownerName={t("Automático")} />
-          ) : (
-            // `ninguem`, `aguardando` e `encerrada` sem dono caem aqui: o disco
-            // TRACEJADO do OwnerBadge, que é como o funil já desenha "ninguém".
-            <OwnerBadge ownerKind={null} ownerName={null} />
-          )}
-        </div>
-        {phone && (
-          // No celular o telefone sai: cada linha do cabeçalho é altura tirada
-          // do fio, e o número continua na Ficha.
-          <p className="mt-0.5 flex min-w-0 items-center gap-1 truncate text-xs text-muted-foreground max-md:hidden">
-            <Phone size={11} weight="regular" aria-hidden /> {phone}
-          </p>
-        )}
         {/* Contato com telefone extra: diz por qual número a resposta sai. Sem
             extra, nada muda na tela. No canal que responde pela última mensagem
             recebida, a resposta vai para o número por onde ela chegou; nos outros
@@ -447,7 +460,7 @@ export function ConversationHeader({
           // inteiro: o `title` é onde ele continua legível quando o corte
           // acontece.
           <p
-            className="mt-0.5 min-w-0 truncate text-xs text-muted-foreground max-md:hidden"
+            className="mt-0.5 min-w-0 truncate text-xs text-text-muted max-md:hidden"
             data-testid="resposta-sai-por"
             title={`${t("A resposta sai por:")} ${phoneForDisplay(endereco.phone_number)}`}
           >
@@ -864,6 +877,7 @@ export function ConversationHeader({
             )}
           </DropdownMenuContent>
         </DropdownMenu>
+        {gatilhoDaFicha}
       </div>
         {/* O aviso pertence à operação automática. Abaixo da barra ele não
             alarga a ficha do contato nem muda a posição dos botões.

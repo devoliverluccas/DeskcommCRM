@@ -56,7 +56,7 @@ export default async function NotificationsPage() {
   const pushPronto = vapidPronto();
 
   return (
-    <div className="flex h-full flex-col gap-6 p-6">
+    <div className="flex h-full flex-col gap-5 p-2">
       <CabecalhoDaSubTela titulo={t("Notificações")} idioma={idioma}>
         <p className="text-sm text-muted-foreground">{t("Canais e categorias.")}</p>
         <Link

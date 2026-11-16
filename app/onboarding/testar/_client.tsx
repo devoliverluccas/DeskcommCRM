@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { marcarTesteFeito, pularTeste } from "@/app/actions/onboarding/marcarTeste";
+import { AvisoDoPasso, RodapeDoPasso } from "../_components/Passo";
 
 interface Props {
   nome: string | null;
@@ -94,33 +95,33 @@ export function TestarClient({ nome, agenteId, versaoId }: Props) {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-8 border-t border-border pt-8">
       {semAgente && (
-        <div className="rounded-lg border bg-background p-6" role="status">
-          <p className="text-sm font-medium">{t("Você ainda não montou seu funcionário.")}</p>
-          <p className="mt-1 text-sm text-muted-foreground">
+        <AvisoDoPasso tom="neutro" role="status">
+          <p className="font-medium">{t("Você ainda não montou seu funcionário.")}</p>
+          <p className="text-text-muted">
             {t(
               "Sem ninguém treinado, não há o que testar. Dá para voltar ao passo anterior agora ou fazer isso depois, em IA › Agentes.",
             )}
           </p>
-        </div>
+        </AvisoDoPasso>
       )}
 
       {rascunho && (
-        <div className="rounded-lg border bg-background p-6" role="status">
-          <p className="text-sm font-medium">
+        <AvisoDoPasso tom="aviso" role="status">
+          <p className="font-medium">
             {funcionario} {t("está como")} <strong>{t("rascunho")}</strong> — {t("ainda não foi para o ar.")}
           </p>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p>
             {t(
               "Rascunho não responde mensagem, então não há o que ensaiar. O passo anterior explicou o que falta; você pode resolver depois em IA › Agentes.",
             )}
           </p>
-        </div>
+        </AvisoDoPasso>
       )}
 
       {!semAgente && !rascunho && (
-        <div className="space-y-4 rounded-lg border bg-background p-6">
+        <div className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="mensagem">{t("Escreva como se fosse um cliente")}</Label>
             <Textarea
@@ -134,6 +135,7 @@ export function TestarClient({ nome, agenteId, versaoId }: Props) {
           <div className="flex sm:justify-end">
             <Button
               type="button"
+              variant="secondary"
               onClick={ensaiar}
               disabled={carregando || mensagem.trim() === ""}
               className="w-full sm:w-auto"
@@ -143,28 +145,25 @@ export function TestarClient({ nome, agenteId, versaoId }: Props) {
           </div>
 
           {desfecho?.tipo === "resposta" && (
-            <div className="space-y-2 rounded-md border bg-muted/40 p-4">
-              <p className="text-xs uppercase tracking-wider text-muted-foreground">
+            <div className="space-y-2 rounded-lg border border-border bg-surface-elevated p-4">
+              <p className="text-xs font-medium text-text-muted">
                 {funcionario} {t("respondeu")}
               </p>
-              <p className="whitespace-pre-wrap text-sm">{desfecho.texto}</p>
-              <p className="text-xs text-muted-foreground">
+              <p className="whitespace-pre-wrap text-sm text-text">{desfecho.texto}</p>
+              <p className="text-xs text-text-muted">
                 {t("Esta conversa não foi enviada a ninguém e não aparece no seu inbox.")}
               </p>
             </div>
           )}
 
           {desfecho?.tipo === "erro" && (
-            <div
-              role="alert"
-              className="space-y-2 rounded-md border border-amber-300/60 bg-amber-50 p-4 dark:border-amber-500/30 dark:bg-amber-950/20"
-            >
+            <AvisoDoPasso tom="aviso" role="alert">
               <p className="text-sm font-medium">
                 {t(
                   "Ele não conseguiu responder — e é melhor descobrir isso agora do que com um cliente de verdade.",
                 )}
               </p>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs">
                 {t("Motivo:")} <code className="break-all">{desfecho.mensagem}</code>
               </p>
               <p className="text-sm">
@@ -174,22 +173,26 @@ export function TestarClient({ nome, agenteId, versaoId }: Props) {
                 <strong>{t("IA › Credenciais")}</strong>{" "}
                 {t("e seguir daqui mesmo — o que você montou está salvo.")}
               </p>
-            </div>
+            </AvisoDoPasso>
           )}
         </div>
       )}
 
-      <div className="flex flex-wrap justify-between gap-2">
+      <RodapeDoPasso
+        secundaria={
+          <Button
+            type="button"
+            variant="ghost"
+            disabled={pending}
+            onClick={() => startTransition(() => void pularTeste())}
+          >
+            {t("Pular")}
+          </Button>
+        }
+      >
         <Button
           type="button"
-          variant="ghost"
-          disabled={pending}
-          onClick={() => startTransition(() => void pularTeste())}
-        >
-          {t("Pular")}
-        </Button>
-        <Button
-          type="button"
+          size="lg"
           disabled={pending}
           onClick={() =>
             startTransition(async () => {
@@ -210,7 +213,7 @@ export function TestarClient({ nome, agenteId, versaoId }: Props) {
         >
           {t("Continuar")}
         </Button>
-      </div>
+      </RodapeDoPasso>
     </div>
   );
 }

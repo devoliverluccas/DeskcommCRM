@@ -65,7 +65,7 @@ export default async function KanbanPickerPage() {
   const t = (texto: string) => traduzir(texto, idioma);
 
   return (
-    <div className="flex h-full flex-col gap-4 p-6">
+    <div className="flex h-full flex-col gap-4 p-2">
       <header className="flex items-center gap-3">
         <Kanban size={28} className="text-muted-foreground" weight="duotone" />
         {/* Era "Pipelines" — nome de quem construiu o sistema, não de quem
@@ -75,7 +75,7 @@ export default async function KanbanPickerPage() {
             era maior do que o comentário contava: são QUATRO assertions em TRÊS
             specs, e `pipelines-gestao.spec.ts` — a spec da própria feature que
             gerou o comentário — é uma delas. Todas atualizadas junto. */}
-        <h1 className="text-2xl font-semibold tracking-tight">{t("Funis")}</h1>
+        <h1 className="text-xl font-semibold tracking-tight">{t("Funis")}</h1>
       </header>
 
       <FunisClient

@@ -2,6 +2,7 @@ import { emailConfigurado } from "@/lib/email/roteador";
 import { InviteTeamForm } from "./_form";
 import { requireAuth } from "@/lib/auth/server";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { AvisoDoPasso, CabecalhoDoPasso } from "../_components/Passo";
 
 export const dynamic = "force-dynamic";
 
@@ -10,18 +11,16 @@ export default async function InviteTeamPage() {
   const idioma = user.idioma;
   const emailReady = await emailConfigurado();
   return (
-    <div className="space-y-6">
-      <header>
-        <h2 className="text-2xl font-semibold tracking-tight">{traduzir("Quem trabalha com ele", idioma)}</h2>
-        <p className="text-sm text-muted-foreground">
-          {traduzir(
-            "Seu funcionário não trabalha sozinho: quando ele passar uma conversa adiante, é uma dessas pessoas que atende.",
-            idioma,
-          )}
-        </p>
-      </header>
+    <div>
+      <CabecalhoDoPasso
+        titulo={traduzir("Quem trabalha com ele", idioma)}
+        subtitulo={traduzir(
+          "Seu funcionário não trabalha sozinho: quando ele passar uma conversa adiante, é uma dessas pessoas que atende.",
+          idioma,
+        )}
+      />
       {!emailReady ? (
-        <div className="rounded-md border border-amber-300/60 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-950/40 dark:text-amber-100">
+        <AvisoDoPasso tom="aviso" className="mb-8">
           <p className="font-medium">{traduzir("Esta instalação ainda não envia e-mail.", idioma)}</p>
           {/*
             A frase anterior dizia que os convites ficariam "registrados
@@ -30,13 +29,13 @@ export default async function InviteTeamPage() {
             depois uma lista de pendentes que nunca existiu. E o nome da
             variável de ambiente não ajuda quem só quer chamar um colega.
           */}
-          <p className="mt-1">
+          <p>
             {traduzir(
               "Você recebe um link para cada pessoa e manda por onde quiser — WhatsApp, e-mail, o que preferir. O link é o convite: quem abrir entra na sua empresa.",
               idioma,
             )}
           </p>
-        </div>
+        </AvisoDoPasso>
       ) : null}
       <InviteTeamForm />
     </div>

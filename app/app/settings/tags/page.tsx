@@ -101,7 +101,7 @@ export default async function TagsPage({ searchParams }: { searchParams: Promise
   const t = (texto: string) => traduzir(texto, idioma);
 
   return (
-    <div className="flex h-full flex-col gap-6 overflow-y-auto md:p-6">
+    <div className="flex h-full flex-col gap-6 overflow-y-auto md:p-2">
       <CabecalhoDaSubTela titulo={t("Tags")} idioma={idioma}>
         <p className="max-w-2xl text-sm text-muted-foreground">
           {t(

@@ -165,7 +165,7 @@ export function StageColumn({
         coluna de etapa não vira painel. De `md` para cima volta o `w-80` de
         sempre, onde a graça é justamente ver várias etapas ao mesmo tempo.
       */
-      className="bg-surface-elevated/40 flex min-h-full w-[85vw] max-w-80 shrink-0 snap-center flex-col rounded-lg border border-border md:w-80"
+      className="bg-surface-elevated flex min-h-full w-[85vw] max-w-80 shrink-0 snap-center flex-col rounded-lg border border-border md:w-80"
       data-etapa-do-quadro={stage.id}
     >
       {/* Cabeçalho e total PRESOS no alto do quadro enquanto os cards rolam: com
@@ -183,8 +183,8 @@ export function StageColumn({
         className="sticky top-0 z-10 -mx-px -mt-px rounded-t-lg border-x border-t border-border bg-background"
         data-cabecalho-da-etapa
       >
-        <div className="bg-surface-elevated/40 rounded-t-lg">
-          <div className="group/etapa flex items-center gap-2 border-b border-border px-3 py-2.5">
+        <div className="bg-surface-elevated rounded-t-lg">
+          <div className="group/etapa flex items-start gap-2 border-b border-border px-3 py-2.5">
             {/* "Selecionar a etapa inteira" é o gesto que faz a ação em lote valer a
             pena: sem ele, mover trinta cards deixa de ser trinta arrastes e vira
             trinta cliques com modificador. Fica no cabeçalho porque é ali que a
@@ -207,7 +207,7 @@ export function StageColumn({
                     : `${t("Selecionar todos em")} ${stage.name}`
                 }
                 className={cn(
-                  "h-4 w-4 shrink-0 cursor-pointer accent-accent transition-opacity",
+                  "mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-accent transition-opacity",
                   "focus:opacity-100 disabled:cursor-default",
                   // `pointer-coarse:opacity-100` pelo mesmo motivo da caixa do
                   // card (ver `components/kanban/KanbanCard.tsx`): no toque o
@@ -221,7 +221,7 @@ export function StageColumn({
               />
             )}
             <span
-              className={cn("h-2 w-2 rounded-full", !stage.color && "bg-text-muted/40")}
+              className={cn("mt-1.5 h-2 w-2 shrink-0 rounded-full", !stage.color && "bg-text-muted/40")}
               style={accentStyle}
               aria-hidden
             />
@@ -232,28 +232,43 @@ export function StageColumn({
               // um rascunho velho aqui.
               // Dentro do <h2>: a coluna segue sendo título para quem navega
               // por leitor de tela, com ou sem permissão de renomear.
-              <h2 className="flex min-w-0 flex-1">
+              <h2 className="-my-0.5 flex min-w-0 flex-1">
                 <NomeDaEtapaNoQuadro key={stage.name} nome={stage.name} onConfirmar={onRenomear} />
               </h2>
             ) : (
-              <h2 className="flex-1 truncate text-sm font-semibold text-text">{stage.name}</h2>
+              <h2 className="min-w-0 truncate text-sm leading-5 font-semibold text-text">
+                {stage.name}
+              </h2>
             )}
-            <span className="rounded-full bg-surface px-2 py-0.5 text-[11px] font-medium text-text-muted tabular-nums">
+            {/* A contagem encostada no nome, como número discreto (não selo):
+                é atributo da etapa, e o selo competia com o nome pelo olho. */}
+            <span
+              className={cn(
+                "shrink-0 text-xs leading-5 font-medium text-text-subtle tabular-nums",
+                selecionadosAqui > 0 && "text-accent",
+              )}
+            >
               {selecionadosAqui > 0 ? `${selecionadosAqui}/${leads.length}` : leads.length}
             </span>
+            {/* O TOTAL NA MESMA LINHA, à direita — antes era uma segunda faixa
+                com borda própria, e o cabeçalho preso ocupava duas alturas do
+                quadro. O ponderado, quando a etapa tem probabilidade, desce para
+                baixo do total no MESMO elemento (o teste de moeda lê os dois
+                juntos). Sem total, o espaçador mantém a contagem junto do nome. */}
+            {temTotal ? (
+              <div className="ml-auto shrink-0 text-right text-xs leading-5 font-medium text-text tabular-nums">
+                {formatSomaPorMoeda(totais, formatValorDoNegocio, { primeira })}
+                {ponderados !== null && (
+                  <span className="block text-[11px] leading-4 font-normal text-text-subtle">
+                    · {t("ponderado")}{" "}
+                    {formatSomaPorMoeda(ponderados, formatValorDoNegocio, { primeira })}
+                  </span>
+                )}
+              </div>
+            ) : (
+              <span className="ml-auto" aria-hidden />
+            )}
           </div>
-
-          {temTotal && (
-            <div className="border-b border-border px-3 py-1.5 text-[11px] text-text-muted tabular-nums">
-              {formatSomaPorMoeda(totais, formatValorDoNegocio, { primeira })}
-              {ponderados !== null && (
-                <span className="ml-2">
-                  · {t("ponderado")}{" "}
-                  {formatSomaPorMoeda(ponderados, formatValorDoNegocio, { primeira })}
-                </span>
-              )}
-            </div>
-          )}
         </div>
       </div>
 
@@ -264,7 +279,7 @@ export function StageColumn({
             {...provided.droppableProps}
             className={cn(
               "flex flex-1 flex-col gap-2 p-2 transition-colors",
-              snapshot.isDraggingOver && "bg-accent/5",
+              snapshot.isDraggingOver && "bg-accent-soft/60",
             )}
           >
             {leads.map((lead, idx) => (
@@ -293,7 +308,7 @@ export function StageColumn({
             ))}
             {provided.placeholder}
             {leads.length === 0 && !snapshot.isDraggingOver && (
-              <div className="flex h-20 items-center justify-center text-[11px] text-text-muted">
+              <div className="flex h-20 items-center justify-center rounded-md border border-dashed border-border text-xs text-text-subtle">
                 {t("vazio")}
               </div>
             )}

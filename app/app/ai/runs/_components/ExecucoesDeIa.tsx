@@ -121,7 +121,7 @@ export function ExecucoesDeIa() {
 
   if (erro) {
     return (
-      <div className="p-6">
+      <div className="p-2">
         <Card className="border-destructive/40 p-6">
           <h2 className="font-medium">{t("Não consegui carregar as execuções")}</h2>
           <p className="mt-2 text-sm text-muted-foreground">{erro}</p>
@@ -138,9 +138,9 @@ export function ExecucoesDeIa() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-5xl p-6" data-testid="execucoes-de-ia">
+    <div className="mx-auto w-full max-w-5xl p-2" data-testid="execucoes-de-ia">
       <header className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">{t("Execuções de IA")}</h1>
+        <h1 className="text-xl font-semibold tracking-tight">{t("Execuções de IA")}</h1>
         <div className="mt-2 flex gap-3 text-sm"><span aria-current="page" className="font-medium">{t("Execuções")}</span><a href="/app/ai/runs?tab=roteamento" className="underline">{t("Roteamento")}</a></div>
         <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
           {t(

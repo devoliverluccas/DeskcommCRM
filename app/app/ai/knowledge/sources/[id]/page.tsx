@@ -50,7 +50,7 @@ export default async function MaterialPage({ params }: { params: Promise<{ id: s
 
   if (!leitura.ok) {
     return (
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 p-6">
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 p-2">
         <VoltarAoAcervo rotulo={t("Voltar ao acervo")} />
         <p className="text-sm text-error-fg" data-testid="material-erro">
           {t("Não consegui ler este material agora.")}
@@ -63,10 +63,10 @@ export default async function MaterialPage({ params }: { params: Promise<{ id: s
   const meta = TIPO_DE_FONTE_POR_ID.get(material.tipo);
 
   return (
-    <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 p-6">
+    <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 p-2">
       <header className="space-y-2">
         <VoltarAoAcervo rotulo={t("Voltar ao acervo")} />
-        <h1 className="text-2xl font-semibold tracking-tight" data-testid="material-nome">
+        <h1 className="text-xl font-semibold tracking-tight" data-testid="material-nome">
           {material.nome}
         </h1>
         <p className="text-sm text-text-muted">{meta ? t(meta.rotulo) : material.tipo}</p>

@@ -162,7 +162,7 @@ export function PersonDetailClient({ id }: { id: string }) {
     .filter((x): x is string => Boolean(x));
 
   return (
-    <div className="flex flex-col gap-4 p-4 md:p-6">
+    <div className="flex flex-col gap-4 p-4 md:p-2">
       <div>
         <Link href="/app/people" className="text-sm text-muted-foreground hover:underline">
           ← {t("Pessoas")}

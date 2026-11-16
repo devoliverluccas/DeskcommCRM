@@ -3,7 +3,9 @@
 import { useT } from "@/hooks/i18n/useT";
 import { usePrevisaoFunil } from "@/hooks/metrics/usePrevisaoFunil";
 import { formatValorDoNegocio } from "@/lib/money";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { CABECALHO_DE_CARTAO, TituloDeSecao } from "./Secao";
 
 /**
  * Painel "Previsão" de `/app/metrics` (issue #1535) — mês × moeda.
@@ -28,27 +30,19 @@ export function PrevisaoPanel() {
 
   if (isLoading) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm font-semibold">{t("Previsão")}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">{t("Carregando…")}</p>
-        </CardContent>
-      </Card>
+      <div className="flex flex-col gap-2" aria-busy="true" aria-label={t("Carregando…")}>
+        <Skeleton className="h-5 w-40" />
+        <Skeleton className="h-32 w-full" />
+      </div>
     );
   }
 
   if (isError || !data) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm font-semibold">{t("Previsão")}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-destructive">{t("Erro ao carregar a previsão.")}</p>
-        </CardContent>
-      </Card>
+      <section className="flex flex-col gap-2">
+        <TituloDeSecao titulo={t("Previsão")} />
+        <p className="text-sm text-error-fg">{t("Erro ao carregar a previsão.")}</p>
+      </section>
     );
   }
 
@@ -61,15 +55,16 @@ export function PrevisaoPanel() {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="text-sm font-semibold">{t("Previsão")}</CardTitle>
-        <p className="text-xs text-muted-foreground">
-          {data.fonte === "ia_quando_houver"
+      <TituloDeSecao
+        className={CABECALHO_DE_CARTAO}
+        titulo={t("Previsão")}
+        descricao={
+          data.fonte === "ia_quando_houver"
             ? t("Chance vinda da inteligência artificial quando existe, e da etapa quando não.")
-            : t("Chance de fechamento definida em cada etapa do funil.")}
-        </p>
-      </CardHeader>
-      <CardContent className="space-y-4">
+            : t("Chance de fechamento definida em cada etapa do funil.")
+        }
+      />
+      <div className="space-y-5 p-4">
         {data.truncado ? (
           // O corte é DITO. Sem esta frase, a soma de um recorte da carteira
           // pareceria a previsão inteira (#4322).
@@ -81,7 +76,7 @@ export function PrevisaoPanel() {
         ) : null}
 
         {vazia ? (
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-text-muted">
             {t("Nenhum negócio aberto com valor neste funil.")}
           </p>
         ) : null}
@@ -92,53 +87,53 @@ export function PrevisaoPanel() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-border text-left text-xs text-muted-foreground">
-                  <th rowSpan={2} className="py-1 font-medium">
+                <tr className="border-b border-border text-left text-xs text-text-muted">
+                  <th rowSpan={2} className="py-1.5 pr-3 font-medium">
                     {t("Mês")}
                   </th>
-                  <th rowSpan={2} className="py-1 font-medium">
+                  <th rowSpan={2} className="py-1.5 pr-3 font-medium">
                     {t("Moeda")}
                   </th>
-                  <th colSpan={2} className="py-1 text-center font-medium">
+                  <th colSpan={2} className="py-1.5 text-center font-medium">
                     {t("Valor único")}
                   </th>
-                  <th colSpan={2} className="py-1 text-center font-medium">
+                  <th colSpan={2} className="py-1.5 text-center font-medium">
                     {t("Recorrência nova (mensal)")}
                   </th>
-                  <th rowSpan={2} className="py-1 text-right font-medium">
+                  <th rowSpan={2} className="py-1.5 pl-3 text-right font-medium">
                     {t("Negócios")}
                   </th>
                 </tr>
-                <tr className="border-b border-border text-left text-xs text-muted-foreground">
-                  <th className="py-1 text-right font-medium">{t("Ponderado")}</th>
-                  <th className="py-1 text-right font-medium">{t("Bruto")}</th>
-                  <th className="py-1 text-right font-medium">{t("Ponderado")}</th>
-                  <th className="py-1 text-right font-medium">{t("Bruto")}</th>
+                <tr className="border-b border-border text-left text-xs text-text-muted">
+                  <th className="py-1.5 pl-3 text-right font-medium">{t("Ponderado")}</th>
+                  <th className="py-1.5 pl-3 text-right font-medium">{t("Bruto")}</th>
+                  <th className="py-1.5 pl-3 text-right font-medium">{t("Ponderado")}</th>
+                  <th className="py-1.5 pl-3 text-right font-medium">{t("Bruto")}</th>
                 </tr>
               </thead>
               <tbody>
                 {data.meses.map((faixa) => (
-                  <tr key={`${faixa.moeda}-${faixa.mes}`} className="border-b border-border/50">
-                    <td className="py-1 tabular-nums">{faixa.mes}</td>
-                    <td className="py-1">{faixa.moeda}</td>
-                    <td className="py-1 text-right tabular-nums">
+                  <tr key={`${faixa.moeda}-${faixa.mes}`} className="border-b border-border last:border-0">
+                    <td className="py-2 pr-3 tabular-nums">{faixa.mes}</td>
+                    <td className="py-2 pr-3 text-text-muted">{faixa.moeda}</td>
+                    <td className="py-2 pl-3 text-right font-medium tabular-nums">
                       {dinheiro(faixa.unico.ponderado_cents, faixa.moeda)}
                     </td>
-                    <td className="py-1 text-right tabular-nums text-muted-foreground">
+                    <td className="py-2 pl-3 text-right tabular-nums text-text-muted">
                       {dinheiro(faixa.unico.bruto_cents, faixa.moeda)}
                     </td>
-                    <td className="py-1 text-right tabular-nums">
+                    <td className="py-2 pl-3 text-right font-medium tabular-nums">
                       {dinheiro(faixa.recorrente_mensal.ponderado_cents, faixa.moeda)}
                     </td>
-                    <td className="py-1 text-right tabular-nums text-muted-foreground">
+                    <td className="py-2 pl-3 text-right tabular-nums text-text-muted">
                       {dinheiro(faixa.recorrente_mensal.bruto_cents, faixa.moeda)}
                     </td>
-                    <td className="py-1 text-right tabular-nums">{faixa.n}</td>
+                    <td className="py-2 pl-3 text-right font-medium tabular-nums">{faixa.n}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
-            <p className="pt-2 text-xs text-muted-foreground">
+            <p className="pt-2 text-xs text-text-subtle">
               {t(
                 "As duas parcelas nunca são somadas: o valor único entra uma vez e a recorrência entra todo mês.",
               )}
@@ -147,8 +142,8 @@ export function PrevisaoPanel() {
         )}
 
         {data.sem_data.length > 0 && (
-          <div className="text-sm">
-            <p className="text-xs font-medium text-muted-foreground">
+          <div className="space-y-1 border-t border-border pt-4 text-sm">
+            <p className="text-xs text-text-muted">
               {t("Sem data prevista — entram, mas sem mês no cronograma")}
             </p>
             {data.sem_data.map((balde) => (
@@ -168,8 +163,8 @@ export function PrevisaoPanel() {
         )}
 
         {data.sem_probabilidade.length > 0 && (
-          <div className="text-sm">
-            <p className="text-xs font-medium text-muted-foreground">
+          <div className="space-y-1 border-t border-border pt-4 text-sm">
+            <p className="text-xs text-text-muted">
               {t("Sem chance definida na etapa — falta calibrar")}
             </p>
             {data.sem_probabilidade.map((balde) => (
@@ -188,8 +183,8 @@ export function PrevisaoPanel() {
         )}
 
         {data.recorrencia_nao_mensal.length > 0 && (
-          <div className="text-sm">
-            <p className="text-xs font-medium text-muted-foreground">
+          <div className="space-y-1 border-t border-border pt-4 text-sm">
+            <p className="text-xs text-text-muted">
               {t("Recorrência fora do mensal — não entra na projeção por mês")}
             </p>
             {data.recorrencia_nao_mensal.map((balde) => (
@@ -200,7 +195,7 @@ export function PrevisaoPanel() {
             ))}
           </div>
         )}
-      </CardContent>
+      </div>
     </Card>
   );
 }

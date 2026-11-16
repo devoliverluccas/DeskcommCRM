@@ -125,7 +125,7 @@ export function ModelosDeProposta() {
 
   if (propostasDesligadas) {
     return (
-      <div className="mx-auto w-full max-w-3xl space-y-3 p-6">
+      <div className="mx-auto w-full max-w-3xl space-y-3 p-2">
         <h1 className="text-xl font-semibold">{t("Modelos de proposta")}</h1>
         <p>
           {t("As propostas estão desligadas para esta organização. Para editar os modelos, ligue as propostas em Configurações › Propostas e salve.")}
@@ -140,7 +140,7 @@ export function ModelosDeProposta() {
   if (!modelos) return <div className="p-6">{t("Carregando…")}</div>;
 
   return (
-    <div className="mx-auto w-full max-w-3xl space-y-6 p-6">
+    <div className="mx-auto w-full max-w-3xl space-y-6 p-2">
       <h1 className="text-xl font-semibold">{t("Modelos de proposta")}</h1>
 
       {salvo && !faixaFechada ? (

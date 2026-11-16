@@ -67,7 +67,7 @@ export default async function PipelinesSettingsPage() {
   const comandaDisponivel = podeEditarConfig && (await moduloLigado(createAdminClient(), "financeiro"));
 
   return (
-    <div className="flex h-full flex-col gap-6 p-6">
+    <div className="flex h-full flex-col gap-5 p-2">
       <CabecalhoDaSubTela titulo={traduzir("Etapas do funil", idioma)} idioma={idioma}>
         <p className="text-sm text-muted-foreground">
           {traduzir("Para onde o agente leva o card em cada passo do atendimento", idioma)}

@@ -128,7 +128,7 @@ export function NewProposalClient({
   }
 
   return (
-    <div className="mx-auto w-full max-w-3xl space-y-6 p-6">
+    <div className="mx-auto w-full max-w-3xl space-y-6 p-2">
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="sm" asChild>
           <Link href="/app/proposals" className="flex items-center gap-1.5 text-muted-foreground">

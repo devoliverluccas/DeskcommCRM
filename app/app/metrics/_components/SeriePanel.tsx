@@ -25,7 +25,7 @@ import {
   YAxis,
 } from "recharts";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
@@ -46,6 +46,7 @@ import { useTagDeIdioma } from "@/hooks/i18n/useLocaleDeData";
 import { useT } from "@/hooks/i18n/useT";
 import { useSerieTemporal } from "@/hooks/metrics/useSerieTemporal";
 import { granularidadeValida, type Granularidade } from "@/lib/metrics/serie-temporal";
+import { CABECALHO_DE_CARTAO, TituloDeSecao } from "./Secao";
 
 /**
  * O rótulo do balde na data: `AAAA-MM` vira mês/ano, `AAAA-MM-DD` vira dia/mês.
@@ -78,16 +79,10 @@ export function SeriePanel() {
 
   if (isError || !data) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">{t("Ganhos por período")}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-destructive">
-            {t("Erro ao carregar a evolução dos ganhos.")}
-          </p>
-        </CardContent>
-      </Card>
+      <section className="flex flex-col gap-2">
+        <TituloDeSecao titulo={t("Ganhos por período")} />
+        <p className="text-sm text-error-fg">{t("Erro ao carregar a evolução dos ganhos.")}</p>
+      </section>
     );
   }
 
@@ -97,29 +92,31 @@ export function SeriePanel() {
 
   return (
     <Card>
-      <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0">
-        <CardTitle className="text-base">
-          {t("Ganhos por período")} · {serie.total}
-        </CardTitle>
-        <Select
-          value={granularidade}
-          onValueChange={(v) => {
-            if (granularidadeValida(v)) setGranularidade(v);
-          }}
-        >
-          <SelectTrigger className="w-32 md:w-40" aria-label={t("Granularidade")}>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="dia">{t("Dia")}</SelectItem>
-            <SelectItem value="semana">{t("Semana")}</SelectItem>
-            <SelectItem value="mes">{t("Mês")}</SelectItem>
-          </SelectContent>
-        </Select>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
+      <TituloDeSecao
+        className={CABECALHO_DE_CARTAO}
+        titulo={t("Ganhos por período")}
+        contagem={formatar(serie.total)}
+        acao={
+          <Select
+            value={granularidade}
+            onValueChange={(v) => {
+              if (granularidadeValida(v)) setGranularidade(v);
+            }}
+          >
+            <SelectTrigger className="w-32 md:w-40" aria-label={t("Granularidade")}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="dia">{t("Dia")}</SelectItem>
+              <SelectItem value="semana">{t("Semana")}</SelectItem>
+              <SelectItem value="mes">{t("Mês")}</SelectItem>
+            </SelectContent>
+          </Select>
+        }
+      />
+      <div className="flex flex-col gap-4 p-4">
         {baldes.length === 0 ? (
-          <p className="text-sm text-muted-foreground">{t("Sem ganhos no período.")}</p>
+          <p className="text-sm text-text-muted">{t("Sem ganhos no período.")}</p>
         ) : (
           <>
             <div data-testid="ganhos-no-tempo" className="h-64 w-full">
@@ -173,30 +170,30 @@ export function SeriePanel() {
 
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead>{t("Período")}</TableHead>
-                  <TableHead className="text-right">{t("Ganhos")}</TableHead>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="pl-0">{t("Período")}</TableHead>
+                  <TableHead className="pr-0 text-right">{t("Ganhos")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {baldes.map((b) => (
                   <TableRow key={b.balde}>
-                    <TableCell className="font-medium tabular-nums">
+                    <TableCell className="pl-0 tabular-nums">
                       {rotuloDoBalde(b.balde, tagDoIdioma)}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">{formatar(b.ganhos)}</TableCell>
+                    <TableCell className="pr-0 text-right font-medium tabular-nums">
+                      {formatar(b.ganhos)}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
             {serie.truncado && (
-              <p className="text-xs text-muted-foreground">
-                {t("Série cortada no teto de leitura.")}
-              </p>
+              <p className="text-xs text-text-subtle">{t("Série cortada no teto de leitura.")}</p>
             )}
           </>
         )}
-      </CardContent>
+      </div>
     </Card>
   );
 }

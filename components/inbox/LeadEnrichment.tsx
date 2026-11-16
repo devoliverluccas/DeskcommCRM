@@ -41,7 +41,7 @@ export function LeadEnrichment({
   const locale = useLocaleDeData();
   const collected = data ? new Date(data.collected_at) : null;
   return (
-    <section data-testid="inbox-enrichment" className="min-w-0 rounded-lg border p-3 text-xs">
+    <section data-testid="inbox-enrichment" className="min-w-0 text-xs">
       <h3 className="font-semibold">{t("Sobre a empresa")}</h3>
       {error ? (
         <div className="mt-2 space-y-2">

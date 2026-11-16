@@ -4,6 +4,7 @@ import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { TestarClient } from "./_client";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { CabecalhoDoPasso } from "../_components/Passo";
 
 export const dynamic = "force-dynamic";
 
@@ -34,16 +35,14 @@ export default async function TestarPage() {
     .maybeSingle();
 
   return (
-    <div className="space-y-6">
-      <header>
-        <h2 className="text-2xl font-semibold tracking-tight">{traduzir("Veja ele atender", idioma)}</h2>
-        <p className="text-sm text-muted-foreground">
-          {traduzir(
-            "Escreva como se fosse um cliente. Nada é enviado pelo WhatsApp — é só um ensaio, entre você e ele.",
-            idioma,
-          )}
-        </p>
-      </header>
+    <div>
+      <CabecalhoDoPasso
+        titulo={traduzir("Veja ele atender", idioma)}
+        subtitulo={traduzir(
+          "Escreva como se fosse um cliente. Nada é enviado pelo WhatsApp — é só um ensaio, entre você e ele.",
+          idioma,
+        )}
+      />
       <TestarClient
         nome={(agente?.name as string | undefined) ?? null}
         agenteId={(agente?.id as string | undefined) ?? null}

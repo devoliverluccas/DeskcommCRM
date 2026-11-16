@@ -123,7 +123,7 @@ export function ImageMedia({ messageId, alt, src: fonte }: Props) {
             <a
               href={baixar}
               download
-              className="mx-auto mt-2 flex w-fit items-center gap-2 rounded-md bg-background px-4 py-2 text-sm font-medium text-foreground shadow-sm hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring"
+              className="mx-auto mt-2 flex w-fit items-center gap-2 rounded-md bg-background px-4 py-2 text-sm font-medium text-foreground shadow-sm hover:bg-hover focus-visible:outline-2 focus-visible:outline-ring"
             >
               <DownloadSimple size={16} aria-hidden />
               {t("Baixar")}

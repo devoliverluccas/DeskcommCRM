@@ -12,6 +12,7 @@ import {
   markNuvemshopConfigured,
 } from "@/app/actions/onboarding/skipWhatsapp";
 import { useMarcaDaInstalacao } from "@/lib/branding/contexto";
+import { RodapeDoPasso } from "../_components/Passo";
 
 export function ConnectNuvemshopClient() {
   const t = useT();
@@ -23,15 +24,35 @@ export function ConnectNuvemshopClient() {
   const marca = useMarcaDaInstalacao();
 
   return (
-    <div className="space-y-4 rounded-lg border bg-background p-6">
-      <p className="text-sm">
+    <div className="space-y-6 border-t border-border pt-8">
+      <p className="max-w-prose text-sm leading-relaxed text-text">
         {t("Ao clicar em")} <strong>{t("Conectar")}</strong> {t("você será redirecionado para autorizar o")}{" "}
         {marca.name} {t("na sua conta Nuvemshop.")}
       </p>
 
-      <div className="flex flex-wrap gap-2">
+      <RodapeDoPasso
+        secundaria={
+          <Button
+            type="button"
+            variant="ghost"
+            disabled={pending}
+            onClick={() => startTransition(() => void skipNuvemshop())}
+          >
+            {t("Pular por enquanto")}
+          </Button>
+        }
+      >
         <Button
           type="button"
+          variant="outline"
+          disabled={pending}
+          onClick={() => startTransition(() => void markNuvemshopConfigured())}
+        >
+          {t("Já conectei")}
+        </Button>
+        <Button
+          type="button"
+          size="lg"
           disabled={pending}
           onClick={() =>
             startTransition(async () => {
@@ -52,23 +73,7 @@ export function ConnectNuvemshopClient() {
         >
           {t("Conectar")}
         </Button>
-        <Button
-          type="button"
-          variant="outline"
-          disabled={pending}
-          onClick={() => startTransition(() => void markNuvemshopConfigured())}
-        >
-          {t("Já conectei")}
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          disabled={pending}
-          onClick={() => startTransition(() => void skipNuvemshop())}
-        >
-          {t("Pular por enquanto")}
-        </Button>
-      </div>
+      </RodapeDoPasso>
     </div>
   );
 }

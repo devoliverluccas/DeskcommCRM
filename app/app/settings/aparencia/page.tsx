@@ -72,7 +72,7 @@ export default async function AparenciaDaOrganizacaoPage() {
     .join("\n");
 
   return (
-    <div className="flex h-full flex-col gap-6 overflow-y-auto p-6">
+    <div className="flex h-full flex-col gap-5 overflow-y-auto p-2">
       {cssDasPrevias ? (
         <style id="aparencia-previas" dangerouslySetInnerHTML={{ __html: cssDasPrevias }} />
       ) : null}

@@ -26,7 +26,7 @@ const SheetOverlay = React.forwardRef<
       // do plugin `tailwindcss-animate`, que NUNCA foi instalado neste repo, e
       // classe inexistente no Tailwind não gera CSS nem erro — a cortina
       // aparecia e desaparecia seca. A régua está em `app/globals.css`.
-      "ds-cortina fixed inset-0 z-50 bg-black/80",
+      "ds-cortina fixed inset-0 z-50 bg-overlay",
       className,
     )}
     {...props}
@@ -150,7 +150,7 @@ const SheetTitle = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <SheetPrimitive.Title
     ref={ref}
-    className={cn("text-lg font-semibold text-foreground", className)}
+    className={cn("text-base font-semibold text-foreground", className)}
     {...props}
   />
 ));

@@ -285,7 +285,7 @@ export function ConversationListItem({
   return (
     <div
       className={cn(
-        "relative flex w-full items-start border-b border-border/70",
+        "relative flex w-full items-start",
         selecionado && "bg-accent-soft",
       )}
     >
@@ -308,7 +308,7 @@ export function ConversationListItem({
             "focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent",
             selecionado
               ? "border-accent bg-accent text-accent-foreground"
-              : "border-muted-foreground bg-background hover:bg-surface-elevated",
+              : "border-muted-foreground bg-background hover:bg-hover",
           )}
         >
           {selecionado && <Check size={12} weight="bold" aria-hidden />}
@@ -319,8 +319,10 @@ export function ConversationListItem({
         data-conversation-id={conversation.id}
         onClick={() => onSelect(conversation.id)}
         className={cn(
-          "group relative flex min-w-0 flex-1 items-start gap-3 px-3 py-2.5 text-left transition-colors hover:bg-surface-elevated",
-          "focus-visible:outline-hidden focus-visible:bg-surface-elevated",
+          // Sem divisória por linha (redesign v2): a separação é o respiro e o
+          // hover neutro; a borda em toda linha era o ruído que a lista tinha.
+          "group relative flex min-w-0 flex-1 items-start gap-3 px-3 py-2.5 text-left transition-colors hover:bg-hover",
+          "focus-visible:outline-hidden focus-visible:bg-hover",
           // `accent-soft`, e não um degrau fixo da rampa: os degraus têm o MESMO
           // hex nos dois temas, e o `accent-50` (quase branco) no escuro deixava o
           // nome — `text-text`, claro no escuro — branco sobre branco.
@@ -339,7 +341,7 @@ export function ConversationListItem({
         <span className="absolute inset-y-0 left-0 w-0.5 bg-accent" aria-hidden />
       )}
       <div className="relative shrink-0">
-        <Avatar className="h-10 w-10">
+        <Avatar className="h-9 w-9">
           {/* Só monta a <img> quando existe arquivo: sem isso o browser pediria
               a rota para TODO contato da lista e levaria 404 em cada um sem
               foto — que é a maioria. O AvatarFallback do Radix já cobre o caso
@@ -460,7 +462,7 @@ export function ConversationListItem({
         </div>
 
         {temSelos && (
-          <div className="mt-1.5 flex flex-wrap items-center gap-1">
+          <div className="mt-1 flex flex-wrap items-center gap-1">
             {/* O SELO DO EXEMPLO vem ANTES das etiquetas de propósito: a faixa
                 mostra no máximo 2 etiquetas e as que sobram viram "+N". Um
                 estado que decide se a conversa entra na base de conhecimento
@@ -542,7 +544,7 @@ export function ConversationListItem({
             "focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent",
             exemploMarcado
               ? "text-accent hover:bg-accent-soft"
-              : "text-text-muted hover:bg-surface-elevated hover:text-text",
+              : "text-text-muted hover:bg-hover hover:text-text",
           )}
         >
           <Sparkle size={14} weight={exemploMarcado ? "fill" : "regular"} aria-hidden />

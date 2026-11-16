@@ -423,7 +423,7 @@ export function ProposalEditorClient({ id, podeEditar, podeRevisar = false }: { 
   const editavel = podeEditar && proposta.status === "rascunho";
 
   return (
-    <div className="mx-auto w-full max-w-5xl space-y-4 p-6">
+    <div className="mx-auto w-full max-w-5xl space-y-4 p-2">
       <header>
         <input
           className="text-2xl font-semibold w-full border rounded-md px-2 py-1"
@@ -668,7 +668,7 @@ export function ProposalEditorClient({ id, podeEditar, podeRevisar = false }: { 
                 {resultadosProdutos.map((produto) => (
                   <button
                     key={produto.id}
-                    className="block w-full border-b px-3 py-2 text-left text-sm hover:bg-accent last:border-b-0"
+                    className="block w-full border-b px-3 py-2 text-left text-sm hover:bg-hover last:border-b-0"
                     onClick={() => adicionarItemDoCatalogo(produto)}
                   >
                     <div className="font-medium">{produto.nome}</div>

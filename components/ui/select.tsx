@@ -27,7 +27,7 @@ const SelectTrigger = React.forwardRef<
       // `h-9`: assim o seletor que o chamador dimensionou à mão não muda.
       //
       // `lg:` é o mesmo corte de `components/ui/button.tsx`.
-      "flex h-9 min-h-11 w-full items-center justify-between rounded-md border border-input bg-transparent px-3 py-2 text-sm whitespace-nowrap shadow-sm ring-offset-background focus:ring-1 focus:ring-ring focus:outline-hidden disabled:cursor-not-allowed disabled:opacity-50 data-[placeholder]:text-muted-foreground lg:min-h-0 [&>span]:line-clamp-1",
+      "flex h-8 min-h-11 w-full items-center justify-between gap-2 rounded-md border border-input bg-surface px-2.5 py-1 text-sm whitespace-nowrap ring-offset-background transition-[border-color,box-shadow] duration-fast hover:border-border-strong focus:border-accent-500 focus:ring-[3px] focus:ring-accent-500/15 focus:outline-hidden disabled:cursor-not-allowed disabled:opacity-50 data-[placeholder]:text-muted-foreground lg:min-h-0 [&>span]:line-clamp-1",
       className,
     )}
     {...props}
@@ -76,7 +76,7 @@ const SelectContent = React.forwardRef<
     <SelectPrimitive.Content
       ref={ref}
       className={cn(
-        "ds-painel relative z-50 max-h-(--radix-select-content-available-height) min-w-[8rem] origin-(--radix-select-content-transform-origin) overflow-x-hidden overflow-y-auto rounded-md border bg-popover text-popover-foreground shadow-md",
+        "ds-painel relative z-50 max-h-(--radix-select-content-available-height) min-w-[8rem] origin-(--radix-select-content-transform-origin) overflow-x-hidden overflow-y-auto rounded-lg border bg-popover text-popover-foreground shadow-lg",
         position === "popper" &&
           "data-[side=bottom]:translate-y-1 data-[side=left]:-translate-x-1 data-[side=right]:translate-x-1 data-[side=top]:-translate-y-1",
         className,
@@ -106,7 +106,7 @@ const SelectLabel = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <SelectPrimitive.Label
     ref={ref}
-    className={cn("px-2 py-1.5 text-sm font-semibold", className)}
+    className={cn("px-2 py-1.5 text-xs font-medium text-muted-foreground", className)}
     {...props}
   />
 ));
@@ -119,7 +119,7 @@ const SelectItem = React.forwardRef<
   <SelectPrimitive.Item
     ref={ref}
     className={cn(
-      "relative flex w-full cursor-default items-center rounded-sm py-1.5 pr-8 pl-2 text-sm outline-hidden select-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 pointer-coarse:min-h-11",
+      "relative flex w-full cursor-default items-center rounded-sm py-1.5 pr-8 pl-2 text-sm outline-hidden select-none focus:bg-hover data-[disabled]:pointer-events-none data-[disabled]:opacity-50 pointer-coarse:min-h-11",
       className,
     )}
     {...props}
@@ -143,7 +143,7 @@ const SelectSeparator = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <SelectPrimitive.Separator
     ref={ref}
-    className={cn("-mx-1 my-1 h-px bg-muted", className)}
+    className={cn("-mx-1 my-1 h-px bg-border", className)}
     {...props}
   />
 ));

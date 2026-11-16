@@ -196,7 +196,7 @@ export function QuadroDeTarefas({
         {Array.from({ length: 4 }).map((_, i) => (
           <div
             key={i}
-            className="h-64 w-[85vw] max-w-80 shrink-0 animate-pulse rounded-lg border bg-card md:w-80"
+            className="h-64 w-[85vw] max-w-80 shrink-0 ds-esqueleto rounded-lg md:w-80"
           />
         ))}
       </div>

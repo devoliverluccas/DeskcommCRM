@@ -17,7 +17,9 @@ import { rotuloDoMotivoDePerda } from "@/lib/schemas/leads";
 import { SEM_CATEGORIA, SEM_ETAPA, SEM_MOEDA, SEM_MOTIVO } from "@/lib/metrics/perdas";
 import { usePerdasMetrics } from "@/hooks/metrics/usePerdasMetrics";
 import { formatValorDoNegocio } from "@/lib/money";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { CABECALHO_DE_CARTAO, TituloDeSecao } from "./Secao";
 import {
   Table,
   TableBody,
@@ -49,25 +51,27 @@ function Bloco({
 }) {
   const t = useT();
   return (
-    <div className="space-y-2">
-      <h3 className="text-sm font-semibold">{t(titulo)}</h3>
+    <div className="min-w-0 space-y-1">
+      <h3 className="text-xs font-medium text-text-muted">{t(titulo)}</h3>
       {linhas.length === 0 ? (
-        <p className="text-sm text-muted-foreground">{t("Nenhuma perda na janela.")}</p>
+        <p className="py-2 text-sm text-text-subtle">{t("Nenhuma perda na janela.")}</p>
       ) : (
         <Table>
           <TableHeader>
-            <TableRow>
-              <TableHead>{t(coluna)}</TableHead>
-              <TableHead className="text-right">{t("Negócios")}</TableHead>
+            <TableRow className="hover:bg-transparent">
+              <TableHead className="pl-0">{t(coluna)}</TableHead>
+              <TableHead className="pr-0 text-right">{t("Negócios")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {linhas.map((linha) => (
               <TableRow key={linha.chave}>
-                <TableCell className="max-md:wrap-anywhere md:truncate">
+                <TableCell className="pl-0 max-md:wrap-anywhere md:truncate">
                   {SENTINELAS.has(linha.chave) ? t(linha.chave) : rotulo(linha.chave)}
                 </TableCell>
-                <TableCell className="text-right tabular-nums">{linha.quantidade}</TableCell>
+                <TableCell className="pr-0 text-right font-medium tabular-nums">
+                  {linha.quantidade}
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -80,22 +84,32 @@ function Bloco({
 export function PerdasPanel() {
   const t = useT();
   const { data, isLoading, isError } = usePerdasMetrics();
-  if (isLoading) return <p className="text-sm text-muted-foreground">{t("Carregando…")}</p>;
+  if (isLoading) {
+    return (
+      <div className="flex flex-col gap-2" aria-busy="true" aria-label={t("Carregando…")}>
+        <Skeleton className="h-5 w-40" />
+        <Skeleton className="h-40 w-full" />
+      </div>
+    );
+  }
   if (isError || !data)
-    return <p className="text-sm text-destructive">{t("Erro ao carregar o relatório de perdas.")}</p>;
+    return <p className="text-sm text-error-fg">{t("Erro ao carregar o relatório de perdas.")}</p>;
 
   const relatorio = data.data;
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="text-base">{t("Perdas")}</CardTitle>
-        <p className="text-xs text-muted-foreground">
-          {t("Por motivo, categoria e etapa de saída — quantidade e valor por moeda.")}
-          {relatorio.truncado ? ` ${t("Cortado no limite de leitura.")}` : ""}
-        </p>
-      </CardHeader>
-      <CardContent className="grid gap-6 md:grid-cols-3">
+      <TituloDeSecao
+        className={CABECALHO_DE_CARTAO}
+        titulo={t("Perdas")}
+        descricao={
+          <>
+            {t("Por motivo, categoria e etapa de saída — quantidade e valor por moeda.")}
+            {relatorio.truncado ? ` ${t("Cortado no limite de leitura.")}` : ""}
+          </>
+        }
+      />
+      <div className="grid gap-6 p-4 md:grid-cols-3 md:gap-8">
         <Bloco
           titulo="Por motivo"
           linhas={relatorio.porMotivo}
@@ -108,33 +122,33 @@ export function PerdasPanel() {
         <Bloco titulo="Por categoria" linhas={relatorio.porCategoria} coluna="Categoria" />
         <Bloco titulo="Por etapa de saída" linhas={relatorio.porEtapa} coluna="Etapa" />
 
-        <div className="space-y-2 md:col-span-3">
-          <h3 className="text-sm font-semibold">{t("Valor por moeda")}</h3>
+        <div className="min-w-0 space-y-1 md:col-span-3">
+          <h3 className="text-xs font-medium text-text-muted">{t("Valor por moeda")}</h3>
           <Table>
             <TableHeader>
-              <TableRow>
-                <TableHead>{t("Moeda")}</TableHead>
+              <TableRow className="hover:bg-transparent">
+                <TableHead className="pl-0">{t("Moeda")}</TableHead>
                 <TableHead className="text-right">{t("Negócios")}</TableHead>
-                <TableHead className="text-right">{t("Valor")}</TableHead>
+                <TableHead className="pr-0 text-right">{t("Valor")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {relatorio.porMoeda.map((m) => (
                 <TableRow key={m.moeda}>
-                  <TableCell>{m.moeda === SEM_MOEDA ? t(SEM_MOEDA) : m.moeda}</TableCell>
+                  <TableCell className="pl-0">{m.moeda === SEM_MOEDA ? t(SEM_MOEDA) : m.moeda}</TableCell>
                   <TableCell className="text-right tabular-nums">{m.quantidade}</TableCell>
-                  <TableCell className="text-right tabular-nums">
+                  <TableCell className="pr-0 text-right font-medium tabular-nums">
                     {formataMoeda(m.moeda, m.valor_cents)}
                   </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-text-subtle">
             {t("Moedas nunca são somadas entre si: cada balde é o total da própria moeda.")}
           </p>
         </div>
-      </CardContent>
+      </div>
     </Card>
   );
 }

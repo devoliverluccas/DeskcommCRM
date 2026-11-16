@@ -2,7 +2,6 @@
 
 import { Button } from "@/components/ui/button";
 import { useT } from "@/hooks/i18n/useT";
-import { Funnel } from "@/lib/ui/icons";
 
 interface Props {
   /** Os filtros auxiliares ligados, já em português — ex.: ["Não lidos", "Etiqueta"]. */
@@ -27,8 +26,7 @@ interface Props {
 export function EmptyPorFiltro({ filtros, onLimpar }: Props) {
   const t = useT();
   return (
-    <div className="flex flex-col items-center justify-center gap-3 p-6 text-center">
-      <Funnel size={28} className="text-text-subtle" weight="regular" aria-hidden />
+    <div className="flex flex-col items-center gap-1 px-6 pt-12 pb-4 text-center">
       <p className="text-sm font-medium text-text">
         {t("Nenhuma conversa com esses filtros")}
       </p>
@@ -38,7 +36,7 @@ export function EmptyPorFiltro({ filtros, onLimpar }: Props) {
         </p>
       )}
       {onLimpar && (
-        <Button size="sm" variant="outline" onClick={onLimpar}>
+        <Button size="sm" variant="outline" className="mt-3" onClick={onLimpar}>
           {t("Limpar filtros")}
         </Button>
       )}

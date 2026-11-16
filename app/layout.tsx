@@ -48,6 +48,8 @@ const atkinson = localFont({
     },
   ],
   display: "swap",
+  // Reserva e opção em Aparência — só baixa quando alguma regra a usa.
+  preload: false,
   variable: "--font-atkinson",
 });
 

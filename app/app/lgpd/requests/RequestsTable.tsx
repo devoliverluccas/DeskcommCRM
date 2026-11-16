@@ -137,7 +137,7 @@ export function RequestsTable({
       {!q.isLoading && rows.length > 0 && <SlaBanner requests={rows} />}
 
       {/* Toolbar */}
-      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-surface p-2">
+      <div className="flex flex-wrap items-center gap-2">
         <Select
           value={status ?? ALL}
           onValueChange={(v) => {
@@ -145,7 +145,7 @@ export function RequestsTable({
             setPage(1);
           }}
         >
-          <SelectTrigger className="h-9 w-[170px]">
+          <SelectTrigger className="w-[170px]">
             <SelectValue placeholder={t("Status: todos")} />
           </SelectTrigger>
           <SelectContent>
@@ -165,7 +165,7 @@ export function RequestsTable({
             setPage(1);
           }}
         >
-          <SelectTrigger className="h-9 w-[200px]">
+          <SelectTrigger className="w-[200px]">
             <SelectValue placeholder={t("Tipo: todos")} />
           </SelectTrigger>
           <SelectContent>
@@ -183,7 +183,7 @@ export function RequestsTable({
             setPage(1);
           }}
         >
-          <SelectTrigger className="h-9 w-[160px]">
+          <SelectTrigger className="w-[160px]">
             <SelectValue placeholder={t("SLA: todos")} />
           </SelectTrigger>
           <SelectContent>

@@ -51,6 +51,20 @@ const STATUS_OPTIONS: Array<{ value: NonNullable<LeadFilters["status"]>; label: 
   { value: "lost", label: "Perdidos" },
 ];
 
+/**
+ * Filtro como chip: a mesma altura dos controles do cabeçalho (44px no toque,
+ * 32px no cursor) e, quando restringe o quadro, a cor de seleção — é o que
+ * deixa ver de relance POR QUE o quadro está mostrando menos do que tem.
+ */
+function chip(ativo: boolean): string {
+  return cn(
+    "bg-surface lg:h-8",
+    ativo
+      ? "border-accent/40 bg-accent-soft text-accent hover:border-accent/60 hover:bg-accent-soft"
+      : "text-text-muted hover:text-text",
+  );
+}
+
 export function FilterBar({ filters, onChange, leads, settings }: FilterBarProps) {
   const t = useT();
   const user = useUser();
@@ -209,18 +223,22 @@ export function FilterBar({ filters, onChange, leads, settings }: FilterBarProps
       : (filters.lostCategory ?? t("Todas"));
 
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-surface p-2">
+    <div className="flex flex-wrap items-center gap-1.5">
       <Input
         type="search"
         placeholder={t("Buscar por título…")}
         value={searchInput}
         onChange={(e) => setSearchInput(e.target.value)}
-        className="h-9 w-full sm:w-64"
+        className="w-full sm:w-60"
       />
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="sm">
+          <Button
+            variant="outline"
+            size="sm"
+            className={chip(!!filters.owner && filters.owner !== "any")}
+          >
             {t("Responsável")}: {ownerLabel}
           </Button>
         </DropdownMenuTrigger>
@@ -265,7 +283,11 @@ export function FilterBar({ filters, onChange, leads, settings }: FilterBarProps
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="sm">
+          <Button
+            variant="outline"
+            size="sm"
+            className={chip(!!filters.status && filters.status !== "all")}
+          >
             {t("Status")}: {statusLabel}
           </Button>
         </DropdownMenuTrigger>
@@ -285,7 +307,7 @@ export function FilterBar({ filters, onChange, leads, settings }: FilterBarProps
         <>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm">
+              <Button variant="outline" size="sm" className={chip(!!filters.lostReason)}>
                 {t("Motivo")}: {motivoLabel}
               </Button>
             </DropdownMenuTrigger>
@@ -308,7 +330,7 @@ export function FilterBar({ filters, onChange, leads, settings }: FilterBarProps
           {categoriasPerdidas.length > 0 ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm">
+                <Button variant="outline" size="sm" className={chip(!!filters.lostCategory)}>
                   {t("Categoria")}: {categoriaLabel}
                 </Button>
               </DropdownMenuTrigger>
@@ -335,7 +357,12 @@ export function FilterBar({ filters, onChange, leads, settings }: FilterBarProps
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="sm" disabled={tagOptions.length === 0}>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={tagOptions.length === 0}
+            className={chip(marcadoresEscolhidos.length > 0)}
+          >
             {marcadoresEscolhidos[0] ? (
               <PontoDaEtiqueta tag={marcadoresEscolhidos[0]} className="mr-2" />
             ) : null}
@@ -386,13 +413,14 @@ export function FilterBar({ filters, onChange, leads, settings }: FilterBarProps
 
       <label
         className={cn(
-          "flex cursor-pointer select-none items-center gap-2 rounded-md border border-border px-3 py-1.5 text-sm",
-          filters.overdueOnly && "border-accent bg-accent/10",
+          "inline-flex h-11 cursor-pointer select-none items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium transition-colors hover:border-border-strong lg:h-8",
+          chip(!!filters.overdueOnly),
         )}
       >
         <input
           type="checkbox"
           checked={!!filters.overdueOnly}
+          className="h-3.5 w-3.5 accent-accent"
           onChange={(e) => onChange({ ...filters, overdueOnly: e.target.checked })}
         />
         {t("Apenas atrasados")}
@@ -408,6 +436,7 @@ export function FilterBar({ filters, onChange, leads, settings }: FilterBarProps
         <Button
           variant="ghost"
           size="sm"
+          className="text-text-muted hover:text-text lg:h-8"
           onClick={() => {
             setSearchInput("");
             onChange({ status: "all" });

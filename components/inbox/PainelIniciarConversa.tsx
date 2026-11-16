@@ -67,7 +67,7 @@ import { apiClient } from "@/lib/api/client";
 import { normalizePhoneBR, phoneForDisplay, samePhone } from "@/lib/channels/phone-variants";
 import { rotuloParaAEquipe } from "@/lib/contacts/rotulo-do-contato";
 import { assumirConversaAoAbrir } from "@/lib/inbox/assumir-conversa-ao-abrir";
-import { ChatCircle, UserCircle, Users } from "@/lib/ui/icons";
+import { Plus, UserCircle, Users } from "@/lib/ui/icons";
 import { useAuth, usePermission } from "@/hooks/auth/AuthProvider";
 import { useContactList } from "@/hooks/contacts/useContactList";
 import { useT } from "@/hooks/i18n/useT";
@@ -384,17 +384,19 @@ export function BotaoIniciarConversa() {
 
   return (
     <>
-      <div className="px-3 pt-3">
-        <Button
-          type="button"
-          variant="outline"
-          className="w-full justify-center gap-2"
-          onClick={() => setAberto(true)}
-        >
-          <ChatCircle size={16} weight="regular" aria-hidden />
-          {t("Iniciar conversa")}
-        </Button>
-      </div>
+      {/* Ação compacta ao lado da busca (redesign v2), e não mais uma barra
+          larga no topo da lista. O nome acessível segue "Iniciar conversa". */}
+      <Button
+        type="button"
+        variant="outline"
+        size="icon"
+        className="shrink-0"
+        aria-label={t("Iniciar conversa")}
+        title={t("Iniciar conversa")}
+        onClick={() => setAberto(true)}
+      >
+        <Plus size={16} weight="bold" aria-hidden />
+      </Button>
       <IniciarConversaDialog open={aberto} onOpenChange={setAberto} />
     </>
   );

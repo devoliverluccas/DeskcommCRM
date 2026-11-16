@@ -43,9 +43,9 @@ export default async function IntegracaoDeDadosPage() {
     (user.is_platform_admin && !user.support) || ROLE_RANK[activeOrg.role] >= ROLE_RANK.admin;
 
   return (
-    <div className="flex h-full flex-col gap-6 overflow-y-auto p-6">
+    <div className="flex h-full flex-col gap-5 overflow-y-auto p-2">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">{traduzir("Dados externos", idioma)}</h1>
+        <h1 className="text-xl font-semibold tracking-tight">{traduzir("Dados externos", idioma)}</h1>
         <p className="max-w-2xl text-sm text-muted-foreground">
           {traduzir(
             "Conecte um banco de dados de outro sistema — o seu segundo CRM, um ERP, uma planilha num banco PostgreSQL ou MySQL — e o agente passa a consultá-lo em tempo real. A conexão é sempre somente leitura: nada que o agente faz altera o banco de origem.",

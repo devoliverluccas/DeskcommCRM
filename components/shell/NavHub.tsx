@@ -88,9 +88,9 @@ export function NavHub({
   const secoes = hubSections(group, isPlatformAdmin, role, interfaceSettings, modulosLigados, capacidadesLigadas);
 
   return (
-    <div className="flex h-full flex-col gap-8 p-6">
+    <div className="flex h-full flex-col gap-6 p-2">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">{traduzir(title, locale)}</h1>
+        <h1 className="text-xl font-semibold tracking-tight">{traduzir(title, locale)}</h1>
         {subtitle && <p className="text-sm text-muted-foreground">{traduzir(subtitle, locale)}</p>}
       </header>
 
@@ -102,29 +102,31 @@ export function NavHub({
         >
           <h2
             id={`hub-${group}-${slug(section)}`}
-            className="text-xs font-medium tracking-wider text-muted-foreground uppercase"
+            className="text-xs font-medium text-text-subtle"
           >
             {traduzir(section, locale)}
           </h2>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+          {/* Linhas, não um mural de cartões: o hub é um índice, e índice se lê
+              em coluna. A borda fica no ícone (o alvo do olho) e o retorno do
+              cursor é de superfície, como em todo item de navegação. */}
+          <div className="-mx-2 grid grid-cols-1 gap-x-2 gap-y-px md:grid-cols-2 lg:grid-cols-3">
             {items.map((item) => {
               const Icon = item.icon;
               return (
-                <Link key={item.href} href={item.href} className="block">
-                  <Card className="flex h-full gap-3 p-4 transition-colors hover:border-border-strong">
-                    <Icon
-                      size={20}
-                      weight="regular"
-                      aria-hidden
-                      className="mt-0.5 shrink-0 text-muted-foreground"
-                    />
-                    <div>
-                      <h3 className="text-sm font-semibold">{traduzir(item.label, locale)}</h3>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {traduzir(item.description, locale)}
-                      </p>
-                    </div>
-                  </Card>
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className="group flex gap-3 rounded-md p-2 transition-colors duration-fast hover:bg-hover focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:outline-hidden"
+                >
+                  <span className="flex size-8 shrink-0 items-center justify-center rounded-md border bg-surface text-muted-foreground transition-colors duration-fast group-hover:text-foreground">
+                    <Icon size={16} weight="regular" aria-hidden />
+                  </span>
+                  <div className="min-w-0">
+                    <h3 className="text-sm font-medium">{traduzir(item.label, locale)}</h3>
+                    <p className="mt-0.5 text-xs leading-snug text-muted-foreground">
+                      {traduzir(item.description, locale)}
+                    </p>
+                  </div>
                 </Link>
               );
             })}

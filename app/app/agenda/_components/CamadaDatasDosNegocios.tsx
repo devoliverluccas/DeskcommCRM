@@ -342,7 +342,7 @@ export function CamadaDatasDosNegocios({ funis, janela, escolhaInicial, aoEscolh
               <SelectTrigger
                 aria-label={t("Funil das datas")}
                 data-testid="camada-datas-funil"
-                className="h-9 w-auto text-xs"
+                className="w-auto text-xs"
               >
                 <SelectValue />
               </SelectTrigger>
@@ -369,7 +369,7 @@ export function CamadaDatasDosNegocios({ funis, janela, escolhaInicial, aoEscolh
               <SelectTrigger
                 aria-label={t("Campo de data do negócio")}
                 data-testid="camada-datas-campo"
-                className="h-9 w-auto text-xs"
+                className="w-auto text-xs"
               >
                 <SelectValue placeholder={t("Escolha o campo de data")} />
               </SelectTrigger>
@@ -392,7 +392,7 @@ export function CamadaDatasDosNegocios({ funis, janela, escolhaInicial, aoEscolh
                 <SelectTrigger
                   aria-label={t("Segundo campo de data")}
                   data-testid="camada-datas-campo-fim"
-                  className="h-9 w-auto text-xs"
+                  className="w-auto text-xs"
                 >
                   <SelectValue />
                 </SelectTrigger>

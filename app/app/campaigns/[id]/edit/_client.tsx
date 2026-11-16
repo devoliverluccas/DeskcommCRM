@@ -122,7 +122,7 @@ export function EditarCampanha({ id }: { id: string }) {
 
   if (campanha.isLoading || !carregado) {
     return (
-      <div className="space-y-3 p-6">
+      <div className="space-y-3 p-2">
         <Skeleton className="h-8 w-64" />
         <Skeleton className="h-64 w-full" />
       </div>
@@ -132,7 +132,7 @@ export function EditarCampanha({ id }: { id: string }) {
   const c = campanha.data;
   if (!c) {
     return (
-      <div className="p-6">
+      <div className="p-2">
         <Card className="p-6 text-center">
           <p className="text-sm text-error-fg">{t("Não foi possível carregar a campanha.")}</p>
         </Card>
@@ -142,8 +142,8 @@ export function EditarCampanha({ id }: { id: string }) {
 
   if (c.status !== "draft") {
     return (
-      <div className="mx-auto max-w-3xl space-y-4 p-6">
-        <h1 className="text-2xl font-semibold tracking-tight">{t("Editar campanha")}</h1>
+      <div className="mx-auto max-w-3xl space-y-4 p-2">
+        <h1 className="text-xl font-semibold tracking-tight">{t("Editar campanha")}</h1>
         <Card className="space-y-3 p-4">
           <p className="text-sm">
             {t(
@@ -182,9 +182,9 @@ export function EditarCampanha({ id }: { id: string }) {
     (baseLegal !== "legitimate_interest" || liaRef.trim() !== "");
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4 p-6">
+    <div className="mx-auto max-w-3xl space-y-4 p-2">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">{t("Editar campanha")}</h1>
+        <h1 className="text-xl font-semibold tracking-tight">{t("Editar campanha")}</h1>
         <p className="text-sm text-muted-foreground">
           {t("Enquanto é rascunho, tudo muda. Depois de preparada, só o ritmo.")}
         </p>

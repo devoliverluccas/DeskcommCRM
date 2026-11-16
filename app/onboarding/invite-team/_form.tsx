@@ -18,6 +18,7 @@ import {
 import { sendOnboardingInvites } from "@/app/actions/onboarding/sendOnboardingInvites";
 import { ROLES, type Role } from "@/lib/schemas/team";
 import { ROTULO_DO_PAPEL } from "@/lib/auth/types";
+import { AvisoDoPasso, RodapeDoPasso } from "../_components/Passo";
 
 export function InviteTeamForm() {
   const t = useT();
@@ -69,7 +70,7 @@ export function InviteTeamForm() {
   };
 
   return (
-    <div className="space-y-4 rounded-lg border bg-background p-6">
+    <div className="space-y-6 border-t border-border pt-8">
       <div className="space-y-2">
         <Label htmlFor="emails">{t("E-mail de quem vai trabalhar com ele")}</Label>
         <Textarea
@@ -103,7 +104,7 @@ export function InviteTeamForm() {
       </div>
 
       {undelivered.length > 0 && (
-        <div className="space-y-3 rounded-md border border-amber-300/60 bg-amber-50 p-4 dark:border-amber-500/30 dark:bg-amber-950/20">
+        <AvisoDoPasso tom="aviso" className="space-y-3">
           <p className="text-sm font-medium">
             {t(
               "Esta instalação não envia e-mail. Os convites estão prontos — copie o link de cada pessoa e mande por onde você já fala com ela:",
@@ -114,7 +115,7 @@ export function InviteTeamForm() {
               <li key={u.email} className="flex items-center gap-2">
                 <span className="min-w-0 flex-1 truncate text-xs">
                   <span className="font-medium">{u.email}</span>{" "}
-                  <code className="break-all text-muted-foreground">{u.accept_url}</code>
+                  <code className="break-all">{u.accept_url}</code>
                 </span>
                 <Button
                   type="button"
@@ -137,17 +138,20 @@ export function InviteTeamForm() {
               {t("Continuar")}
             </Button>
           </div>
-        </div>
+        </AvisoDoPasso>
       )}
 
-      <div className="flex flex-wrap justify-between gap-2 pt-2">
-        <Button type="button" variant="ghost" disabled={pending} onClick={() => submit(true)}>
-          {t("Pular por enquanto")}
-        </Button>
-        <Button type="button" disabled={pending} onClick={() => submit(false)}>
+      <RodapeDoPasso
+        secundaria={
+          <Button type="button" variant="ghost" disabled={pending} onClick={() => submit(true)}>
+            {t("Pular por enquanto")}
+          </Button>
+        }
+      >
+        <Button type="button" size="lg" disabled={pending} onClick={() => submit(false)}>
           {pending ? t("Enviando...") : t("Enviar convites")}
         </Button>
-      </div>
+      </RodapeDoPasso>
     </div>
   );
 }

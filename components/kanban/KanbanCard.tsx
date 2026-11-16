@@ -184,10 +184,13 @@ export function KanbanCard({
           className={cn(
             "group relative overflow-hidden rounded-md border border-border bg-surface",
             denso ? "py-1.5 pl-2.5 pr-2" : "py-2.5 pl-3 pr-3",
-            "shadow-xs transition-colors",
+            // Só borda em repouso (v2): sombra é de quem flutua, e o card só
+            // flutua no arraste. Seleção é a accent; arraste é elevação — os
+            // dois juntos (arrastar um card marcado) continuam distinguíveis.
+            "transition-[border-color,background-color,box-shadow]",
             "hover:border-border-strong",
-            snapshot.isDragging && "rotate-1 shadow-md ring-1 ring-accent/40",
-            isSelected && "ring-2 ring-accent",
+            snapshot.isDragging && "rotate-1 border-border-strong shadow-lg",
+            isSelected && "border-accent bg-accent-soft/40 ring-1 ring-accent",
           )}
         >
           {/* key = contador: cada evento remoto monta um overlay NOVO, e é isso
@@ -286,7 +289,7 @@ export function KanbanCard({
                     e.stopPropagation();
                     decidirClique(e);
                   }}
-                  className="text-left hover:underline"
+                  className="text-left underline-offset-2 hover:underline"
                 >
                   {card.title}
                 </button>
@@ -309,9 +312,9 @@ export function KanbanCard({
           <p
             data-testid="card-valor"
             className={cn(
-              "flex items-baseline gap-1 font-medium tabular-nums",
-              denso ? "mt-0.5 h-4 text-[11px] leading-4" : "mt-1 h-5 text-xs leading-5",
-              value || recorrente ? "text-text" : "text-text-muted",
+              "flex items-baseline gap-1 font-semibold tabular-nums",
+              denso ? "mt-0.5 h-4 text-xs leading-4" : "mt-1 h-5 text-sm leading-5",
+              value || recorrente ? "text-text" : "font-normal text-text-subtle",
             )}
             title={recorrente ? `${value ?? ""} + ${recorrente}`.trim() : undefined}
           >
@@ -319,7 +322,7 @@ export function KanbanCard({
               <span className="truncate">{value ?? t("Sem valor único")}</span>
             )}
             {recorrente && (
-              <span className="shrink-0 text-text-muted">
+              <span className="shrink-0 text-xs font-normal text-text-muted">
                 {value ? "+ " : ""}
                 {recorrente}
               </span>
@@ -420,7 +423,7 @@ export function KanbanCard({
               />
               <TarefasNoCard tarefas={lead.tarefas} />
             </div>
-            <span className="shrink-0 whitespace-nowrap text-[11px] tabular-nums text-text-muted">
+            <span className="shrink-0 whitespace-nowrap text-[11px] tabular-nums text-text-subtle">
               {state.showStageAge && age
                 ? `${age} ${t("em")} ${card.stageName}`
                 : `${t("em")} ${card.stageName}`}

@@ -30,10 +30,10 @@ export function ListaDeCampanhas() {
   const campanhas = useMemo(() => q.data?.pages.flatMap((p) => p.data) ?? [], [q.data]);
 
   return (
-    <div className="space-y-4 p-6">
+    <div className="space-y-4 p-2">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
-          <h1 className="text-2xl font-semibold tracking-tight">{t("Campanhas")}</h1>
+          <h1 className="text-xl font-semibold tracking-tight">{t("Campanhas")}</h1>
           <p className="text-sm text-muted-foreground">
             {t("Escolha o público, escreva a mensagem e acompanhe quem recebeu.")}
           </p>
@@ -51,7 +51,7 @@ export function ListaDeCampanhas() {
         </div>
       </header>
 
-      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-surface p-2">
+      <div className="flex flex-wrap items-center gap-2">
         <label className="text-sm text-muted-foreground" htmlFor="filtro-status">
           {t("Situação")}
         </label>

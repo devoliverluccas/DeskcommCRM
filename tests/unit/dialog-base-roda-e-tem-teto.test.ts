@@ -109,11 +109,11 @@ describe("DialogTitle base quebra identificador longo", () => {
   const literais = [...fonte.matchAll(/"([^"\n]*)"/g)].map((m) => m[1] ?? "");
   const titulo = literais.find((literal) => {
     const classes = new Set(literal.split(/\s+/));
-    return classes.has("text-lg") && classes.has("font-semibold");
+    return classes.has("text-base") && classes.has("font-semibold");
   });
 
   it("o className BASE do título usa overflow-wrap:anywhere", () => {
-    expect(titulo, "nenhuma string reúne text-lg + font-semibold").toBeTruthy();
+    expect(titulo, "nenhuma string reúne text-base + font-semibold").toBeTruthy();
     expect(new Set((titulo ?? "").split(/\s+/))).toContain("[overflow-wrap:anywhere]");
   });
 });

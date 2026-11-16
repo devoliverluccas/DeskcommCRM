@@ -33,7 +33,8 @@ export const fontePlex = localFont({
   src: "./fonts/ibm-plex-sans-300-700-latin.woff2",
   weight: "300 700",
   display: "swap",
-  preload: false,
+  // Sem `preload: false`: é a fonte de fábrica da interface (`--font-sans` em
+  // `app/globals.css`), então TODA tela a usa no primeiro quadro.
   variable: "--fonte-plex",
 });
 

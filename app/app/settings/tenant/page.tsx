@@ -73,7 +73,7 @@ export default async function TenantSettingsPage() {
   const alineas = row ? art15DoControlador(row.settings) : null;
 
   return (
-    <div className="flex h-full flex-col gap-6 p-6">
+    <div className="flex h-full flex-col gap-5 p-2">
       <CabecalhoDaSubTela titulo={traduzir("Organização", idioma)} idioma={idioma}>
         <p className="text-sm text-muted-foreground">
           {traduzir("Dados da empresa, retenção de mídia, DPO. Admin only.", idioma)}

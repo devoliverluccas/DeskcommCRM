@@ -214,7 +214,7 @@ export function CalendarioDoFunil({ pipelineId, pipeline: funil, stages, leads }
             <SelectTrigger
               aria-label={t("Campo de data")}
               data-testid="calendario-campo"
-              className="h-9 w-auto text-xs"
+              className="w-auto text-xs"
             >
               <SelectValue />
             </SelectTrigger>
@@ -236,7 +236,7 @@ export function CalendarioDoFunil({ pipelineId, pipeline: funil, stages, leads }
             <SelectTrigger
               aria-label={t("Campo de data final")}
               data-testid="calendario-campo-final"
-              className="h-9 w-auto text-xs"
+              className="w-auto text-xs"
             >
               <SelectValue />
             </SelectTrigger>

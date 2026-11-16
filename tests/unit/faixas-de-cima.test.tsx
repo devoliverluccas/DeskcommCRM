@@ -82,7 +82,9 @@ describe("quem desconta as faixas", () => {
     const casca = readFileSync("app/app/_components/AppShell.tsx", "utf8");
     const inbox = readFileSync("components/inbox/InboxLayout.tsx", "utf8");
     // As DUAS caixas da casca: a de fora e a coluna do conteúdo.
-    expect(casca.split("min-h-[calc(100dvh-var(--faixas-de-cima,0px))]").length - 1).toBe(2);
+    // O painel de conteúdo desconta também `--casca-recuo` (redesign v2), então a
+    // segunda ocorrência tem um termo a mais: o que se conta é quem lê a variável.
+    expect(casca.split("min-h-[calc(100dvh-var(--faixas-de-cima,0px)").length - 1).toBe(2);
     expect(inbox).toMatch(/h-\[calc\(100dvh-var\(--faixas-de-cima,0px\)-3\.5rem/);
   });
 

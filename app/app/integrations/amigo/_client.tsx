@@ -44,11 +44,11 @@ export function AmigoClient({
     ["catalogos", t("Catálogos")],
   ];
   return (
-    <div className="w-full min-w-0 space-y-6 p-4 sm:p-6">
+    <div className="w-full min-w-0 space-y-6 p-4 sm:p-2">
       <AmigoMutationBoundary key={config.connection_id}>
         <header className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">{t("Amigo")}</h1>
+            <h1 className="text-xl font-semibold tracking-tight">{t("Amigo")}</h1>
             <p className="mt-1 text-sm text-muted-foreground">
               {t("Pacientes, recursos da clínica e consultas na mesma operação.")}
             </p>

@@ -64,9 +64,9 @@ export default async function OuvidoriaPage({
   ]);
 
   return (
-    <main className="flex h-full flex-col gap-6 md:p-6">
+    <main className="flex h-full flex-col gap-5 md:p-2">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">{t("Ouvidoria")}</h1>
+        <h1 className="text-xl font-semibold tracking-tight">{t("Ouvidoria")}</h1>
         <p className="text-sm text-muted-foreground">
           {t("Manifestações recebidas pela empresa. Só quem a organização autoriza lê o relato.")}
         </p>

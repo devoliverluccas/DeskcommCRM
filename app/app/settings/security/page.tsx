@@ -76,7 +76,7 @@ export default async function SecurityPage() {
   const idioma = user.idioma;
 
   return (
-    <div className="flex h-full flex-col gap-6 p-6">
+    <div className="flex h-full flex-col gap-5 p-2">
       <CabecalhoDaSubTela titulo={traduzir("Segurança", idioma)} idioma={idioma}>
         <p className="text-sm text-muted-foreground">
           {traduzir(

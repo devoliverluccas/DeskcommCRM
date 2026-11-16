@@ -334,7 +334,7 @@ export function TelefonesDaFicha({
   const tituloDoBloco = temExtra ? t("Telefones") : t("Telefone");
 
   return (
-    <div className="md:col-span-2">
+    <div>
       <dt className="text-xs uppercase text-muted-foreground">{tituloDoBloco}</dt>
       <dd className="mt-1">
         <ul className="flex flex-col gap-2">

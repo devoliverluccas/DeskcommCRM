@@ -129,7 +129,7 @@ export default async function CobrancaPage({ searchParams }: { searchParams: Pro
   return (
     <div className="space-y-6">
       <header className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">{t("Cobrança dos seus clientes")}</h1>
+        <h1 className="text-xl font-semibold tracking-tight">{t("Cobrança dos seus clientes")}</h1>
         <p className="text-sm text-muted-foreground">
           {t("Os planos que você vende e as empresas que pagam. Empresa sem plano é isenta: não paga e não tem limites.")}
         </p>

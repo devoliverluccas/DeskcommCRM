@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { lerRetratoDaInstalacao } from "@/lib/instalacao/retrato";
 import { JaEstaPronto } from "../_components/JaEstaPronto";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { CabecalhoDoPasso } from "../_components/Passo";
 
 export const dynamic = "force-dynamic";
 
@@ -23,15 +24,15 @@ export default async function WelcomePage() {
   const retrato = await lerRetratoDaInstalacao({ supabase, orgId: activeOrg.orgId });
 
   return (
-    <div className="space-y-6">
-      <header>
-        <h2 className="text-2xl font-semibold tracking-tight">
-          {traduzir("Boas-vindas ao", idioma)} {marca.nome}
-        </h2>
-        <p className="text-sm text-muted-foreground">
-          {traduzir("Vamos montar quem vai atender seus clientes — e onde ele vai trabalhar.", idioma)}
-        </p>
-      </header>
+    <div>
+      <CabecalhoDoPasso
+        titulo={
+          <>
+            {traduzir("Boas-vindas ao", idioma)} {marca.nome}
+          </>
+        }
+        subtitulo={traduzir("Vamos montar quem vai atender seus clientes — e onde ele vai trabalhar.", idioma)}
+      />
 
       <JaEstaPronto retrato={retrato} idioma={idioma} />
 

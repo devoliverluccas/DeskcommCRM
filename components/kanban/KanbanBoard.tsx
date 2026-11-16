@@ -3,7 +3,6 @@ import { useCallback, useMemo, useState } from "react";
 import { DragDropContext, type DropResult } from "@hello-pangea/dnd";
 import { useQueryClient } from "@tanstack/react-query";
 import { useT } from "@/hooks/i18n/useT";
-import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { chaveDoQuadro, useBoard } from "@/hooks/kanban/useBoard";
 import { useMoveCard, type MoveArgs, type RecusaDeCampos, type RetomadaPendente } from "@/hooks/kanban/useMoveCard";
@@ -88,15 +87,15 @@ function groupLeadsByStage(stages: Stage[], leads: Lead[]): Map<string, Lead[]> 
 
 function BoardSkeleton() {
   return (
-    <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto p-4">
+    <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto pb-3">
       {[0, 1, 2].map((c) => (
         <div
           key={c}
-          className="flex w-80 shrink-0 flex-col gap-2 rounded-lg border border-border bg-surface-elevated/40 p-3"
+          className="flex w-80 shrink-0 flex-col gap-2 rounded-lg border border-border bg-surface-elevated p-2"
         >
           <Skeleton className="h-5 w-32" />
           {[0, 1, 2, 3].map((i) => (
-            <Skeleton key={i} className="h-24 w-full animate-pulse" />
+            <Skeleton key={i} className="h-24 w-full" />
           ))}
         </div>
       ))}
@@ -357,10 +356,10 @@ export function KanbanBoard({
 
   if (isError) {
     return (
-      <Card className="m-4 p-6 text-sm text-text-muted">
+      <div className="rounded-md bg-error-bg px-3 py-2 text-sm text-error-fg">
         {t("Falha ao carregar o board.")}
         {error instanceof Error ? ` ${error.message}` : null}
-      </Card>
+      </div>
     );
   }
 
@@ -370,9 +369,9 @@ export function KanbanBoard({
 
   if (etapasDoQuadro.length === 0) {
     return (
-      <Card className="m-4 p-6 text-sm text-text-muted">
+      <div className="rounded-md border border-dashed border-border p-8 text-center text-sm text-text-muted">
         {t("Nenhum negócio neste funil ainda.")}
-      </Card>
+      </div>
     );
   }
 
@@ -394,7 +393,7 @@ export function KanbanBoard({
           "o quadro cabe na tela"). O respiro até os filtros vem do `gap-4` da
           página. */}
       <div
-        className="flex min-h-0 flex-1 items-start gap-3 overflow-auto px-4 pb-4"
+        className="flex min-h-0 flex-1 items-start gap-3 overflow-auto pb-3"
         data-quadro-do-funil
       >
         {/* A FAIXA entre o rolo e as colunas (#3030). O contêiner de fora é o

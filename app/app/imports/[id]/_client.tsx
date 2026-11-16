@@ -36,7 +36,7 @@ export function ImportDetailClient({ id }: { id: string }) {
   if (!batch) return <div className="p-6 text-muted-foreground">{t("Carregando…")}</div>;
 
   return (
-    <div className="flex flex-col gap-4 p-4 md:p-6">
+    <div className="flex flex-col gap-4 p-4 md:p-2">
       <div>
         <Link href="/app/imports" className="text-sm text-muted-foreground hover:underline">
           ← {t("Importações")}

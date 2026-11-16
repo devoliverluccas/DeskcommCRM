@@ -134,7 +134,7 @@ function ComContato({ atalhos, lead, contactId }: Props) {
               // clique ao softphone.
               {...(atalho.externo ? { target: "_blank", rel: "noopener noreferrer" } : {})}
               data-atalho={atalho.icone}
-              className="inline-flex max-w-full items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-text hover:bg-accent/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+              className="inline-flex max-w-full items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-text hover:bg-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
             >
               <Icone size={12} weight="regular" aria-hidden className="shrink-0" />
               <span className="truncate">{atalho.rotulo}</span>

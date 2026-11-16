@@ -99,7 +99,7 @@ export function TabelaDeManifestacoes({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-surface p-2">
+      <div className="flex flex-wrap items-center gap-2">
         <Button
           asChild
           size="sm"

@@ -11,6 +11,7 @@ import { explicacaoDoPasso } from "@/lib/leads/agent-mapping";
 import { MAX_ETAPAS, MIN_ETAPAS, type PropostaDeFunil } from "@/lib/onboarding/proposta-de-funil";
 import { PACOTES } from "@/lib/onboarding/pacotes-de-funil";
 import type { Sugestao } from "@/lib/onboarding/sugerir-funil";
+import { AvisoDoPasso, RodapeDoPasso } from "../_components/Passo";
 
 /**
  * O quadro proposto, editável antes de existir.
@@ -78,7 +79,7 @@ export function QuadroClient({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/*
         De onde veio o quadro. Quando a IA não respondeu, a pessoa PRECISA saber:
         ela acabou de configurar uma chave, e o silêncio aqui é a primeira pista
@@ -86,29 +87,31 @@ export function QuadroClient({
         o primeiro cliente real.
       */}
       {sugestao.origem === "ia" ? (
-        <p className="rounded-md border border-emerald-500/30 bg-emerald-500/5 p-3 text-sm">
-          {t(
-            "Seu funcionário montou este quadro olhando o que você me contou sobre o negócio. Ajuste o que quiser.",
-          )}
-        </p>
+        <AvisoDoPasso tom="sucesso">
+          <p>
+            {t(
+              "Seu funcionário montou este quadro olhando o que você me contou sobre o negócio. Ajuste o que quiser.",
+            )}
+          </p>
+        </AvisoDoPasso>
       ) : (
-        <div className="space-y-2 rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
+        <AvisoDoPasso tom="aviso">
           <p>
             {t("Não consegui pedir uma sugestão para o seu funcionário agora")}
             {sugestao.porque ? <> — {t(sugestao.porque)}</> : null}. {t("Comecei por um quadro pronto de")}{" "}
             <strong>{t(sugestao.pacote.comoSeApresenta)}</strong>.
           </p>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs">
             {t(
               "Isso não trava nada: escolha outro modelo abaixo ou ajuste as colunas na mão. Dá para mudar tudo depois, quando quiser.",
             )}
           </p>
-        </div>
+        </AvisoDoPasso>
       )}
 
-      <div className="space-y-3 rounded-lg border bg-background p-6">
+      <div className="space-y-5 border-t border-border pt-8">
         <div className="space-y-2">
-          <label className="block text-sm font-medium" htmlFor="nome_do_quadro">
+          <label className="block text-sm font-medium text-text" htmlFor="nome_do_quadro">
             {t("Nome do quadro")}
           </label>
           <Input
@@ -119,14 +122,14 @@ export function QuadroClient({
           />
         </div>
 
-        <ol className="space-y-2">
+        <ol className="divide-y divide-border rounded-lg border border-border">
           {quadro.etapas.map((etapa, i) => {
             const explicacao = etapa.passo ? explicacaoDoPasso(etapa.passo) : null;
             return (
-              <li key={i} className="flex items-start gap-2 rounded-md border p-3">
+              <li key={i} className="flex items-start gap-3 p-3">
                 <span
                   aria-hidden
-                  className="mt-2 w-5 shrink-0 text-center text-xs text-muted-foreground"
+                  className="mt-3 w-5 shrink-0 text-center font-mono text-xs text-text-subtle lg:mt-2"
                 >
                   {i + 1}
                 </span>
@@ -137,7 +140,7 @@ export function QuadroClient({
                     onChange={(e) => renomear(i, e.target.value)}
                     maxLength={60}
                   />
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-text-muted">
                     {explicacao
                       ? `${t("Ele move o cliente para cá quando")} ${t(explicacao)}.`
                       : t("Coluna que só vocês movem — ele não mexe nesta.")}
@@ -149,7 +152,7 @@ export function QuadroClient({
                   salvar seria pior do que não oferecer o botão.
                 */}
                 {etapa.passo === "won" || etapa.passo === "lost" ? (
-                  <span className="mt-2 shrink-0 text-xs text-muted-foreground">{t("obrigatória")}</span>
+                  <span className="mt-3 shrink-0 rounded-sm bg-pressed px-1.5 py-0.5 text-[11px] text-text-muted lg:mt-1.5">{t("obrigatória")}</span>
                 ) : (
                   <Button
                     type="button"
@@ -167,7 +170,7 @@ export function QuadroClient({
           })}
         </ol>
 
-        <div className="flex items-center justify-between pt-1">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <Button
             type="button"
             variant="outline"
@@ -178,7 +181,7 @@ export function QuadroClient({
             {t("Adicionar coluna")}
           </Button>
           {quadro.etapas.length >= MAX_ETAPAS ? (
-            <span className="text-xs text-muted-foreground">
+            <span className="text-xs text-text-muted">
               {MAX_ETAPAS} {t("colunas é o máximo — mais que isso não cabe na tela do celular.")}
             </span>
           ) : null}
@@ -187,31 +190,31 @@ export function QuadroClient({
 
       {/* O que a instalação trouxe, para a troca não parecer mágica. */}
       {atual && atual.colunas.length > 0 ? (
-        <details className="rounded-md border p-3 text-sm">
-          <summary className="cursor-pointer text-muted-foreground">
+        <details className="border-t border-border pt-6 text-sm">
+          <summary className="flex min-h-11 cursor-pointer items-center text-text-muted hover:text-text lg:min-h-0">
             {t("O que veio na instalação")} ({atual.nome})
           </summary>
-          <p className="mt-2 text-xs text-muted-foreground">
+          <p className="mt-2 text-xs text-text-muted">
             {atual.colunas.join(" → ")}
           </p>
-          <p className="mt-2 text-xs text-muted-foreground">
+          <p className="mt-2 text-xs text-text-muted">
             {t("Este é o quadro padrão, feito para loja online. Ao continuar, ele é substituído pelo de cima.")}
           </p>
         </details>
       ) : null}
 
-      <div className="space-y-3">
+      <div className="space-y-3 border-t border-border pt-6">
         {trocando ? (
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-2">
             {PACOTES.map((p) => (
               <button
                 key={p.id}
                 type="button"
                 onClick={() => usarPacote(p.id)}
-                className="rounded-md border p-3 text-left text-sm hover:bg-muted"
+                className="min-h-11 rounded-lg border border-border p-4 text-left text-sm transition-colors hover:border-border-strong hover:bg-hover focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent"
               >
-                <span className="font-medium">{t(p.comoSeApresenta)}</span>
-                <span className="mt-1 block text-xs text-muted-foreground">
+                <span className="font-medium text-text">{t(p.comoSeApresenta)}</span>
+                <span className="mt-1 block text-xs text-text-muted">
                   {p.proposta.etapas.map((e) => e.nome).join(" → ")}
                 </span>
               </button>
@@ -221,34 +224,34 @@ export function QuadroClient({
           <button
             type="button"
             onClick={() => setTrocando(true)}
-            className="text-sm text-muted-foreground underline underline-offset-2"
+            className="inline-flex min-h-11 items-center text-sm text-text-muted underline underline-offset-2 hover:text-text lg:min-h-0"
           >
             {t("Prefiro começar de um modelo pronto")}
           </button>
         )}
       </div>
 
-      {/* `flex-wrap`: com o aviso "Dê um nome..." mais os dois botões, a linha
-          passava de 320-375px sem margem nenhuma — este é o rodapé de
-          navegação do wizard, o botão que a pessoa mais precisa achar. */}
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      {/* O aviso "Dê um nome..." fica ao lado da primária, e a linha quebra
+          antes de passar de 320-375px — este é o rodapé de navegação do wizard,
+          o botão que a pessoa mais precisa achar. */}
+      <RodapeDoPasso
+        secundaria={
+          <Button
+            type="button"
+            variant="ghost"
+            disabled={pending}
+            onClick={() => startTransition(async () => void (await pularQuadro()))}
+          >
+            {t("Pular por enquanto")}
+          </Button>
+        }
+      >
+        {semNome ? (
+          <span className="text-xs text-warning-fg">{t("Dê um nome à coluna em branco.")}</span>
+        ) : null}
         <Button
           type="button"
-          variant="ghost"
-          disabled={pending}
-          onClick={() => startTransition(async () => void (await pularQuadro()))}
-        >
-          {t("Pular por enquanto")}
-        </Button>
-
-        <div className="flex flex-wrap items-center gap-3">
-          {semNome ? (
-            <span className="text-xs text-amber-700 dark:text-amber-500">
-              {t("Dê um nome à coluna em branco.")}
-            </span>
-          ) : null}
-        <Button
-          type="button"
+          size="lg"
           disabled={pending || semNome}
           onClick={() =>
             startTransition(async () => {
@@ -263,8 +266,7 @@ export function QuadroClient({
         >
           {pending ? t("Salvando...") : t("Usar este quadro")}
         </Button>
-        </div>
-      </div>
+      </RodapeDoPasso>
     </div>
   );
 }

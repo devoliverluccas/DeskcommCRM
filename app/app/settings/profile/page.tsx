@@ -28,7 +28,7 @@ export default async function ProfilePage() {
   //                    a troca de idioma da empresa passaria por cima dela.
   const idioma = user.idioma;
   return (
-    <div className="flex h-full flex-col gap-6 p-6">
+    <div className="flex h-full flex-col gap-5 p-2">
       <CabecalhoDaSubTela titulo={traduzir("Perfil", idioma)} idioma={idioma}>
         <p className="text-sm text-muted-foreground">
           {traduzir("Informações pessoais. Email só pode ser trocado em breve.", idioma)}

@@ -61,7 +61,7 @@ export default async function NewAgentPage() {
   )?.llm;
 
   return (
-    <div className="flex h-full flex-col gap-6 p-6">
+    <div className="flex h-full flex-col gap-5 p-2">
       <AgentForm
         mode="create"
         credentials={credentials}

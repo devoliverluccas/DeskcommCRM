@@ -79,7 +79,7 @@ export function OutrasOrganizacoes({
         data-testid="sair-do-onboarding"
         disabled={isPending}
         onClick={() => trocar(unica.id)}
-        className="gap-1.5"
+        className="gap-1.5 text-text-muted hover:text-text lg:justify-start"
       >
         <ArrowBendUpLeft size={14} weight="bold" aria-hidden />
         <span className="max-w-[180px] truncate">
@@ -97,7 +97,7 @@ export function OutrasOrganizacoes({
           size="sm"
           data-testid="sair-do-onboarding"
           disabled={isPending}
-          className="gap-1.5"
+          className="gap-1.5 text-text-muted hover:text-text lg:justify-start"
         >
           <ArrowBendUpLeft size={14} weight="bold" aria-hidden />
           <span>{t("Ir para outra organização")}</span>

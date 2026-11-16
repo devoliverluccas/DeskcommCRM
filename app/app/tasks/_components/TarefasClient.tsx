@@ -146,10 +146,10 @@ export function TarefasClient({
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 p-4 sm:p-6">
+    <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 p-4 sm:p-2">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{t("Tarefas")}</h1>
+          <h1 className="text-xl font-semibold tracking-tight">{t("Tarefas")}</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {t(
               "O que ficou combinado, com prazo. Tarefa presa a um negócio aparece na linha do tempo dele.",
@@ -336,7 +336,7 @@ export function TarefasClient({
       ) : carregando ? (
         <div className="space-y-3" aria-busy>
           {Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="h-14 animate-pulse rounded-lg border bg-card" />
+            <div key={i} className="h-14 ds-esqueleto rounded-lg" />
           ))}
         </div>
       ) : (

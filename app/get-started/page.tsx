@@ -69,45 +69,55 @@ export default async function GetStartedPage() {
 
   return (
     <IdiomaProvider locale={user.idioma}>
-      <main className="bg-muted/40 flex min-h-screen items-center justify-center px-4 py-10">
-        <div className="w-full max-w-md space-y-6 rounded-lg border bg-background p-6 shadow-sm">
-          <div className="space-y-2">
-            <p className="text-xs uppercase tracking-wider text-muted-foreground">
-              {marca.nome}
-            </p>
-            <h1 className="text-2xl font-semibold tracking-tight">
-              {pedido === "pending"
-                ? t("Pedido enviado")
-                : pedido === "rejected"
-                  ? t("Pedido não aprovado")
-                  : t("Configure sua organização")}
-            </h1>
-            <p className="text-sm leading-relaxed text-muted-foreground">
-              {pedido === "pending"
-                ? t(
-                    "Seu pedido para abrir a empresa está com quem administra esta instalação. Quando ele for aprovado, é só entrar de novo.",
-                  )
-                : pedido === "rejected"
+      {/*
+        A mesma linguagem da fachada de acesso (`app/(public)/layout.tsx`):
+        marca no trilho da esquerda, formulário no painel branco destacado.
+        Abaixo de `lg`, uma coluna só.
+      */}
+      <main className="flex min-h-dvh flex-col bg-bg lg:grid lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+        <aside className="px-6 pt-8 lg:flex lg:flex-col lg:justify-between lg:p-12">
+          <p className="text-sm font-semibold tracking-tight text-text lg:text-lg">{marca.nome}</p>
+          <p className="hidden max-w-xs text-2xl font-semibold leading-snug tracking-tight text-text lg:block">
+            {t("Atendimento e vendas pelo WhatsApp, com agentes de inteligência artificial.")}
+          </p>
+        </aside>
+        <div className="flex flex-1 justify-center px-6 pb-10 pt-6 lg:m-2 lg:items-center lg:rounded-xl lg:border lg:border-border lg:bg-surface lg:py-16">
+          <div className="w-full max-w-md space-y-8">
+            <div className="space-y-2">
+              <h1 className="text-2xl font-semibold tracking-tight text-text">
+                {pedido === "pending"
+                  ? t("Pedido enviado")
+                  : pedido === "rejected"
+                    ? t("Pedido não aprovado")
+                    : t("Configure sua organização")}
+              </h1>
+              <p className="text-sm leading-relaxed text-text-muted">
+                {pedido === "pending"
                   ? t(
-                      "Quem administra esta instalação não aprovou o pedido. Se você recebeu um convite, use o link que chegou no seu e-mail.",
+                      "Seu pedido para abrir a empresa está com quem administra esta instalação. Quando ele for aprovado, é só entrar de novo.",
                     )
-                  : comAprovacao
+                  : pedido === "rejected"
                     ? t(
-                        "Sua conta foi confirmada. Nesta instalação, a empresa só é criada depois da aprovação de quem administra. Confira o nome da empresa e envie o pedido.",
+                        "Quem administra esta instalação não aprovou o pedido. Se você recebeu um convite, use o link que chegou no seu e-mail.",
                       )
-                    : t(
-                        "Sua conta foi confirmada, mas a organização inicial ainda não foi criada. Informe o nome da sua empresa para concluir o primeiro acesso e abrir o onboarding do CRM.",
-                      )}
+                    : comAprovacao
+                      ? t(
+                          "Sua conta foi confirmada. Nesta instalação, a empresa só é criada depois da aprovação de quem administra. Confira o nome da empresa e envie o pedido.",
+                        )
+                      : t(
+                          "Sua conta foi confirmada, mas a organização inicial ainda não foi criada. Informe o nome da sua empresa para concluir o primeiro acesso e abrir o onboarding do CRM.",
+                        )}
+              </p>
+            </div>
+            {!aguardando && (
+              <RecoverOrganizationForm nomeSugerido={nomeSugerido} comAprovacao={comAprovacao} planos={planos} planoInicial={planoInicial} />
+            )}
+            <p className="border-t border-border pt-6 text-xs leading-relaxed text-text-muted">
+              {t(
+                "Se você recebeu um convite, não crie uma organização nova. Use o link do convite ou peça ao administrador para reenviá-lo.",
+              )}
             </p>
           </div>
-          {!aguardando && (
-            <RecoverOrganizationForm nomeSugerido={nomeSugerido} comAprovacao={comAprovacao} planos={planos} planoInicial={planoInicial} />
-          )}
-          <p className="text-xs leading-relaxed text-muted-foreground">
-            {t(
-              "Se você recebeu um convite, não crie uma organização nova. Use o link do convite ou peça ao administrador para reenviá-lo.",
-            )}
-          </p>
         </div>
       </main>
     </IdiomaProvider>

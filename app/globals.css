@@ -32,19 +32,19 @@
 
 :root {
   /* Surfaces (light) */
-  --color-bg: #faf9f6;
+  --color-bg: #f7f7f8;
   --color-surface: #ffffff;
-  --color-surface-elevated: #f5f3ee;
-  --color-overlay: rgba(28, 26, 22, 0.42);
+  --color-surface-elevated: #f1f1f3;
+  --color-overlay: rgba(15, 15, 20, 0.45);
 
   /* Text (light) */
-  --color-text: #1c1a16;
-  --color-text-muted: #5d594f;
-  --color-text-subtle: #7d786c;
+  --color-text: #1a1a1e;
+  --color-text-muted: #5f6068;
+  --color-text-subtle: #71727b;
 
   /* Borders (light) */
-  --color-border: #e7e3da;
-  --color-border-strong: #d2cdbf;
+  --color-border: #e6e6ea;
+  --color-border-strong: #d0d0d6;
 
   /* ---- Identidade de canal (#4094) -------------------------------------
    * A cor da faixa/ícone que marca DE ONDE veio a mensagem (aviso da esquina
@@ -76,17 +76,17 @@
   --color-accent-hover: var(--color-accent-700);
 
   /* Neutrals — greige (11 stops, light) */
-  --color-neutral-50: #faf9f6;
-  --color-neutral-100: #f3f1ec;
-  --color-neutral-200: #e7e3da;
-  --color-neutral-300: #d2cdbf;
-  --color-neutral-400: #a9a395;
-  --color-neutral-500: #7d786c;
-  --color-neutral-600: #5d594f;
-  --color-neutral-700: #46433b;
-  --color-neutral-800: #2e2c26;
-  --color-neutral-900: #1c1a16;
-  --color-neutral-950: #0e0d0a;
+  --color-neutral-50: #f7f7f8;
+  --color-neutral-100: #f1f1f3;
+  --color-neutral-200: #e6e6ea;
+  --color-neutral-300: #d0d0d6;
+  --color-neutral-400: #a1a2aa;
+  --color-neutral-500: #71727b;
+  --color-neutral-600: #5f6068;
+  --color-neutral-700: #45464d;
+  --color-neutral-800: #2b2c31;
+  --color-neutral-900: #1a1a1e;
+  --color-neutral-950: #0c0c0e;
 
   /* States (light) */
   --color-success: #5a8a5f;
@@ -120,24 +120,29 @@
 
   /* Radius */
   --radius-none: 0px;
+  /* Raio — escala curta, de ferramenta: 4 em selos e caixas de seleção, 6 em
+     controles (botão, campo, item de menu), 8 em superfícies (cartão, painel
+     preso a gatilho), 12 em modal. Era 4/8/12/16, e o 12 num cartão de lista
+     somado ao 16 dos modais era o que dava à tela o ar de "brinquedo". */
   --radius-sm: 4px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
-  --radius-xl: 16px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
   --radius-full: 9999px;
 
   /* Shadows — desaturated, neutral-based */
-  --shadow-xs: 0 1px 2px 0 rgba(20, 18, 14, 0.04);
-  --shadow-sm: 0 1px 2px 0 rgba(20, 18, 14, 0.05), 0 1px 1px 0 rgba(20, 18, 14, 0.03);
-  --shadow-md: 0 4px 12px -2px rgba(20, 18, 14, 0.06), 0 2px 4px -1px rgba(20, 18, 14, 0.04);
-  --shadow-lg: 0 12px 32px -6px rgba(20, 18, 14, 0.1), 0 4px 12px -2px rgba(20, 18, 14, 0.06);
-  --shadow-xl: 0 24px 48px -12px rgba(20, 18, 14, 0.16), 0 8px 16px -4px rgba(20, 18, 14, 0.08);
+  --shadow-xs: 0 1px 1px 0 rgba(15, 15, 20, 0.04);
+  --shadow-sm: 0 1px 2px 0 rgba(15, 15, 20, 0.06);
+  --shadow-md: 0 4px 10px -2px rgba(15, 15, 20, 0.08), 0 1px 3px -1px rgba(15, 15, 20, 0.05);
+  --shadow-lg: 0 10px 28px -6px rgba(15, 15, 20, 0.14), 0 2px 8px -2px rgba(15, 15, 20, 0.06);
+  --shadow-xl: 0 24px 56px -12px rgba(15, 15, 20, 0.22), 0 6px 16px -4px rgba(15, 15, 20, 0.08);
 
-  /* Density — Aerada */
-  --density-row: 56px;
-  --density-gap: 24px;
-  --density-px: 20px;
-  --density-py: 16px;
+  /* Density — Equilibrada (linha de 40, que é a régua de CRM: a lista cabe
+     na tela sem perder o alvo do cursor). Era Aerada, 56/24. */
+  --density-row: 40px;
+  --density-gap: 16px;
+  --density-px: 12px;
+  --density-py: 8px;
 
   /* Motion — os quatro pares canônicos de `docs/design-system/07-motion-language.md`.
      Os nomes daqui são os de lá: `ease-out` = `ease-out-fast` (hover, micro-feedback),
@@ -275,15 +280,15 @@
    (lib/branding/css.ts), que só ganha consumidor com a tela de marca.
    ───────────────────────────────────────────────────────────────────────── */
 [data-theme="light"] {
-  --color-bg: #faf9f6;
+  --color-bg: #f7f7f8;
   --color-surface: #ffffff;
-  --color-surface-elevated: #f5f3ee;
-  --color-overlay: rgba(28, 26, 22, 0.42);
-  --color-text: #1c1a16;
-  --color-text-muted: #5d594f;
-  --color-text-subtle: #7d786c;
-  --color-border: #e7e3da;
-  --color-border-strong: #d2cdbf;
+  --color-surface-elevated: #f1f1f3;
+  --color-overlay: rgba(15, 15, 20, 0.45);
+  --color-text: #1a1a1e;
+  --color-text-muted: #5f6068;
+  --color-text-subtle: #71727b;
+  --color-border: #e6e6ea;
+  --color-border-strong: #d0d0d6;
 
   /* ---- Identidade de canal (#4094) -------------------------------------
    * A cor da faixa/ícone que marca DE ONDE veio a mensagem (aviso da esquina
@@ -300,17 +305,17 @@
   --color-accent-fg: #ffffff;
   --color-accent-soft: var(--color-accent-100);
   --color-accent-hover: var(--color-accent-700);
-  --color-neutral-50: #faf9f6;
-  --color-neutral-100: #f3f1ec;
-  --color-neutral-200: #e7e3da;
-  --color-neutral-300: #d2cdbf;
-  --color-neutral-400: #a9a395;
-  --color-neutral-500: #7d786c;
-  --color-neutral-600: #5d594f;
-  --color-neutral-700: #46433b;
-  --color-neutral-800: #2e2c26;
-  --color-neutral-900: #1c1a16;
-  --color-neutral-950: #0e0d0a;
+  --color-neutral-50: #f7f7f8;
+  --color-neutral-100: #f1f1f3;
+  --color-neutral-200: #e6e6ea;
+  --color-neutral-300: #d0d0d6;
+  --color-neutral-400: #a1a2aa;
+  --color-neutral-500: #71727b;
+  --color-neutral-600: #5f6068;
+  --color-neutral-700: #45464d;
+  --color-neutral-800: #2b2c31;
+  --color-neutral-900: #1a1a1e;
+  --color-neutral-950: #0c0c0e;
   --color-success: #5a8a5f;
   --color-success-bg: rgba(90, 138, 95, 0.12);
   --color-success-fg: #41673f;
@@ -323,11 +328,11 @@
   --color-info: #4a7a93;
   --color-info-bg: rgba(74, 122, 147, 0.12);
   --color-info-fg: #355d72;
-  --shadow-xs: 0 1px 2px 0 rgba(20, 18, 14, 0.04);
-  --shadow-sm: 0 1px 2px 0 rgba(20, 18, 14, 0.05), 0 1px 1px 0 rgba(20, 18, 14, 0.03);
-  --shadow-md: 0 4px 12px -2px rgba(20, 18, 14, 0.06), 0 2px 4px -1px rgba(20, 18, 14, 0.04);
-  --shadow-lg: 0 12px 32px -6px rgba(20, 18, 14, 0.1), 0 4px 12px -2px rgba(20, 18, 14, 0.06);
-  --shadow-xl: 0 24px 48px -12px rgba(20, 18, 14, 0.16), 0 8px 16px -4px rgba(20, 18, 14, 0.08);
+  --shadow-xs: 0 1px 1px 0 rgba(15, 15, 20, 0.04);
+  --shadow-sm: 0 1px 2px 0 rgba(15, 15, 20, 0.06);
+  --shadow-md: 0 4px 10px -2px rgba(15, 15, 20, 0.08), 0 1px 3px -1px rgba(15, 15, 20, 0.05);
+  --shadow-lg: 0 10px 28px -6px rgba(15, 15, 20, 0.14), 0 2px 8px -2px rgba(15, 15, 20, 0.06);
+  --shadow-xl: 0 24px 56px -12px rgba(15, 15, 20, 0.22), 0 6px 16px -4px rgba(15, 15, 20, 0.08);
   --background: var(--color-bg);
   --foreground: var(--color-text);
   --card: var(--color-surface);
@@ -365,19 +370,19 @@
 
 [data-theme="dark"] {
   /* Surfaces (dark — drawn) */
-  --color-bg: #161510;
-  --color-surface: #1d1c17;
-  --color-surface-elevated: #272620;
+  --color-bg: #0f0f11;
+  --color-surface: #17171a;
+  --color-surface-elevated: #1f1f23;
   --color-overlay: rgba(0, 0, 0, 0.55);
 
   /* Text (dark) */
-  --color-text: #f5f4ef;
-  --color-text-muted: #8e8b7f;
-  --color-text-subtle: #605e54;
+  --color-text: #ededf0;
+  --color-text-muted: #9a9ba3;
+  --color-text-subtle: #7c7d86;
 
   /* Borders (dark) */
-  --color-border: #33312a;
-  --color-border-strong: #444239;
+  --color-border: #26262b;
+  --color-border-strong: #34343a;
 
   /* ---- Identidade de canal (#4094) -------------------------------------
    * A cor da faixa/ícone que marca DE ONDE veio a mensagem (aviso da esquina
@@ -404,22 +409,22 @@
   --color-accent-900: #2f3c2b;
   --color-accent-950: #171f15;
   --color-accent: var(--color-accent-400);
-  --color-accent-fg: #161510;
+  --color-accent-fg: #0f0f11;
   --color-accent-soft: rgba(130, 160, 119, 0.16);
   --color-accent-hover: var(--color-accent-300);
 
   /* Neutrals — greige (11 stops, dark) */
-  --color-neutral-50: #f5f4ef;
-  --color-neutral-100: #e6e4dc;
-  --color-neutral-200: #bbb8ac;
-  --color-neutral-300: #8e8b7f;
-  --color-neutral-400: #605e54;
-  --color-neutral-500: #444239;
-  --color-neutral-600: #33312a;
-  --color-neutral-700: #272620;
-  --color-neutral-800: #1d1c17;
-  --color-neutral-900: #161510;
-  --color-neutral-950: #0c0b08;
+  --color-neutral-50: #ededf0;
+  --color-neutral-100: #e4e4e8;
+  --color-neutral-200: #b9bac1;
+  --color-neutral-300: #9a9ba3;
+  --color-neutral-400: #7c7d86;
+  --color-neutral-500: #34343a;
+  --color-neutral-600: #26262b;
+  --color-neutral-700: #1f1f23;
+  --color-neutral-800: #17171a;
+  --color-neutral-900: #0f0f11;
+  --color-neutral-950: #09090b;
 
   /* States (dark) */
   --color-success: #82a077;
@@ -580,9 +585,25 @@
   --color-card: var(--color-surface);
   --color-card-foreground: var(--color-text);
 
-  /* Tipografia */
+  /* Estados de interação NEUTROS. Derivados do texto do tema no ponto de uso
+     (por isso só aqui, no `inline`, e não no `:root`): acompanham claro, escuro,
+     subárvore de tema e paleta de extensão sem um hex por combinação. A accent
+     fica para o que é marca e seleção — passar o mouse num item de menu não é
+     nenhuma das duas. */
+  --color-hover: color-mix(in oklab, var(--color-text) 5%, transparent);
+  --color-pressed: color-mix(in oklab, var(--color-text) 9%, transparent);
+
+  /* Tipografia. IBM Plex Sans é a família da Plex Mono que os dados já usam:
+     uma família só, com 500 e 600 de verdade — a Atkinson só tem 400 e 700, e
+     todo `font-medium`/`font-semibold` do produto era peso sintetizado. A
+     Atkinson segue na pilha como reserva e como escolha em Aparência. */
   --font-sans:
-    var(--font-atkinson), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    var(--fonte-plex), var(--font-atkinson), ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, sans-serif;
+  /* O corpo de interface é 13px. `text-base` continua 16: é o tamanho que
+     impede o zoom de foco do Safari nos campos (ver `components/ui/input.tsx`). */
+  --text-sm: 0.8125rem;
+  --text-sm--line-height: 1.25rem;
   --font-mono: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
   /* Espaçamento. Os valores são px LITERAIS (`--space-6` = 24px), não rem — e
@@ -714,6 +735,32 @@
   }
 }
 
+/* ---- O painel de conteúdo é destacado da casca a partir de `md` -----------
+   `--casca-recuo` é o que ele perde de altura (margem de cima e de baixo mais
+   as duas bordas). As telas que calculam a própria altura descontam ESTE token
+   junto do `3.5rem` da barra do topo — uma medida só, declarada onde o recuo
+   nasce (`app/app/_components/AppShell.tsx`). */
+[data-casca="raiz"] {
+  --casca-recuo: 0px;
+}
+@media (width >= 48rem) {
+  [data-casca="raiz"] {
+    --casca-recuo: calc(1rem + 2px);
+  }
+}
+
+/* Dentro do painel, "fundo da página" É a superfície do painel. Sem isto, todo
+   `bg-background`/`bg-bg` que uma tela usa para se fundir à página (cabeçalho
+   de lista, painel lateral, barra fixa) vira um retalho cinza sobre o branco.
+   Só de `md` para cima: no celular não há painel e a página segue no tom da
+   casca, com os cartões em superfície por cima. */
+@media (width >= 48rem) {
+  [data-casca="conteudo"] {
+    --color-bg: var(--color-surface);
+    --background: var(--color-surface);
+  }
+}
+
 @layer base {
   /* O preflight do v4 não pinta mais borda por padrão (`border: 0 solid`, cor
      = `currentColor`), então os ~300 `class="border"` sem cor desta base
@@ -819,6 +866,7 @@
     background-color: var(--color-bg);
     color: var(--color-text);
     font-family:
+      var(--fonte-plex),
       var(--font-atkinson),
       ui-sans-serif,
       system-ui,
@@ -830,8 +878,7 @@
       sans-serif;
     font-feature-settings:
       "rlig" 1,
-      "calt" 1,
-      "ss01" 1;
+      "calt" 1;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
@@ -1491,8 +1538,12 @@
 }
 
 .ds-esqueleto {
-  --ds-esqueleto-corpo: var(--color-neutral-400);
-  --ds-esqueleto-brilho: var(--color-neutral-500);
+  /* Redesign v2: o corpo desce para o tom de borda forte e o brilho CLAREIA.
+     Sobre o painel branco, o `neutral-400` da v1 lia como bloco de conteúdo
+     escuro, não como "carregando". Os dois tokens têm par por tema, então o
+     bloco `[data-theme="dark"]` de baixo deixa de ser necessário. */
+  --ds-esqueleto-corpo: var(--color-border-strong);
+  --ds-esqueleto-brilho: var(--color-border);
   background-image: linear-gradient(
     90deg,
     var(--ds-esqueleto-corpo) 0%,
@@ -1500,12 +1551,28 @@
     var(--ds-esqueleto-corpo) 100%
   );
   background-size: 200% 100%;
-  animation: ds-esqueleto 1.6s linear infinite;
+  /* O ESQUELETO SÓ APARECE SE A ESPERA FOR DE VERDADE.
+
+     Esqueleto que pisca por 80ms não informa nada: ele troca "a tela abriu" por
+     "a tela abriu, sumiu e abriu de novo", e é isso que dá a sensação de
+     lentidão num sistema que respondeu rápido. Durante os primeiros 220ms o
+     bloco fica invisível (o `backwards` segura o quadro inicial da entrada no
+     atraso) e só então surge, em 160ms. Carga que termina antes disso nunca
+     mostra esqueleto nenhum.
+
+     O espaço continua reservado desde o primeiro quadro — é opacidade, não
+     `display` —, então o conteúdo que chega não empurra a página. */
+  animation:
+    ds-esqueleto-surge 160ms var(--ease-out) 220ms backwards,
+    ds-esqueleto 1.6s linear infinite;
 }
 
-[data-theme="dark"] .ds-esqueleto {
-  --ds-esqueleto-brilho: var(--color-neutral-300);
+@keyframes ds-esqueleto-surge {
+  from {
+    opacity: 0;
+  }
 }
+
 
 /* ═══════════════════════════════════════════════════════════════════════════
    MOVIMENTO REDUZIDO — o atalho global que a lei prescreve
@@ -1550,9 +1617,12 @@
     scroll-behavior: auto !important;
   }
 
+  /* Uma animação só aqui, e não as duas de cima: a regra geral deste bloco
+     força `iteration-count` e `duration` em TODA animação do elemento, e a
+     entrada por opacidade repetindo para sempre viraria cintilação. Sem ela o
+     esqueleto aparece de imediato — que é o destino, sem o percurso. */
   .ds-esqueleto {
-    animation-duration: 1.6s !important;
-    animation-iteration-count: infinite !important;
+    animation: ds-esqueleto 1.6s linear infinite !important;
   }
 
   .animate-spin {

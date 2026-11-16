@@ -153,7 +153,7 @@ export function PlanosDeTarefa() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4 p-6">
+    <div className="mx-auto max-w-3xl space-y-4 p-2">
       <div>
         <Link
           href="/app/tasks"
@@ -166,7 +166,7 @@ export function PlanosDeTarefa() {
 
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{t("Planos de tarefa")}</h1>
+          <h1 className="text-xl font-semibold tracking-tight">{t("Planos de tarefa")}</h1>
           <p className="text-sm text-muted-foreground">
             {t(
               "Monte a sequência uma vez; a ação Aplicar um plano de tarefas aplica o plano ao negócio.",

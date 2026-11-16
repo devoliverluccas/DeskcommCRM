@@ -99,7 +99,7 @@ export function IncidentDetailClient({ id }: IncidentDetailClientProps) {
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
         <div className="min-w-0 space-y-2">
-          <h1 className="break-words text-2xl font-semibold tracking-tight font-mono">
+          <h1 className="break-words text-xl font-semibold tracking-tight font-mono">
             {incident.type}
           </h1>
           <div className="flex flex-wrap items-center gap-2">

@@ -37,7 +37,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
     : null;
   const suporte = painel ? null : await emailDeSuporte();
   return (
-    <div className="flex h-full flex-col gap-6 p-6">
+    <div className="flex h-full flex-col gap-5 p-2">
       {/* Mesmo nome do item de menu (catalogo.ts), ligada ou não. */}
       <CabecalhoDaSubTela titulo={traduzir("Plano e cobrança", idioma)} idioma={idioma}>
         <p className="text-sm text-muted-foreground">

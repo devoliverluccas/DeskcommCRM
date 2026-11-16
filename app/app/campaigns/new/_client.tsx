@@ -189,9 +189,9 @@ export function NovaCampanha({ emailLigado = false }: { emailLigado?: boolean })
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4 p-6">
+    <div className="mx-auto max-w-3xl space-y-4 p-2">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">{t("Nova campanha")}</h1>
+        <h1 className="text-xl font-semibold tracking-tight">{t("Nova campanha")}</h1>
         <p className="text-sm text-muted-foreground">
           {t("Isto cria um rascunho. Nada é enviado antes de você preparar a lista e iniciar.")}
         </p>

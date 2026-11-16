@@ -21,6 +21,7 @@ Esta pasta é a **fonte canônica** da linguagem visual do DeskcommCRM. Toda dec
 | 07 | [Motion Language](./07-motion-language.md) | 4 tipos canônicos, curvas, durations |
 | 08 | [Voz e Tom](./08-voice-and-tone.md) | PT-BR profissional calmo, microcopy |
 | 09 | [Anti-patterns](./09-anti-patterns.md) | O que não fazer, com alternativas |
+| 10 | [Redesign v2](./10-redesign-v2.md) | **Proposta:** Plex Sans, corpo 13px, raio 4/6/8/12, linha de 40 e estados neutros — supera partes de 01, 03 e 04 |
 
 ## Mapa decisão → source of truth
 

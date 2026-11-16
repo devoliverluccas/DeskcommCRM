@@ -513,7 +513,7 @@ export function LeadDossier({
             )}
           </div>
           <h1
-            className="min-w-0 text-2xl leading-8 font-semibold tracking-tight break-words"
+            className="min-w-0 text-xl leading-8 font-semibold tracking-tight break-words"
             data-testid="negocio-titulo"
           >
             {lead.title}

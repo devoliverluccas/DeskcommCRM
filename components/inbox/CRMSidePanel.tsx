@@ -20,11 +20,9 @@ import { useT } from "@/hooks/i18n/useT";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { format } from "date-fns";
 import { ChipDeEtiqueta } from "@/components/tags/ChipDeEtiqueta";
-import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import { Tag, Receipt, Users, ArrowRight, CaretDoubleLeft, CaretDoubleRight, CalendarCheck } from "@/lib/ui/icons";
 import { apiClient } from "@/lib/api/client";
@@ -913,7 +911,7 @@ function BotaoDeRecolherDoPainel({
       onClick={onAlternar}
       // Vocabulário e ícone iguais aos do menu da esquerda (`BotaoDeRecolher`).
       className={cn(
-        "flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+        "flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-hover hover:text-foreground",
         recolhido && "justify-center",
       )}
       aria-label={rotulo}
@@ -1229,9 +1227,9 @@ export function CRMSidePanel({
         <h3 className="text-xs font-semibold text-text">
           {t("Contato")}
         </h3>
-        <Card className="mt-2 space-y-2 p-3 text-sm">
+        <div className="mt-2 space-y-2 text-sm">
           <div className="flex flex-wrap items-center gap-2">
-            <div className="font-medium">{displayName}</div>
+            <div className="text-sm font-semibold text-text">{displayName}</div>
             {/*
               O TIPO DO CONTATO (issue 3005, fatia 1): lido da COLUNA
               (`contacts.contact_type`, migration 0763), nunca da etiqueta
@@ -1253,15 +1251,24 @@ export function CRMSidePanel({
             OS ATALHOS DO CARD (#3487), logo abaixo do telefone — que é o dado
             que eles usam. `tel:` aqui é o caso (a) da issue: um clique disca no
             softphone do PABX, em vez de copiar o número e colar. Sem atalho
-            configurado no funil, nada aparece; o espaçamento da `Card` não muda.
+            configurado no funil, nada aparece; o espaçamento do bloco não muda.
           */}
           <AtalhosDoNegocio
             atalhos={negocioAtivo?.atalhos}
             lead={negocioAtivo}
             contactId={contactId}
           />
-          <div className="flex flex-wrap gap-2 pt-1">
-            {contactId&&conversation?<Link className="underline" href={`/app/agenda?contato=${contactId}&conversa=${conversation.id}`}>{t("Marcar compromisso")}</Link>:null}
+          {/* AS AÇÕES DO CONTATO numa linha de botões compactos (redesign v2),
+              e não um link sublinhado solto entre botões. */}
+          <div className="flex flex-wrap gap-1.5 pt-1">
+            {contactId && conversation ? (
+              <Button asChild size="sm" variant="outline" className="h-11 px-2 text-xs lg:h-7">
+                <Link href={`/app/agenda?contato=${contactId}&conversa=${conversation.id}`}>
+                  <CalendarCheck size={12} className="mr-1" weight="regular" aria-hidden />
+                  {t("Marcar compromisso")}
+                </Link>
+              </Button>
+            ) : null}
             <Button
               size="sm"
               variant="outline"
@@ -1304,7 +1311,7 @@ export function CRMSidePanel({
               </Button>
             )}
           </div>
-        </Card>
+        </div>
       </section>
     ),
 
@@ -1370,7 +1377,6 @@ export function CRMSidePanel({
           onRetry={recarregar}
           sobrescritaVocabulario={personalizacao?.vocabulario ?? null}
         />
-        <Separator />
       </>
     ),
 
@@ -1381,7 +1387,6 @@ export function CRMSidePanel({
           orgId={conversation.organization_id}
           tags={conversation.tags ?? []}
         />}
-        <Separator />
       </>
     ),
 
@@ -1405,8 +1410,8 @@ export function CRMSidePanel({
                   key={d.id}
                   data-testid={semPasso ? "demanda-sem-proximo-passo" : "demanda-com-proximo-passo"}
                   className={cn(
-                    "rounded-md border p-2 text-xs",
-                    semPasso ? "border-warning-border bg-warning-bg/40" : "border-border",
+                    "border-l-2 py-1 pl-2.5 text-xs",
+                    semPasso ? "border-warning-border" : "border-border",
                   )}
                 >
                   <div className="flex items-baseline justify-between gap-2">
@@ -1484,7 +1489,6 @@ export function CRMSidePanel({
             !readonly && ((user.is_platform_admin && !user.support) || roleAtLeast(activeOrg?.role, "manager"))
           }
         />
-        <Separator />
       </>
     ) : null,
 
@@ -1497,7 +1501,6 @@ export function CRMSidePanel({
           {!sectionsLoading && fatos.length === 0 && <p className="mt-2 text-xs text-muted-foreground">{t("Nenhum fato durável registrado.")}</p>}
           {!sectionsLoading && historico.length > 0 && <div className="mt-3 text-xs"><h4>{t("Histórico encerrado — sem tarefas pendentes")}</h4>{historico.map((h) => <p key={h.id}>{t(DESFECHO_LEGIVEL[h.desfecho] ?? h.desfecho)}{h.fechada_em ? ` · ${shortDate(h.fechada_em, localeDaData)}` : ""}</p>)}</div>}
         </section>
-        <Separator />
       </>
     ),
 
@@ -1541,7 +1544,6 @@ export function CRMSidePanel({
     compras: contactId && !contact?.is_anonymized ? (
       <>
         <UltimasComprasDoContato contactId={contactId} />
-        <Separator />
       </>
     ) : null,
 
@@ -1558,7 +1560,7 @@ export function CRMSidePanel({
               {orders.map((o) => (
                 <li
                   key={o.id}
-                  className="flex items-center justify-between rounded-md border border-border p-2 text-xs"
+                  className="flex items-center justify-between py-1 text-xs"
                 >
                   <div className="min-w-0">
                     <div className="flex items-center gap-1 truncate font-medium">
@@ -1576,7 +1578,6 @@ export function CRMSidePanel({
             <SemLista vazio="Sem pedidos." erro={erro} onTentarDeNovo={() => setTentativa((n) => n + 1)} />
           )}
         </section>
-        <Separator />
       </>
     ),
 
@@ -1591,7 +1592,7 @@ export function CRMSidePanel({
           ) : activities && activities.length > 0 ? (
             <ul className="mt-2 space-y-1.5">
               {activities.map((a) => (
-                <li key={a.id} className="rounded-md border border-border p-2 text-xs">
+                <li key={a.id} className="py-1 text-xs">
                   {/* Rótulo do vocabulário único (activity-vocabulary), nunca o
                       tipo cru: a tela e o banco divergiram justamente por manter
                       duas listas. Marcador por ator, forma e não cor (§5). */}
@@ -1620,7 +1621,6 @@ export function CRMSidePanel({
             <SemLista vazio="Sem atividade." erro={erro} onTentarDeNovo={() => setTentativa((n) => n + 1)} />
           )}
         </section>
-        <Separator />
       </>
     ),
 
@@ -1639,19 +1639,17 @@ export function CRMSidePanel({
   };
 
   return (
-    <aside className="flex h-full flex-col gap-4 overflow-y-auto border-l border-border bg-background p-4">
+    <aside className="flex h-full flex-col overflow-y-auto border-l border-border bg-background">
       {/* A FAIXA DO ALTO (#3004/#3008): o recolher do painel, no mesmo lugar do
           recolher do menu da esquerda, e o botão que abre a personalização da
-          lateral. `sticky` para não rolar para fora com o conteúdo, e o
-          `-mx-4 -mt-4` esticam a faixa até as bordas do painel cancelando o
-          padding do `<aside>`.
+          lateral. `sticky` para não rolar para fora com o conteúdo.
 
           A faixa existe MESMO sem `onAlternarRecolhido` (o `Sheet` do celular,
           que já tem o próprio gesto de fechar): é por ela que o painel do
           celular chega à personalização. Sem o controle de recolher, o espaço
           dele fica com um vazio — o botão de módulos não muda de lugar. */}
       <div
-        className="sticky top-0 z-10 -mx-4 -mt-4 flex shrink-0 items-center justify-between gap-2 border-b border-border bg-background px-4 py-1"
+        className="sticky top-0 z-10 flex shrink-0 items-center justify-between gap-2 border-b border-border bg-background px-4 py-1"
         data-testid="inbox-cabecalho-do-painel"
       >
         <DialogoDosModulos modulos={modulos} onSalvos={setModulos} />
@@ -1691,14 +1689,24 @@ export function CRMSidePanel({
         />
       )}
 
-      {/* A ORDEM E A VISIBILIDADE ESCOLHIDAS (#3008). O `contents` mantém a
-          pilha do `<aside>` como ela era — o `gap-4` continua valendo entre os
-          módulos, sem um `div` a mais para o layout negociar —, e o
-          `data-modulo` deixa a tela e os testes nomearem o bloco. */}
+      {/* A ORDEM E A VISIBILIDADE ESCOLHIDAS (#3008); o `data-modulo` deixa a
+          tela e os testes nomearem o bloco.
+
+          CADA MÓDULO É UMA SEÇÃO (redesign v2): o divisor é do invólucro, não
+          um `<Separator />` que cada módulo lembrava (ou não) de pôr — por isso
+          havia traço entre uns e não entre outros. `empty:hidden` some com o
+          módulo que não desenhou nada (sem dado, sem permissão, auto-oculto),
+          e com ele o traço: nada de divisória separando o nada do nada. O
+          título de toda seção sai do mesmo seletor, inclusive o dos módulos
+          que moram em `components/contacts`. */}
       {modulos
         .filter((modulo) => modulo.visivel)
         .map((modulo) => (
-          <div key={modulo.id} data-modulo={modulo.id} className="contents">
+          <div
+            key={modulo.id}
+            data-modulo={modulo.id}
+            className="border-b border-border px-4 py-4 empty:hidden [&_h3]:text-xs [&_h3]:font-medium [&_h3]:text-text-muted"
+          >
             {conteudo[modulo.id]}
           </div>
         ))}

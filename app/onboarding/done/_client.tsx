@@ -8,6 +8,9 @@ import { Button } from "@/components/ui/button";
 import { finishOnboarding } from "@/app/actions/onboarding/finishOnboarding";
 import type { ItemDoResumo } from "@/lib/onboarding/passos";
 import type { PecaDoSistema } from "@/lib/onboarding/o-que-mais-existe";
+import { ArrowRight, Check } from "@/lib/ui/icons";
+import { cn } from "@/lib/utils";
+import { CabecalhoDoPasso } from "../_components/Passo";
 
 export function DoneClient({
   itens,
@@ -54,35 +57,61 @@ export function DoneClient({
       : t("Seu funcionário já está de pé. O que ficou para depois continua te esperando.");
 
   return (
-    <div className="space-y-6 rounded-lg border bg-background p-6">
-      <div className="space-y-1 text-center">
-        <h2 className="text-2xl font-semibold tracking-tight">{titulo}</h2>
-        <p className="text-sm text-muted-foreground">{resumo}</p>
-      </div>
+    <div>
+      <CabecalhoDoPasso titulo={titulo} subtitulo={resumo} />
 
-      <ul className="mx-auto max-w-sm space-y-2 text-left text-sm">
-        {itens.map((it) => (
-          <li key={it.segmento} className="flex items-center gap-2">
-            <span
-              aria-hidden
-              className={
-                "inline-block h-2 w-2 rounded-full " +
-                (it.feito ? "bg-emerald-500" : "bg-muted-foreground/30")
-              }
-            />
-            <span className={it.feito ? "" : "text-muted-foreground"}>
-              {t(it.rotulo)}
+      <section className="border-t border-border py-8">
+        <ul className="divide-y divide-border rounded-lg border border-border">
+          {itens.map((it) => (
+            <li key={it.segmento} className="flex min-h-11 items-center gap-3 px-4 py-3 text-sm">
+              <span
+                aria-hidden
+                className={cn(
+                  "flex h-5 w-5 shrink-0 items-center justify-center rounded-full",
+                  it.feito ? "bg-success-bg text-success-fg" : "border border-border-strong",
+                )}
+              >
+                {it.feito ? <Check size={12} weight="bold" /> : null}
+              </span>
+              <span className={cn("min-w-0 flex-1", it.feito ? "text-text" : "text-text-muted")}>
+                {t(it.rotulo)}
+              </span>
               {/*
                 "Pulado" é escolha da pessoa; "ainda não" é o que ela não
                 chegou a fazer. Antes tudo que não estivesse feito virava
                 "(pulado)", inclusive passo que a instalação nunca ofereceu —
                 o wizard cobrando o que ninguém pediu.
               */}
-              {it.pulado ? ` (${t("você pulou")})` : it.feito ? "" : ` (${t("ainda não")})`}
-            </span>
-          </li>
-        ))}
-      </ul>
+              {it.feito ? null : (
+                <span className="shrink-0 rounded-sm bg-pressed px-1.5 py-0.5 text-[11px] text-text-muted">
+                  {it.pulado ? t("você pulou") : t("ainda não")}
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      {/*
+        A ação vem ANTES do "O que mais tem aqui": é o fim do wizard, e quem
+        chegou aqui quer entrar. O resto é leitura opcional, logo abaixo.
+      */}
+      <div className="flex flex-col border-t border-border py-8 sm:flex-row sm:justify-end [&>button]:w-full sm:[&>button]:w-auto">
+        <Button
+          type="button"
+          size="lg"
+          disabled={pending}
+          onClick={() =>
+            startTransition(async () => {
+              const res = await finishOnboarding();
+              if (res && !res.ok) toast.error(`${t("Falha:")} ${res.error}`);
+            })
+          }
+        >
+          {pending ? t("Finalizando...") : t("Começar a usar")}
+          {pending ? null : <ArrowRight aria-hidden weight="bold" />}
+        </Button>
+      </div>
 
       {/*
         O wizard acabava aqui, com um botão que entregava a pessoa numa caixa de
@@ -92,10 +121,10 @@ export function DoneClient({
         ficava por conta da curiosidade — e quase ninguém volta para explorar
         menu.
       */}
-      <section className="space-y-3 border-t pt-6">
-        <div>
-          <h3 className="text-sm font-medium">{t("O que mais tem aqui")}</h3>
-          <p className="text-xs text-muted-foreground">
+      <section className="space-y-4 border-t border-border pt-8">
+        <div className="space-y-1">
+          <h3 className="text-sm font-semibold text-text">{t("O que mais tem aqui")}</h3>
+          <p className="text-xs text-text-muted">
             {t("Você não precisa mexer em nada disso agora. É só para saber que existe.")}
           </p>
         </div>
@@ -111,25 +140,25 @@ export function DoneClient({
           seis tutoriais agora. O que ele precisa é saber que a explicação existe
           e está a um clique.
         */}
-        <ul className="grid gap-2 sm:grid-cols-2">
+        <ul className="grid gap-x-8 sm:grid-cols-2">
           {pecas.map((p) => (
-            <li key={p.href} className="rounded-md border p-3">
-              <a href={p.href} className="text-sm font-medium underline-offset-2 hover:underline">
+            <li key={p.href} className="border-t border-border py-4">
+              <a href={p.href} className="text-sm font-medium text-text underline-offset-2 hover:underline">
                 {t(p.comoChamar)}
               </a>
-              <span className="ml-1 text-xs text-muted-foreground">({t(p.label)})</span>
-              <p className="mt-1 text-xs text-muted-foreground">{t(p.porQue)}</p>
+              <span className="ml-1 text-xs text-text-subtle">({t(p.label)})</span>
+              <p className="mt-1 text-xs leading-relaxed text-text-muted">{t(p.porQue)}</p>
 
               <details className="group mt-2">
-                <summary className="cursor-pointer list-none text-xs text-muted-foreground underline underline-offset-2">
+                <summary className="inline-flex min-h-11 cursor-pointer list-none items-center text-xs text-text-muted underline underline-offset-2 hover:text-text lg:min-h-0">
                   {t("Como funciona")}
                 </summary>
                 <ol className="mt-2 space-y-1.5">
                   {p.comoFunciona.map((passo, i) => (
-                    <li key={passo} className="flex gap-2 text-xs text-muted-foreground">
+                    <li key={passo} className="flex gap-2 text-xs text-text-muted">
                       <span
                         aria-hidden
-                        className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border text-[10px]"
+                        className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-border font-mono text-[10px]"
                       >
                         {i + 1}
                       </span>
@@ -142,21 +171,6 @@ export function DoneClient({
           ))}
         </ul>
       </section>
-
-      <div className="flex justify-center">
-        <Button
-          type="button"
-          disabled={pending}
-          onClick={() =>
-            startTransition(async () => {
-              const res = await finishOnboarding();
-              if (res && !res.ok) toast.error(`${t("Falha:")} ${res.error}`);
-            })
-          }
-        >
-          {pending ? t("Finalizando...") : t("Começar a usar")}
-        </Button>
-      </div>
     </div>
   );
 }

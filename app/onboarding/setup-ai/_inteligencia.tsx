@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { salvarChaveDaIa } from "@/app/actions/onboarding/chaveDaIa";
 import { PROVEDOR_POR_ASSINATURA, PROVEDORES } from "@/lib/ai/pontos/provedores";
 import { explicacaoParaQuemInstala } from "@/lib/instalacao/explicacao-da-falha";
+import { cn } from "@/lib/utils";
 
 /**
  * "O CÉREBRO DELE" — a chave, medida e testada onde ela passa a importar.
@@ -102,10 +103,13 @@ export function InteligenciaDele({ inicial }: { inicial: EstadoDaChave }) {
 
   if (!temChave) {
     return (
-      <section className="space-y-3 rounded-lg border border-amber-500/40 bg-amber-500/5 p-5">
-        <div>
-          <h3 className="text-sm font-medium">{t("Ele ainda não tem cérebro")}</h3>
-          <p className="mt-1 text-sm text-muted-foreground">
+      <section className="space-y-4 border-t border-border py-8">
+        <div className="space-y-1">
+          <h3 className="flex items-center gap-2 text-sm font-semibold text-text">
+            <span aria-hidden className="h-2 w-2 shrink-0 rounded-full bg-warning" />
+            {t("Ele ainda não tem cérebro")}
+          </h3>
+          <p className="max-w-prose text-sm text-text-muted">
             {t(
               "Seu funcionário pensa com a inteligência artificial que você contratar. A instalação não trouxe nenhuma chave — cole a sua aqui e ele já nasce funcionando.",
             )}
@@ -119,7 +123,7 @@ export function InteligenciaDele({ inicial }: { inicial: EstadoDaChave }) {
               id="provedor_da_ia"
               value={provedor}
               onChange={(e) => setProvedor(e.target.value)}
-              className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+              className="h-11 w-full rounded-md border border-border bg-surface px-2.5 text-base text-text hover:border-border-strong focus-visible:border-accent-500 focus-visible:outline-hidden focus-visible:ring-[3px] focus-visible:ring-accent-500/15 md:text-sm lg:h-8"
             >
               {/* A assinatura do ChatGPT nunca: ela não se cola, conecta-se pelo login em Credenciais. */}
               {PROVEDORES.filter((p) => p.id !== PROVEDOR_POR_ASSINATURA || p.id === provedor).map((p) => (
@@ -147,16 +151,17 @@ export function InteligenciaDele({ inicial }: { inicial: EstadoDaChave }) {
           a tela precisa saber disso antes de escolher, não depois. É a mesma
           decisão que o passo grava em `organizations.settings.llm`.
         */}
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs text-text-muted">
           {t(
             "Esta escolha passa a valer para a empresa inteira: é esta inteligência que atende seus clientes.",
           )}
         </p>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
           <Button
             type="button"
-            size="sm"
+            variant="secondary"
+            className="w-full sm:w-auto"
             disabled={salvando || apiKey.trim().length < 8}
             onClick={async () => {
               setSalvando(true);
@@ -198,7 +203,7 @@ export function InteligenciaDele({ inicial }: { inicial: EstadoDaChave }) {
           >
             {salvando ? t("Guardando...") : t("Guardar a chave")}
           </Button>
-          <span className="text-xs text-muted-foreground">
+          <span className="text-xs text-text-muted">
             {t("Ela é guardada cifrada — nem nós conseguimos lê-la depois.")}
           </span>
         </div>
@@ -207,22 +212,29 @@ export function InteligenciaDele({ inicial }: { inicial: EstadoDaChave }) {
   }
 
   return (
-    <section className="space-y-1 rounded-lg border bg-background p-5">
-      <h3 className="text-sm font-medium">
+    <section className="space-y-1 border-t border-border py-8">
+      <h3 className="flex items-center gap-2 text-sm font-semibold text-text">
+        <span
+          aria-hidden
+          className={cn(
+            "h-2 w-2 shrink-0 rounded-full",
+            prova?.estado === "ok" ? "bg-success" : prova?.estado === "problema" ? "bg-warning" : "bg-border-strong",
+          )}
+        />
         {t("O cérebro dele:")} {chave.rotulo}
         {chave.final ? (
-          <span className="ml-1 font-normal text-muted-foreground">
+          <span className="font-normal text-text-muted">
             ({t("final")} {chave.final})
           </span>
         ) : null}
       </h3>
-      <p className="text-sm text-muted-foreground">
+      <p className="text-sm text-text-muted">
         {prova?.estado === "conferindo" && t("Conferindo se a chave tem crédito…")}
         {prova?.estado === "ok" && t("Testei agora: a chave respondeu e tem crédito.")}
         {prova?.estado === "problema" && (
           <>
             {t("A chave foi aceita, mas o teste não passou:")}{" "}
-            <span className="text-amber-700 dark:text-amber-500">
+            <span className="text-warning-fg">
               {t(explicacaoParaQuemInstala(prova.codigo))}
             </span>
           </>
