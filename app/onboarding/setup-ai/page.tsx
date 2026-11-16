@@ -27,6 +27,9 @@ export const dynamic = "force-dynamic";
  * mensagem sair. Escrever essas frases à mão aqui seria a tela prometendo um
  * comportamento que o código não garante.
  */
+import { loadOnboardingState } from "@/app/actions/onboarding/_shared";
+import { segmentoPorId } from "@/lib/onboarding/segmentos";
+
 export default async function SetupAiPage() {
   const user = await requireAuth();
   const activeOrg = await resolveActiveOrg(user);
@@ -43,6 +46,16 @@ export default async function SetupAiPage() {
     .map((r) => traduzir(r, idioma));
 
   const conferencias = CONFERENCIAS_DE_SAIDA.map((c) => traduzir(c.rotulo, idioma));
+
+  // As regras do segmento escolhido no primeiro passo já entram no campo.
+  // Falha de leitura não trava o passo: o campo nasce vazio, como antes.
+  let regrasIniciais = "";
+  try {
+    const { state } = await loadOnboardingState(activeOrg.orgId);
+    regrasIniciais = segmentoPorId(state.welcome?.segmento)?.regrasDaCasa ?? "";
+  } catch {
+    regrasIniciais = "";
+  }
 
   return (
     <div>
@@ -64,7 +77,7 @@ export default async function SetupAiPage() {
         }}
       />
 
-      <SetupAiForm capacidades={capacidades} conferencias={conferencias} />
+      <SetupAiForm capacidades={capacidades} conferencias={conferencias} regrasIniciais={regrasIniciais} />
     </div>
   );
 }

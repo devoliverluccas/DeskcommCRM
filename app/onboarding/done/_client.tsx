@@ -12,13 +12,27 @@ import { ArrowRight, Check } from "@/lib/ui/icons";
 import { cn } from "@/lib/utils";
 import { CabecalhoDoPasso } from "../_components/Passo";
 
+export interface KitNoResumo {
+  rotulo: string;
+  etiquetas: number;
+  respostas: number;
+  tiposDeAgendamento: number;
+  automacoes: number;
+}
+
 export function DoneClient({
   itens,
   pecas,
   noAr,
+  kit = null,
 }: {
   itens: ItemDoResumo[];
   pecas: PecaDoSistema[];
+  /**
+   * O recibo do segmento escolhido no primeiro passo: o que foi criado além do
+   * quadro. `null` quando não houve segmento — e aí a seção nem aparece.
+   */
+  kit?: KitNoResumo | null;
   /**
    * Existe ao menos um agente PUBLICADO nesta organização (não-arquivado, com
    * `published_version_id`)? É a página que lê o banco e passa — este componente
@@ -91,6 +105,40 @@ export function DoneClient({
           ))}
         </ul>
       </section>
+
+      {kit ? (
+        <section className="border-t border-border py-8" data-testid="kit-do-segmento">
+          <h3 className="text-sm font-semibold text-text">
+            {t("O que já deixei pronto para o seu segmento:")} {t(kit.rotulo)}
+          </h3>
+          <ul className="mt-3 space-y-2 text-sm text-text-muted">
+            {kit.etiquetas > 0 ? (
+              <li>
+                <strong className="font-medium text-text tabular-nums">{kit.etiquetas}</strong>{" "}
+                {t("etiquetas, em Configurações › Tags.")}
+              </li>
+            ) : null}
+            {kit.respostas > 0 ? (
+              <li>
+                <strong className="font-medium text-text tabular-nums">{kit.respostas}</strong>{" "}
+                {t("respostas rápidas, em Atendimento › Respostas rápidas.")}
+              </li>
+            ) : null}
+            {kit.tiposDeAgendamento > 0 ? (
+              <li>
+                <strong className="font-medium text-text tabular-nums">{kit.tiposDeAgendamento}</strong>{" "}
+                {t("tipos de agendamento, em Configurações › Tipos de agendamento.")}
+              </li>
+            ) : null}
+            {kit.automacoes > 0 ? (
+              <li>
+                <strong className="font-medium text-text tabular-nums">{kit.automacoes}</strong>{" "}
+                {t("automações, em Canais › Webhooks, na aba Automações. Elas nascem desligadas: leia e ligue as que fizerem sentido.")}
+              </li>
+            ) : null}
+          </ul>
+        </section>
+      ) : null}
 
       {/*
         A ação vem ANTES do "O que mais tem aqui": é o fim do wizard, e quem

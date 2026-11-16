@@ -94,6 +94,13 @@ export function QuadroClient({
             )}
           </p>
         </AvisoDoPasso>
+      ) : sugestao.escolhido ? (
+        <AvisoDoPasso tom="sucesso">
+          <p>
+            {t("Este é o quadro pronto do segmento que você escolheu:")}{" "}
+            <strong>{t(sugestao.pacote.comoSeApresenta)}</strong>. {t("Ajuste o que quiser.")}
+          </p>
+        </AvisoDoPasso>
       ) : (
         <AvisoDoPasso tom="aviso">
           <p>

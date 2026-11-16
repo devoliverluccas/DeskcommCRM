@@ -2,6 +2,7 @@ import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { redirect } from "next/navigation";
 import { loadOnboardingState } from "@/app/actions/onboarding/_shared";
 import { resumoDoOnboarding } from "@/lib/onboarding/passos";
+import { segmentoPorId } from "@/lib/onboarding/segmentos";
 import { createClient } from "@/lib/supabase/server";
 import { env } from "@/lib/env";
 import { oQueMaisExiste } from "@/lib/onboarding/o-que-mais-existe";
@@ -36,5 +37,19 @@ export default async function DonePage() {
     .limit(1);
   const noAr = (publicados ?? []).length > 0;
 
-  return <DoneClient itens={itens} pecas={oQueMaisExiste()} noAr={noAr} />;
+  // O recibo do kit só vira seção quando o segmento ainda existe na lista: um
+  // estado antigo com segmento removido não inventa rótulo.
+  const segmento = segmentoPorId(state.kit?.segmento);
+  const kit =
+    segmento && state.kit
+      ? {
+          rotulo: segmento.rotulo,
+          etiquetas: state.kit.etiquetas,
+          respostas: state.kit.respostas,
+          tiposDeAgendamento: state.kit.tipos_de_agendamento,
+          automacoes: state.kit.automacoes,
+        }
+      : null;
+
+  return <DoneClient itens={itens} pecas={oQueMaisExiste()} noAr={noAr} kit={kit} />;
 }

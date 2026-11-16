@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+
+import { cartaoDeEscolha } from "@/app/onboarding/_components/Passo";
+import { SEGMENTOS } from "@/lib/onboarding/segmentos";
 import { toast } from "sonner";
 import { useT } from "@/hooks/i18n/useT";
 
@@ -23,6 +26,7 @@ export function WelcomeForm({ defaultOrgName, orgId }: { defaultOrgName: string;
   const t = useT();
   const [displayName, setDisplayName] = useState(defaultOrgName);
   const [oQueFaz, setOQueFaz] = useState("");
+  const [segmento, setSegmento] = useState("");
   const [timezone, setTimezone] = useState(FUSO_PADRAO);
 
   // O fuso do NAVEGADOR (se for um oferecido) vem marcado no lugar de São
@@ -86,6 +90,59 @@ export function WelcomeForm({ defaultOrgName, orgId }: { defaultOrgName: string;
         de e-commerce que o gatilho semeia. Os dois defeitos têm a mesma origem:
         uma instalação que nunca pergunta em que ramo entrou.
       */}
+      {/*
+        O SEGMENTO. Escolher aqui traz, além do quadro de clientes, etiquetas,
+        respostas rápidas, tipos de agendamento e automações do ramo
+        (`lib/onboarding/segmentos.ts`). É opcional de propósito — "Outro" é uma
+        resposta, e quem a dá segue pelo texto livre logo abaixo, como sempre.
+
+        Rádio NATIVO dentro do cartão, como as formas de conexão do passo
+        seguinte: o cartão é só o desenho, e o controle é o que o teclado e o
+        leitor de tela já conhecem.
+      */}
+      <fieldset className="space-y-2">
+        <legend className="text-sm font-medium text-text">{t("Qual é o seu segmento?")}</legend>
+        <p className="text-xs text-text-muted">
+          {t(
+            "Com isso o sistema já nasce com quadro, etiquetas, respostas rápidas e automações do seu ramo. Dá para mudar tudo depois.",
+          )}
+        </p>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {SEGMENTOS.map((s) => (
+            <label key={s.id} data-testid={`segmento-${s.id}`} className={cartaoDeEscolha(segmento === s.id)}>
+              <input
+                type="radio"
+                name="segmento"
+                value={s.id}
+                checked={segmento === s.id}
+                onChange={() => setSegmento(s.id)}
+                className="mt-0.5 size-4 shrink-0 accent-accent"
+              />
+              <span className="min-w-0">
+                <span className="block text-sm font-medium text-text">{t(s.rotulo)}</span>
+                <span className="block text-xs text-text-muted">{t(s.descricao)}</span>
+              </span>
+            </label>
+          ))}
+          <label data-testid="segmento-outro" className={cartaoDeEscolha(segmento === "")}>
+            <input
+              type="radio"
+              name="segmento"
+              value=""
+              checked={segmento === ""}
+              onChange={() => setSegmento("")}
+              className="mt-0.5 size-4 shrink-0 accent-accent"
+            />
+            <span className="min-w-0">
+              <span className="block text-sm font-medium text-text">{t("Outro")}</span>
+              <span className="block text-xs text-text-muted">
+                {t("Conte abaixo o que vocês fazem e o quadro é montado a partir disso.")}
+              </span>
+            </span>
+          </label>
+        </div>
+      </fieldset>
+
       <div className="space-y-2">
         <Label htmlFor="o_que_faz">{t("O que vocês fazem?")}</Label>
         <Input

@@ -708,6 +708,9 @@ export const AUDIT_ACTIONS = [
   // arquivo virou a fonte única. O merge pediu COMBINAÇÃO, não escolha de
   // lado: `ours` perderia estes oito; `theirs` perderia a derivação.
   "onboarding.quadro_montado",
+  // O kit do segmento escolhido no primeiro passo (etiquetas, respostas
+  // rápidas, tipos de agendamento e automações desligadas).
+  "onboarding.kit_do_segmento_aplicado",
   "onboarding.quadro_pulado",
   // O passo de ver o funcionário responder antes de terminar o wizard.
   "onboarding.agente_testado",

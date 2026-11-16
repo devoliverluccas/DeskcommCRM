@@ -23,6 +23,8 @@ import {
   type PropostaDeFunil,
 } from "@/lib/onboarding/proposta-de-funil";
 import { escolherPacotePorTexto, sugerirFunil, type Sugestao } from "@/lib/onboarding/sugerir-funil";
+import { aplicarKitDoSegmento } from "@/lib/onboarding/aplicar-kit";
+import { pacoteDoSegmento, segmentoPorId } from "@/lib/onboarding/segmentos";
 import { requireOnboardingCtx, patchOnboardingState, loadOnboardingState, OnboardingError } from "./_shared";
 
 /** O funil que o gatilho semeou — o que a pessoa tem antes deste passo. */
@@ -131,11 +133,26 @@ export async function dadosDoPasso(orgId: string, negocio: string): Promise<Dado
   const atual = await carregarQuadroAtual(admin, orgId);
 
   let oQueFaz = "";
+  let segmentoEscolhido: string | undefined;
   try {
     const { state } = await loadOnboardingState(orgId);
     oQueFaz = state.welcome?.o_que_faz ?? "";
+    segmentoEscolhido = state.welcome?.segmento;
   } catch {
     oQueFaz = "";
+  }
+
+  // Quem ESCOLHEU o segmento recebe o quadro dele, sem passar pela IA: a pessoa
+  // já disse qual é o ramo, e o quadro do segmento é o que as etiquetas, as
+  // respostas e as automações do mesmo kit pressupõem. `porque` vazio e
+  // `escolhido` é o que a tela usa para não dizer "não consegui pedir uma
+  // sugestão" — nada falhou aqui.
+  const segmento = segmentoPorId(segmentoEscolhido);
+  if (segmento) {
+    return {
+      atual,
+      sugestao: { origem: "pacote", pacote: pacoteDoSegmento(segmento), porque: "", escolhido: true },
+    };
   }
 
   const ctx = { nome: negocio, oQueFaz };
@@ -253,6 +270,7 @@ export async function aplicarQuadro(formData: FormData): Promise<ResultadoDoQuad
   }
 
   const origem = String(formData.get("origem") ?? "pacote") === "ia" ? "ia" : "pacote";
+  await aplicarKitSeHouver(admin, ctx.orgId, ctx.userId);
   try {
     await patchOnboardingState(ctx.orgId, {
       funil: { pipeline_id: atual.pipelineId, origem, etapas: proposta.etapas.length },
@@ -294,8 +312,51 @@ function explicarRecusa(motivo: string | undefined, quantos: number | undefined)
   }
 }
 
+/**
+ * O KIT DO SEGMENTO entra junto com o passo do quadro — aplicando o quadro OU
+ * pulando: etiquetas, respostas rápidas, tipos de agendamento e automações não
+ * dependem das colunas, e quem pulou o quadro escolheu o segmento do mesmo jeito.
+ *
+ * A guarda é o recibo em `onboarding_state.kit`: o mesmo segmento não é aplicado
+ * duas vezes. Nada aqui lança — o kit é conveniência, e o passo do quadro não
+ * pode falhar por causa dele; o que não entrou vai para a auditoria.
+ */
+async function aplicarKitSeHouver(
+  admin: ReturnType<typeof createAdminClient>,
+  orgId: string,
+  userId: string,
+): Promise<void> {
+  try {
+    const { state } = await loadOnboardingState(orgId);
+    const segmento = segmentoPorId(state.welcome?.segmento);
+    if (!segmento || state.kit?.segmento === segmento.id) return;
+    const r = await aplicarKitDoSegmento(admin, orgId, userId, segmento);
+    await patchOnboardingState(orgId, {
+      kit: {
+        segmento: segmento.id,
+        etiquetas: r.etiquetas,
+        respostas: r.respostas,
+        tipos_de_agendamento: r.tiposDeAgendamento,
+        automacoes: r.automacoes,
+        aplicado_em: new Date().toISOString(),
+      },
+    });
+    await audit({
+      action: "onboarding.kit_do_segmento_aplicado",
+      actorUserId: userId,
+      organizationId: orgId,
+      resourceType: "organization",
+      resourceId: orgId,
+      metadata: { segmento: segmento.id, ...r },
+    });
+  } catch {
+    // de propósito: ver o cabeçalho.
+  }
+}
+
 export async function pularQuadro(): Promise<void> {
   const ctx = await requireOnboardingCtx();
+  await aplicarKitSeHouver(createAdminClient(), ctx.orgId, ctx.userId);
   await patchOnboardingState(ctx.orgId, { funil: { skipped: true } });
   // Pular também é decisão, e é a que deixa o quadro de e-commerce de pé numa
   // clínica: sem registro, ninguém consegue explicar depois por que aquele

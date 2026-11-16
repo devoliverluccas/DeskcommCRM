@@ -51,13 +51,19 @@ interface Props {
   capacidades: string[];
   /** O que ele nunca faz — as conferências antes de cada mensagem sair. */
   conferencias: string[];
+  /**
+   * As regras do SEGMENTO escolhido no primeiro passo, já no campo — a pessoa
+   * lê, edita e só então elas viram memória do funcionário. Vazio quando não
+   * houve segmento.
+   */
+  regrasIniciais?: string;
 }
 
-export function SetupAiForm({ capacidades, conferencias }: Props) {
+export function SetupAiForm({ capacidades, conferencias, regrasIniciais = "" }: Props) {
   const t = useT();
   const [name, setName] = useState("Atendente IA");
   const [jeito, setJeito] = useState<PromptTemplate>("ecommerce_friendly");
-  const [regras, setRegras] = useState("");
+  const [regras, setRegras] = useState(regrasIniciais);
   const [naoPublicado, setNaoPublicado] = useState<string | null>(null);
   const [causa, setCausa] = useState<"canal" | "modelo" | "chave" | null>(null);
   const [provedor, setProvedor] = useState<string | null>(null);

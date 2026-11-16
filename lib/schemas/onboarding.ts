@@ -4,6 +4,8 @@
  */
 import { z } from "zod";
 
+import { IDS_DE_SEGMENTO } from "@/lib/onboarding/segmentos";
+
 export const welcomeSchema = z.object({
   display_name: z.string().min(2).max(120),
   /**
@@ -20,6 +22,12 @@ export const welcomeSchema = z.object({
    * o próprio negócio em uma linha. Quem pula recebe o quadro genérico.
    */
   o_que_faz: z.string().max(280).optional(),
+  /**
+   * O segmento escolhido nos cartões do primeiro passo (`lib/onboarding/segmentos.ts`).
+   * Opcional pelo mesmo motivo do `o_que_faz`: quem não se reconhece em nenhum
+   * cartão segue pelo texto livre e recebe o quadro sugerido, como sempre.
+   */
+  segmento: z.enum(IDS_DE_SEGMENTO).optional(),
   timezone: z.string().min(1).default("America/Sao_Paulo"),
   accepted_terms_at: z.string().datetime().optional(),
 });
@@ -66,6 +74,8 @@ export const onboardingStateSchema = z.object({
       display_name: z.string(),
       /** O ramo, na palavra do dono. Alimenta o prompt e o quadro de clientes. */
       o_que_faz: z.string().optional(),
+      /** O segmento escolhido. `string` e não enum: estado gravado sobrevive a um segmento que saia da lista. */
+      segmento: z.string().optional(),
     })
     .optional(),
   whatsapp: z
@@ -112,6 +122,21 @@ export const onboardingStateSchema = z.object({
       origem: z.enum(["ia", "pacote"]).optional(),
       etapas: z.number().optional(),
       skipped: z.boolean().optional(),
+    })
+    .optional(),
+  /**
+   * O que o segmento deixou pronto além do quadro. Não é um PASSO (não entra
+   * em `lib/onboarding/passos.ts`): é o recibo do que foi criado, lido pela
+   * tela final e pela guarda que impede aplicar o mesmo segmento duas vezes.
+   */
+  kit: z
+    .object({
+      segmento: z.string(),
+      etiquetas: z.number(),
+      respostas: z.number(),
+      tipos_de_agendamento: z.number(),
+      automacoes: z.number(),
+      aplicado_em: z.string(),
     })
     .optional(),
   team: z

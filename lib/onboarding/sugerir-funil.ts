@@ -139,6 +139,11 @@ export type Sugestao =
        * de configurar uma chave e precisa saber se ela está funcionando.
        */
       porque: string;
+      /**
+       * `true` quando o pacote é o do SEGMENTO que a pessoa escolheu no primeiro
+       * passo. Nada falhou nesse caso, e a tela não pode dizer que falhou.
+       */
+      escolhido?: boolean;
     };
 
 /** A geração, injetável — é o único ponto que toca a rede. */
