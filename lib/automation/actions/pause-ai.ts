@@ -68,7 +68,7 @@ async function execute(ctx: ActionCtx): Promise<ActionResultDetail> {
 
   const { data: atual, error: erroLeitura } = await ctx.admin
     .from("conversations")
-    .select("id, contact_id, status, assigned_to_user_id, bot_silenced_until")
+    .select("id, contact_id, status, assigned_to_user_id, bot_silenced_until, comando_da_conversa")
     .eq("id", conversaId)
     .eq("organization_id", ctx.organizationId)
     .maybeSingle();
@@ -79,6 +79,7 @@ async function execute(ctx: ActionCtx): Promise<ActionResultDetail> {
     status: string;
     assigned_to_user_id: string | null;
     bot_silenced_until: string | null;
+    comando_da_conversa?: string | null;
   } | null;
   if (!conversa) return { type: "pause_ai", status: "skipped", detail: { reason: "pausa_sem_conversa_aberta" } };
   if (ENCERRADAS.includes(conversa.status)) {
@@ -90,7 +91,8 @@ async function execute(ctx: ActionCtx): Promise<ActionResultDetail> {
     return { type: "pause_ai", status: "success", detail: { conversa_id: conversaId, mudou: false } };
   }
 
-  const voltaParaAFila = conversa.assigned_to_user_id === null && conversa.status === "ai_handling";
+  // Quem manda vem da coluna `comando_da_conversa` (a régua única da Fila), nunca do `status`.
+  const voltaParaAFila = conversa.assigned_to_user_id === null && conversa.comando_da_conversa === "automatico";
   const { error: erroEscrita } = await ctx.admin
     .from("conversations")
     .update({

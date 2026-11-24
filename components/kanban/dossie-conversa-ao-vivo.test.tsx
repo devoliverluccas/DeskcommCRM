@@ -48,6 +48,10 @@ vi.mock("next/link", () => ({
   ),
 }));
 
+// Peças vindas da main (vendas do negócio, classificação comercial): não são o
+// assunto aqui e pedem QueryClient — saem como no `LeadDossier.test.tsx`.
+vi.mock("@/components/vendas/VendasDoNegocio", () => ({ VendasDoNegocio: () => null }));
+vi.mock("./ClassificacaoComercial", () => ({ ClassificacaoComercial: () => null }));
 vi.mock("./ContatoDoNegocio", () => ({ ContatoDoNegocio: () => <div data-peca="contato" /> }));
 vi.mock("./LeadFieldsForm", () => ({ LeadFieldsForm: () => <div data-peca="campos" /> }));
 vi.mock("./RevisaoDoDocumento", () => ({ RevisaoDoDocumento: () => null }));

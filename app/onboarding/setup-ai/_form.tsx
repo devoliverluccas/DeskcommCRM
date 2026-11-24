@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { createDefaultAgent, skipAi } from "@/app/actions/onboarding/createDefaultAgent";
+import type { EstadoDoItem, ItemDaColuna, OndeLigar } from "@/lib/ai/guardrails/lista-de-conferencia";
 import type { PromptTemplate } from "@/lib/schemas/onboarding";
 import { PROVEDOR_POR_ID } from "@/lib/ai/pontos/provedores";
 import { Check, X } from "@/lib/ui/icons";
@@ -50,13 +51,55 @@ interface Props {
   /** O que ele já sabe fazer, em linguagem de dono de negócio. */
   capacidades: string[];
   /** O que ele nunca faz — as conferências antes de cada mensagem sair. */
-  conferencias: string[];
+  conferencias: ItemDaColuna[];
   /**
    * As regras do SEGMENTO escolhido no primeiro passo, já no campo — a pessoa
    * lê, edita e só então elas viram memória do funcionário. Vazio quando não
    * houve segmento.
    */
   regrasIniciais?: string;
+}
+
+/**
+ * O SELO DO ITEM — o estado REAL da camada nesta organização (#1041).
+ *
+ * A coluna nasceu prometendo todas as conferências do mesmo jeito, e quatro
+ * delas dependem de um interruptor que uma organização nova não ligou:
+ * `clinical_claim` e `commercial_restriction` nascem desligadas, a promessa
+ * semântica só liga com `PROMISE_SEMANTIC_ENABLED=true`, e a conferência de
+ * fato depende da tarefa do Jev. Sem o selo, a tela prometia proteção que o
+ * motor não executa.
+ *
+ * O caminho é o da tela onde o interruptor mora, e são DOIS lugares: as três do
+ * painel ficam em "Confere antes de enviar", dentro do agente; a de fato, no
+ * cartão do Jev, em Provedores de IA. A nota antiga mandava tudo para
+ * "configuração do agente", que não é onde a quarta está.
+ *
+ * `data-estado` carrega o estado para o teste e para quem lê a tela pelo DOM;
+ * o selo visível existe só onde há o que dizer ("sempre" é o silêncio das que
+ * rodam sem escolha de ninguém).
+ */
+function SeloDoItem({ estado, ondeLigar }: { estado: EstadoDoItem | null; ondeLigar: OndeLigar | null }) {
+  const t = useT();
+  if (estado === null) return null;
+  if (estado === "so_anota") {
+    return (
+      <span className="ml-1">
+        — {t("ligada, mas só anota: ainda não barra nenhuma mensagem")}
+      </span>
+    );
+  }
+  if (estado === "ligada") {
+    return <span className="ml-1">— {t("ligada nesta organização")}</span>;
+  }
+  const caminho =
+    ondeLigar === "jev" ? t("IA › Provedores de IA › cartão do Jev") : t("IA › Agentes › Confere antes de enviar");
+  return (
+    <span className="ml-1">
+      — {t("desligada nesta organização — ligue em")}{" "}
+      <span className="font-medium">{caminho}</span>
+    </span>
+  );
 }
 
 export function SetupAiForm({ capacidades, conferencias, regrasIniciais = "" }: Props) {
@@ -191,7 +234,7 @@ export function SetupAiForm({ capacidades, conferencias, regrasIniciais = "" }: 
       */}
       <div className="grid gap-8 border-t border-border pt-8 sm:grid-cols-2">
         <section className="space-y-3">
-          <h3 className="text-sm font-semibold text-text">{t("Ele já vem sabendo")}</h3>
+          <h3 className="text-sm font-semibold text-text">{t("O que ele já sabe fazer")}</h3>
           <ul className="space-y-2 text-sm text-text-muted">
             {capacidades.map((c) => (
               <li key={c} className="flex items-start gap-2">
@@ -202,17 +245,20 @@ export function SetupAiForm({ capacidades, conferencias, regrasIniciais = "" }: 
           </ul>
         </section>
         <section className="space-y-3">
-          <h3 className="text-sm font-semibold text-text">{t("E nunca vai fazer")}</h3>
+          <h3 className="text-sm font-semibold text-text">{t("O que ele nunca faz")}</h3>
           <ul className="space-y-2 text-sm text-text-muted">
             {conferencias.map((c) => (
-              <li key={c} className="flex items-start gap-2">
+              <li key={c.nome} className="flex items-start gap-2" data-estado={c.estado ?? "sempre"}>
                 <X size={14} weight="bold" aria-hidden className="mt-0.5 shrink-0 text-error" />
-                <span>{c}</span>
+                <span>
+                  {c.frase}
+                  <SeloDoItem estado={c.estado} ondeLigar={c.ondeLigar} />
+                </span>
               </li>
             ))}
           </ul>
           <p className="text-xs text-text-subtle">
-            {t("Essas conferências acontecem antes de cada mensagem sair, e não têm interruptor.")}
+            {t("Essas conferências rodam antes de cada mensagem sair. As que dependem de um interruptor aparecem com o estado desta empresa e o caminho para ligar; as demais rodam sempre.")}
           </p>
         </section>
       </div>

@@ -48,6 +48,8 @@ describe("capabilities do canal intermediado", () => {
       // 4.3 — o provedor não expõe o corpo interativo no envio: os nós Botões/Lista
       // saem como texto numerado por aqui.
       mensagemInterativa: false,
+      // O visto por id de mensagem é do canal por QR (#5015).
+      marcaLidasPorMensagem: false,
     });
   });
 

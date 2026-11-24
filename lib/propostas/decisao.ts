@@ -20,7 +20,11 @@ import { logger } from "@/lib/logger";
 export type Decisao = "aceita" | "recusada";
 
 export type QuemDecidiu =
-  | { via: "equipe"; userId: string }
+  /**
+   * A equipe decide por sessão (`userId`) ou por token de integração (Spec 33):
+   * aí `userId` é null, `ator` é o ator do token e `apiTokenId` vai à auditoria.
+   */
+  | { via: "equipe"; userId: string | null; ator?: Actor; apiTokenId?: string | null }
   | { via: "cliente"; linkId: string };
 
 export interface EntradaDaDecisao {
@@ -38,9 +42,8 @@ export type ResultadoDaDecisao =
 
 /** O ator da linha do tempo e do retorno. O cliente não é usuário do sistema. */
 function atorDe(quem: QuemDecidiu): Actor {
-  return quem.via === "equipe"
-    ? { type: "user", id: quem.userId }
-    : { type: "webhook_source", id: `proposal_link:${quem.linkId}` };
+  if (quem.via === "cliente") return { type: "webhook_source", id: `proposal_link:${quem.linkId}` };
+  return quem.ator ?? { type: "user", id: quem.userId ?? "" };
 }
 
 /**
@@ -117,6 +120,7 @@ export async function registrarDecisao(db: SupabaseClient, e: EntradaDaDecisao):
   void audit({
     action: e.decisao === "aceita" ? "proposal.aceita" : "proposal.recusada",
     actorUserId: e.quem.via === "equipe" ? e.quem.userId : null,
+    actorApiTokenId: e.quem.via === "equipe" ? (e.quem.apiTokenId ?? null) : null,
     organizationId: e.orgId,
     resourceType: "crm_proposals",
     resourceId: e.propostaId,

@@ -6,6 +6,7 @@ import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { ROLE_RANK } from "@/lib/auth/types";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { fusoDoRelatorio } from "@/lib/relatorios/janela";
+import { createClient } from "@/lib/supabase/server";
 
 import { RelatoriosClient } from "./_components/RelatoriosClient";
 
@@ -28,6 +29,15 @@ export default async function RelatoriosPage() {
   const podeGerenciar =
     (user.is_platform_admin && !user.support) || ROLE_RANK[activeOrg.role] >= ROLE_RANK.manager;
   const t = (texto: string) => traduzir(texto, user.idioma);
+  // Os funis do recorte dos ganhos da aba Desempenho (#4918), lidos como a tela
+  // de Métricas lê: client de sessão, sem cortar arquivado.
+  const supabase = await createClient();
+  const { data: funisDaOrg } = await supabase
+    .from("crm_pipelines")
+    .select("id, name")
+    .eq("organization_id", activeOrg.orgId)
+    .order("position");
+  const funis = (funisDaOrg ?? []) as Array<{ id: string; name: string }>;
 
   return (
     <div className="flex h-full flex-col gap-5 md:p-2">
@@ -41,6 +51,7 @@ export default async function RelatoriosPage() {
         <RelatoriosClient
           podeGerenciar={podeGerenciar}
           currentUserId={user.id}
+          funis={funis}
           fuso={fusoDoRelatorio(activeOrg.timezone)}
         />
       </Suspense>

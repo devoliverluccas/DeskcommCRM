@@ -69,7 +69,9 @@ function bancoFalso(settings: unknown) {
       const chain = {
         id: "",
         select: () => chain,
-        eq: (_c: string, id: string) => ((chain.id = id), chain),
+        // Só o filtro por `id` escolhe a etapa: a rota também filtra
+        // `organization_id` (multi-tenancy), e esse valor não é etapa.
+        eq: (coluna: string, valor: string) => (coluna === "id" && (chain.id = valor), chain),
         maybeSingle: async () => ({
           data: { id: chain.id, pipeline_id: PIPELINE_ID, name: "Etapa", is_won: false, is_lost: false },
           error: null,

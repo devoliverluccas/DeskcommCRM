@@ -34,6 +34,7 @@ import { BotaoIniciarConversa } from "./PainelIniciarConversa";
 import { RetentionNotice } from "./RetentionNotice";
 import { CRMSidePanel } from "./CRMSidePanel";
 import type { ModuloDaLateral } from "@/lib/inbox/modulos-da-lateral";
+import type { AbaDaPessoa } from "@/lib/inbox/abas-da-inbox";
 import type { Message as ConversationMensagem } from "@/lib/types/messaging";
 import { InboxKeyboardShortcuts } from "./InboxKeyboardShortcuts";
 
@@ -179,6 +180,9 @@ export function soltarFocoEscondido(lista: HTMLElement | null): void {
   if (getComputedStyle(lista).visibility === "hidden") ativo.blur();
 }
 
+/** Onde o aparelho lembra a ordem escolhida para a Fila (`recentes` | `espera`). */
+export const CHAVE_DA_ORDEM_DA_FILA = "inbox:ordem-da-fila";
+
 /**
  * O QUE CADA ABA SIGNIFICA. Exportada porque é a definição em si — o defeito
  * que este mapa já teve (Minhas mostrando tudo que o atendente fechou) não
@@ -222,13 +226,28 @@ export function tabToFilter(
       // "Devolver ao automático"), então a aba vivia mostrando 2 enquanto o robô
       // atendia 47. Agora ela pergunta a régua do MOTOR.
       return { comando: ["automatico"] };
+    case "pessoal":
+      // A ABA PESSOAL (#4434) INVERTE a exclusão da spec 21: a lista devolve SÓ
+      // o pessoal de quem está olhando. Sem `status` de propósito — marcar um
+      // contato FECHA as conversas dele (rota de marcar, efeito 6), então
+      // filtrar por status deixaria a aba vazia justamente para quem acabou de
+      // marcar alguém.
+      return { pessoais: true };
     case "all":
     default:
       return {};
   }
 }
 
-const FILTER_TABS: InboxTab[] = ["unassigned", "mine", "all", "closed", "archived", "ai"];
+const FILTER_TABS: InboxTab[] = [
+  "unassigned",
+  "mine",
+  "all",
+  "closed",
+  "archived",
+  "ai",
+  "pessoal",
+];
 
 /**
  * Lê ?filter= (G4-02, deep-link). ?filter=all é HONRADO mesmo para agent — a
@@ -281,6 +300,11 @@ interface InboxLayoutProps {
    * faria a lateral nascer completa e "pular" para a escolhida.
    */
   modulosDaLateral?: ModuloDaLateral[];
+  /**
+   * A ordem das abas e as que ficam no menu "Mais" (#3313). Vem do SERVIDOR
+   * (`carregarAbasDaInbox`), pela mesma razão dos módulos acima.
+   */
+  abasDaInbox?: AbaDaPessoa[];
 }
 
 export function InboxLayout({
@@ -288,6 +312,7 @@ export function InboxLayout({
   rascunho = null,
   painelRecolhidoInicial = false,
   modulosDaLateral,
+  abasDaInbox,
 }: InboxLayoutProps = {}) {
   const t = useT();
   const { activeOrg, user } = useAuth();
@@ -380,8 +405,25 @@ export function InboxLayout({
   const ultimoIdNaUrl = useRef(idNaUrl);
   const [visibleIds, setVisibleIds] = useState<string[]>([]);
   const [helpOpen, setHelpOpen] = useState(false);
-  /** A ficha do contato como painel deslizante — só existe abaixo do `xl`. */
+  /**
+   * A ficha do contato como gaveta — só abaixo do `xl`, onde ela não é coluna.
+   *
+   * DUAS PORTAS, UMA GAVETA (#4822): abaixo de 768px o gatilho é o botão da
+   * barra do celular; entre 768 e 1279px é o botão "Ficha" do cabeçalho da
+   * conversa. Acima de 1280px a ficha é a terceira coluna e nenhuma porta
+   * aparece — abrir a gaveta ali duplicaria o mesmo painel na tela.
+   */
   const [fichaAberta, setFichaAberta] = useState(false);
+  /**
+   * QUEM ABRIU A GAVETA, para o foco voltar a ele ao fechar. Sem `SheetTrigger`
+   * o Radix não tem para onde devolver o foco (o `triggerRef` dele fica nulo e o
+   * foco cai no `body`); com duas portas, quem sabe qual foi usada é este ref.
+   */
+  const portaDaFicha = useRef<HTMLElement | null>(null);
+  const abrirFicha = useCallback((porta: HTMLElement) => {
+    portaDaFicha.current = porta;
+    setFichaAberta(true);
+  }, []);
   /**
    * O PAINEL DO CONTATO RECOLHIDO (issue #3004).
    *
@@ -459,6 +501,28 @@ export function InboxLayout({
    * discorda do filtro, porque os dois usam a mesma convenção.
    */
   const { data: automaticoDaOrg, isLoading: automaticoCarregando } = useAutomaticoAtivo();
+  // A ORDEM DA FILA, por aparelho. "Esperando há mais tempo" é o padrão — a
+  // ordem de sempre, com a posição de cada um. "Mais recentes" é escolha da
+  // pessoa (#5118): com esperas antigas acumuladas, a ordem por espera jogava o
+  // contato novo para depois da primeira página e o atendente não o via. Lida
+  // num efeito (nunca no `useState`), para o primeiro paint do servidor e do
+  // navegador baterem.
+  const [ordemDaFila, setOrdemDaFila] = useState<"recentes" | "espera">("espera");
+  useEffect(() => {
+    try {
+      if (window.localStorage.getItem(CHAVE_DA_ORDEM_DA_FILA) === "recentes") setOrdemDaFila("recentes");
+    } catch {
+      // armazenamento bloqueado: fica o padrão
+    }
+  }, []);
+  const escolherOrdemDaFila = useCallback((ordem: "recentes" | "espera") => {
+    setOrdemDaFila(ordem);
+    try {
+      window.localStorage.setItem(CHAVE_DA_ORDEM_DA_FILA, ordem);
+    } catch {
+      // armazenamento bloqueado: vale só nesta visita
+    }
+  }, []);
   const composerRef = useRef<ComposerHandle | null>(null);
 
   const filters: ConversationsFilters = useMemo(
@@ -485,8 +549,10 @@ export function InboxLayout({
       // "Pendentes" (item 3.7): a cápsula da barra vira o `pendente` da rota.
       pendente: filterValue.onlyPendentes || undefined,
       is_group: filterValue.onlyGroups || undefined,
+      ...(filterValue.tab === "unassigned" ? { ordem_fila: ordemDaFila } : {}),
     }),
     [
+      ordemDaFila,
       filterValue.tab,
       automaticoDaOrg,
       filterValue.assigned_to,
@@ -975,6 +1041,7 @@ export function InboxLayout({
           onChange={setFilterValue}
           filas={filasDaOrganizacao?.data ?? []}
           acao={<BotaoIniciarConversa />}
+          abasIniciais={abasDaInbox}
         />
         {podeAgirEmLote && (
           <BarraDeAcoesEmLote
@@ -988,6 +1055,41 @@ export function InboxLayout({
             onTransferir={(toUserId, reason) => rodarLote("transfer", toUserId, reason)}
             onLimpar={selecao.limpar}
           />
+        )}
+        {filterValue.tab === "unassigned" && (
+          <div
+            className="flex flex-wrap items-center gap-1 border-b border-border px-3 py-1.5 text-xs"
+            role="group"
+            aria-label={t("Ordem da fila")}
+            data-testid="ordem-da-fila"
+          >
+            <span className="mr-1 text-text-muted">{t("Ordem:")}</span>
+            {(
+              [
+                ["recentes", t("Mais recentes")],
+                ["espera", t("Esperando há mais tempo")],
+              ] as const
+            ).map(([valor, rotulo]) => (
+              <button
+                key={valor}
+                type="button"
+                aria-pressed={ordemDaFila === valor}
+                data-testid={`ordem-da-fila-${valor}`}
+                onClick={() => escolherOrdemDaFila(valor)}
+                className={cn(
+                  // Mesma altura de toque dos chips "Não lidos"/"Grupos" (32 px);
+                  // o rótulo não quebra — quem quebra é a faixa, entre os botões.
+                  "h-8 shrink-0 whitespace-nowrap rounded-full px-3 transition-colors",
+                  "focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                  ordemDaFila === valor
+                    ? "bg-accent-soft font-medium text-accent"
+                    : "text-text-muted hover:bg-surface-elevated hover:text-text",
+                )}
+              >
+                {rotulo}
+              </button>
+            ))}
+          </div>
         )}
         <div className="min-h-0 flex-1 overflow-hidden">
           <ConversationList
@@ -1056,20 +1158,54 @@ export function InboxLayout({
                 variant="ghost"
                 size="sm"
                 className="gap-1 px-2 xl:hidden"
+                data-testid="ficha-no-celular"
+                title={t("Ficha do contato")}
                 aria-haspopup="dialog"
                 aria-expanded={fichaAberta}
-                onClick={() => setFichaAberta(true)}
+                onClick={(e) => abrirFicha(e.currentTarget)}
               >
-                <IdentificationCard size={16} />
+                <IdentificationCard size={16} aria-hidden />
                 {t("Ficha")}
               </Button>
             )}
           </div>
         )}
+        {/* ─── A GAVETA DA FICHA É UMA SÓ (#4822) ───────────────────────────────
+            Antes ela morava DENTRO da barra `md:hidden`: a gaveta existia, mas a
+            única porta ficava abaixo de 768px, e entre 768 e 1279px não havia
+            como abrir a ficha — nem o follow-up, que só é montado no painel
+            (`CRMSidePanel`). Aqui o `Sheet` sobe para fora da barra e passa a
+            ser UM só, controlado por `fichaAberta`; as duas portas (a barra do
+            celular e o botão da faixa do meio no cabeçalho) só chamam
+            `abrirFicha`, que guarda a porta para o foco voltar a ela. Continua sendo a MESMA gaveta e o MESMO
+            `CRMSidePanel`: nenhum segundo painel é montado.
+
+            Sem `SheetTrigger` porque são dois gatilhos em lugares diferentes da
+            árvore — um `Root` do Radix aceita vários, mas dois botões com o
+            mesmo papel acessível confundiriam `getByRole`. O conteúdo é portal,
+            então onde o `Root` mora não muda o que aparece. */}
+        {selectedConversation && (
+          <Sheet open={fichaAberta} onOpenChange={setFichaAberta}>
+            <SheetContent
+              side="right"
+              className="w-[min(22rem,90vw)] overflow-y-auto p-0"
+              onCloseAutoFocus={(e) => {
+                e.preventDefault();
+                portaDaFicha.current?.focus();
+              }}
+            >
+              <SheetTitle className="sr-only">{t("Ficha do contato")}</SheetTitle>
+              <CRMSidePanel conversation={selectedConversation} modulosIniciais={modulosDaLateral} />
+            </SheetContent>
+          </Sheet>
+        )}
         {selectedConversation ? (
           <>
             {/* `key`: trocar de conversa desmonta a confirmação de Fechar/Arquivar
-                aberta — senão o clique de dentro agiria sobre a conversa nova. */}
+                aberta — senão o clique de dentro agiria sobre a conversa nova.
+                `onAbrirFicha` é a PORTA DA FICHA ENTRE 768 E 1279px (#4822): o
+                estado e a gaveta são daqui, o cabeçalho só desenha o botão na
+                faixa que hoje não tem nem coluna nem barra de celular. */}
             <ConversationHeader
               key={selectedConversation.id}
               conversation={selectedConversation}
@@ -1083,21 +1219,8 @@ export function InboxLayout({
               }
               buscaAberta={buscaAberta}
               botaoBuscaRef={botaoBuscaRef}
-              // Entre `md` e `xl` a ficha não tem coluna e a barra do celular
-              // está escondida: sem este gatilho o tablet não abria a ficha.
-              gatilhoDaFicha={
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="hidden gap-1 px-2 md:inline-flex xl:hidden"
-                  aria-haspopup="dialog"
-                  aria-expanded={fichaAberta}
-                  onClick={() => setFichaAberta(true)}
-                >
-                  <IdentificationCard size={16} aria-hidden />
-                  {t("Ficha")}
-                </Button>
-              }
+              onAbrirFicha={abrirFicha}
+              fichaAberta={fichaAberta}
             />
             {/* A FAIXA DO NEGÓCIO: irmã do cabeçalho, nunca dentro dele (os
                 testes do cabeçalho o medem como `firstElementChild`). Com
@@ -1224,7 +1347,7 @@ export function InboxLayout({
         )}
       </div>
 
-      <div className="hidden h-full min-h-0 min-w-0 xl:block">
+      <div data-testid="ficha-em-coluna" className="hidden h-full min-h-0 min-w-0 xl:block">
         <CRMSidePanel
           conversation={selectedConversation}
           recolhido={painelRecolhido}
@@ -1303,20 +1426,6 @@ export function InboxLayout({
         onToggleHelp={() => setHelpOpen((v) => !v)}
       />
       <ShortcutsHelpDialog open={helpOpen} onOpenChange={setHelpOpen} />
-      {/* A FICHA EM FOLHA — uma só, para o celular e o tablet. Os dois gatilhos
-          (o da barra do celular e o do cabeçalho entre `md` e `xl`) só abrem;
-          a folha mora aqui para não depender de qual deles está visível. */}
-      {selectedConversation && (
-        <Sheet open={fichaAberta} onOpenChange={setFichaAberta}>
-          <SheetContent side="right" className="w-[min(22rem,90vw)] overflow-y-auto p-0">
-            <SheetTitle className="sr-only">{t("Ficha do contato")}</SheetTitle>
-            <CRMSidePanel
-              conversation={selectedConversation}
-              modulosIniciais={modulosDaLateral}
-            />
-          </SheetContent>
-        </Sheet>
-      )}
       <EncaminharDialog
         open={encaminhando !== null}
         onOpenChange={(aberto) => {

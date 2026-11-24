@@ -51,28 +51,35 @@ import { requireSupportWrite } from "@/lib/impersonate/support";
  * em `details.motivos`, para a tela oferecer na hora. As duas recusas saem
  * ANTES de qualquer escrita — nem devolução, nem fechamento.
  *
+ * O motivo é gesto da SESSÃO: `fn_demanda_aplicar_motivo` exige uma pessoa como
+ * autor. Por token, `motivo_id` é recusado (422) e a exigência não se aplica —
+ * a integração fecha como antes do #4517.
+ *
  * Depois de fechar, o motivo vai para a demanda do atendimento
  * (`fn_demanda_aplicar_motivo`): grava `motivo_de_encerramento_id` e, se ela
  * ainda não tinha desfecho, encerra com o desfecho da categoria. Falha aqui não
  * desfaz o fechamento — viaja no corpo em `motivo_de_encerramento`.
+ *
+ * ## #4517 — a MESMA transição, agora por token
+ *
+ * Fechar por integração tem de ser o mesmo `fn_service_status` da tela: a
+ * revisão, o carimbo de atendimento e a demanda são regras do BANCO, e uma
+ * segunda implementação (um UPDATE em `status`) as pularia em silêncio. A
+ * sequência inteira mora em `./_handler.ts` (`fecharConversaHandler`), chamada
+ * por esta rota e pela ferramenta do agente.
  */
 import { randomUUID } from "node:crypto";
 import { type NextRequest } from "next/server";
 
-import { audit } from "@/lib/audit";
 import { ok, fail } from "@/lib/api/wrappers";
-import { requireRole } from "@/lib/auth/require-role";
-import { roleAtLeast } from "@/lib/auth/types";
-import { devolverAtendimentoAoAgente, type RetomadaResultado } from "@/lib/escalacao/retomada";
-import { logger } from "@/lib/logger";
-import type { Actor } from "@/lib/api/handlers/types";
-import { createAdminClient } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
-import type { Conversation } from "@/lib/types/messaging";
-import { traduzir } from "@/lib/i18n/dicionario";
+import { resolveAuthDual, tetoDeEscritaDoToken } from "@/lib/api/auth-dual";
+import { ESCOPO_CONVERSAS_ESCRITA } from "@/lib/api/escopos-do-token";
 import { ApiError } from "@/lib/api/types";
-import { exigirControleDaConversa } from "@/lib/inbox/controle-da-conversa";
-import { pedirSatisfacaoAoEncerrar } from "@/lib/atendimento/satisfacao";
+import { audit } from "@/lib/audit";
+import { logger } from "@/lib/logger";
+import { createAdminClient } from "@/lib/supabase/admin";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Conversation } from "@/lib/types/messaging";
 import {
   decidirMotivo,
   type DecisaoDoMotivo,
@@ -83,6 +90,8 @@ import {
   lerExigenciaDeMotivo,
   lerMotivosAtivos,
 } from "@/lib/atendimento/motivos-de-encerramento-server";
+import { traduzir } from "@/lib/i18n/dicionario";
+import { fecharConversaHandler } from "../_handler";
 
 export const dynamic = "force-dynamic";
 
@@ -120,187 +129,133 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
     motivo_id: z.uuid().optional(),
   }).safeParse(body);
   if (!parsed.success) return fail("validation_failed", "Revisão inválida.", 422, { requestId });
+
   const { id } = await ctx.params;
-  const supabase = await createClient();
 
-  // spec 13 §4: escrita é agent+ (viewer é read-only).
-  const authz = await requireRole("agent", { requestId, resource: "conversations" });
-  if (!authz.ok) return authz.response;
-  const t = (texto: string) => traduzir(texto, authz.user.idioma);
-  const user = authz.user;
-
-  const { data: visible, error: readError } = await supabase.from("conversations")
-    .select("id, organization_id, assigned_to_user_id, service_revision").eq("id", id)
-    .eq("organization_id", authz.org.orgId).maybeSingle();
-  if (readError) return fail("internal_error", readError.message, 500, { requestId });
-  if (!visible) return fail("not_found", t("Conversa não encontrada."), 404, { requestId });
-  try {
-    await exigirControleDaConversa(supabase, {
-      organization_id: authz.org.orgId, actor: { type: "user", id: user.id }, requestId,
-      idioma: user.idioma,
-    }, visible);
-  } catch (erro) {
-    if (erro instanceof ApiError) return fail(erro.code, erro.message, erro.status, { requestId });
-    throw erro;
-  }
-
-  // (1) A CONFERÊNCIA DA REVISÃO, ANTES DE QUALQUER ESCRITA. Revisão obsoleta
-  // não pode deixar o contato destravado nem a conversa encerrada pela metade:
-  // o 409 sai daqui, sem tocar em nada.
-  const revisaoEsperada = parsed.data.expected_revision ?? visible.service_revision;
-  if (revisaoEsperada !== visible.service_revision) {
-    return fail("conflict", t("O atendimento mudou. Atualize e tente novamente."), 409, { requestId });
-  }
-
-  // (1b) O MOTIVO, TAMBÉM ANTES DE QUALQUER ESCRITA. Motivo de outra
-  // organização ou inativo, ou motivo exigido e ausente: 422 sem tocar em nada.
-  const motivo = await conferirMotivo(supabase, authz.org.orgId, parsed.data.motivo_id, requestId);
-  if (motivo.tipo === "motivo_invalido") {
-    return fail("motivo_invalido", t("Escolha um motivo de encerramento válido."), 422, { requestId });
-  }
-  if (motivo.tipo === "motivo_required") {
-    return fail("motivo_required", t("Escolha o motivo do encerramento."), 422, {
-      requestId,
-      details: { motivos: motivo.motivos },
-    });
-  }
-  if (motivo.tipo === "falha") {
-    return fail("internal_error", motivo.detalhe, 500, { requestId });
-  }
-  const motivoEscolhido: MotivoDeEncerramento | null = motivo.motivo;
-
-  // (2) A ESCOLHA VEM ANTES DO FECHAMENTO — a ordem é o conserto do CR (#3323).
-  //
-  // Fechar e devolver DEPOIS passava a conversa por `open` no meio do caminho:
-  // numa conversa com dono humano, o release da `fn_conversation_assign` grava
-  // `status='open'`, e gravar `open` numa conversa já `closed` é REABERTURA para
-  // os gatilhos do banco (revisão +2, `service_started_at` regravado,
-  // `current_demanda_id` anulado, `conversation.routing_requested` para uma
-  // conversa encerrada).
-  //
-  // Devolver antes não reabre nada: a conversa ainda está viva, então a escrita
-  // do release (`claimed → open`) não muda atendimento nenhum, e o fechamento
-  // que vem depois é a ÚNICA transição que conta. É o que a tela descreve:
-  // encerra o atendimento e, no mesmo gesto, devolve o contato ao automático.
-  //
-  // A MESMA regra de dono do botão "Devolver ao automático" (#3436, em
-  // `reactivate-bot/route.ts`): conversa com dono que NÃO é quem fecha só volta
-  // ao agente pela mão de um `manager` ou acima. Aqui a recusa não é 403 — fechar
-  // é o gesto pedido e segue —, mas a devolução não acontece e o motivo viaja no
-  // corpo. E o dono lido vai como `expectedAssignee`: se alguém assumiu a
-  // conversa entre a leitura e a devolução, ela recusa (`assignment_conflict`).
-  const dono = visible.assigned_to_user_id ?? null;
-  const devolucao: DesfechoDaDevolucao | null = parsed.data.devolver_ao_automatico !== true
-    ? null
-    : dono !== null && dono !== user.id && !roleAtLeast(authz.org.role, "manager")
-      ? { ok: false, motivo: "conversa_de_outro_atendente" }
-      : await devolverAntesDeFechar({
-          supabase,
-          conversationId: id,
-          organizationId: visible.organization_id,
-          actor: { type: "user", id: user.id, role: authz.org.role },
-          requestId,
-          expectedAssignee: dono,
-        });
-
-  // (3) E FECHA, com a MESMA revisão que o cliente mandou (ou a que foi lida
-  // quando ele não mandou nenhuma). O CAS da `fn_service_status` (PT409) segue
-  // sendo a última palavra: se alguém mexeu na conversa entre a leitura e este
-  // UPDATE, a resposta é 409, e não um fechamento por cima de estado alheio.
-  const admin = createAdminClient();
-  const { data, error } = await admin.rpc("fn_service_status", {
-    p_org: visible.organization_id, p_conversation: id, p_status: "closed",
-    p_expected: revisaoEsperada,
-  });
-  // PT409: revisão obsoleta (migration 0514). 40001: contato trocou no meio, ou banco anterior à 0514.
-  const conflito = error?.code === "PT409" || error?.code === "40001";
-  if (error) return fail(conflito ? "conflict" : "internal_error",
-    conflito ? t("O atendimento mudou. Atualize e tente novamente.") : error.message,
-    conflito ? 409 : 500, { requestId });
-  const convFechada = data as unknown as Conversation;
-
-  await audit({
-    action: "conversation.closed",
-    actorUserId: user.id,
-    organizationId: convFechada.organization_id,
-    resourceType: "conversation",
-    resourceId: convFechada.id,
+  const authz = await resolveAuthDual(req, {
     requestId,
-    ...(motivoEscolhido ? { metadata: { motivo_id: motivoEscolhido.id } } : {}),
+    resource: "conversations",
+    role: "agent",
+    scope: ESCOPO_CONVERSAS_ESCRITA,
+    tokenRole: "agent",
   });
+  if (!authz.ok) return authz.response;
+  // #1999 — rota de `PUBLIC_PATHS`: o `proxy.ts` não decide sobre ela e nada a
+  // montante conta as chamadas. Sem este teto, o Bearer escreve sem cota. A
+  // sessão passa sem contagem (quem digita é uma pessoa).
+  const teto = await tetoDeEscritaDoToken(authz, "conversations", requestId);
+  if (teto) return teto;
+  const t = (texto: string) => traduzir(texto, authz.idioma ?? "pt-BR");
 
-  // (4) O MOTIVO NA DEMANDA, depois do fechamento — que já aconteceu e não é
-  // desfeito por falha aqui. O resultado viaja no corpo.
-  let motivoNoFechamento: MotivoNoFechamento | null = null;
-  if (motivoEscolhido) {
-    const aplicado = await aplicarMotivoNaDemanda(admin, {
-      organizationId: convFechada.organization_id,
-      demandaId: convFechada.current_demanda_id ?? null,
-      motivoId: motivoEscolhido.id,
-      actorUserId: user.id,
-    });
-    if (aplicado.ok) {
-      motivoNoFechamento = {
-        id: motivoEscolhido.id, nome: motivoEscolhido.nome, registrado: true,
-        demanda_id: aplicado.demandaId, desfecho: aplicado.desfecho, protocolo: aplicado.protocolo,
-      };
-      await audit({
-        action: "demanda.motivo_registrado",
-        actorUserId: user.id,
-        organizationId: convFechada.organization_id,
-        resourceType: "demanda",
-        resourceId: aplicado.demandaId,
-        requestId,
-        metadata: { motivo_id: motivoEscolhido.id, categoria: motivoEscolhido.categoria, conversation_id: convFechada.id },
-      });
-    } else {
-      motivoNoFechamento = { id: motivoEscolhido.id, nome: motivoEscolhido.nome, registrado: false, erro: aplicado.erro };
-      if (aplicado.erro === "falha") {
-        logger.error("[conversations.close] motivo não chegou à demanda", {
-          conversation_id: convFechada.id,
-          organization_id: convFechada.organization_id,
-          detalhe: aplicado.detalhe,
-          requestId,
-        });
-      }
+  // (1b) O MOTIVO, ANTES DE QUALQUER ESCRITA (fase 3, item 3.2). Motivo de outra
+  // organização ou inativo, ou motivo exigido e ausente: 422 sem tocar em nada —
+  // nem devolução, nem fechamento. Só a sessão escolhe motivo: a demanda precisa
+  // de uma pessoa como autor (`fn_demanda_aplicar_motivo`).
+  const pessoa = authz.actor.type === "user" ? authz.actor.id : null;
+  if (pessoa === null && parsed.data.motivo_id) {
+    return fail("validation_failed", t("O motivo de encerramento só pode ser escolhido pela sessão."), 422, { requestId });
+  }
+  let motivoEscolhido: MotivoDeEncerramento | null = null;
+  if (pessoa !== null) {
+    const motivo = await conferirMotivo(authz.supabase, authz.organizationId, parsed.data.motivo_id, requestId);
+    if (motivo.tipo === "motivo_invalido") {
+      return fail("motivo_invalido", t("Escolha um motivo de encerramento válido."), 422, { requestId });
     }
+    if (motivo.tipo === "motivo_required") {
+      return fail("motivo_required", t("Escolha o motivo do encerramento."), 422, {
+        requestId,
+        details: { motivos: motivo.motivos },
+      });
+    }
+    if (motivo.tipo === "falha") {
+      return fail("internal_error", motivo.detalhe, 500, { requestId });
+    }
+    motivoEscolhido = motivo.motivo;
   }
 
-  // ── #4023: A PESQUISA DE SATISFAÇÃO, DEPOIS DO FECHAMENTO ────────────────
-  //
-  // O encerramento ACIMA é o gesto pedido e já aconteceu; a pesquisa vem depois e
-  // não pode desfazê-lo nem mudar a resposta desta rota (o corpo sai idêntico ao
-  // de antes, e é o que permite o lote reusar esta função). Desligada na
-  // organização, `pedirSatisfacaoAoEncerrar` devolve `desligada` sem tocar o
-  // banco além da leitura do settings — o caso de quem nunca ligou.
-  const pesquisa = await pedirSatisfacaoAoEncerrar(admin, {
-    organizationId: convFechada.organization_id,
-    conversationId: convFechada.id,
-    contactId: convFechada.contact_id ?? null,
-    channelSessionId: convFechada.channel_session_id ?? null,
+  try {
+    const { conversation, devolucao } = await fecharConversaHandler(
+      authz.supabase,
+      {
+        organization_id: authz.organizationId,
+        // O papel da sessão vai no ator: o handler decide por ele se um gerente
+        // devolve ao automático a conversa de um colega (#3436).
+        actor: authz.papelDaSessao && authz.actor.type === "user"
+          ? { ...authz.actor, role: authz.papelDaSessao }
+          : authz.actor,
+        requestId,
+        idioma: authz.idioma,
+        ...(authz.apiTokenId !== undefined ? { apiTokenId: authz.apiTokenId } : {}),
+      },
+      id,
+      {
+        ...(parsed.data.expected_revision !== undefined
+          ? { expectedRevision: parsed.data.expected_revision }
+          : {}),
+        ...(parsed.data.devolver_ao_automatico !== undefined
+          ? { devolverAoAutomatico: parsed.data.devolver_ao_automatico }
+          : {}),
+      },
+    );
+
+    // (4) O MOTIVO NA DEMANDA, depois do fechamento — que já aconteceu e não é
+    // desfeito por falha aqui. O resultado viaja no corpo.
+    const motivoNoFechamento =
+      motivoEscolhido && pessoa !== null
+        ? await registrarMotivo(conversation, motivoEscolhido, pessoa, requestId)
+        : null;
+
+    return ok(
+      {
+        ...conversation,
+        ...(devolucao === null ? {} : { devolucao }),
+        ...(motivoNoFechamento === null ? {} : { motivo_de_encerramento: motivoNoFechamento }),
+      },
+      { requestId },
+    );
+  } catch (err) {
+    if (err instanceof ApiError) return fail(err.code, t(err.message), err.status, { requestId });
+    throw err;
+  }
+}
+
+/** Grava o motivo na demanda do atendimento recém-fechado, com auditoria. */
+async function registrarMotivo(
+  conversa: Conversation,
+  motivo: MotivoDeEncerramento,
+  actorUserId: string,
+  requestId: string,
+): Promise<MotivoNoFechamento> {
+  const aplicado = await aplicarMotivoNaDemanda(createAdminClient(), {
+    organizationId: conversa.organization_id,
+    demandaId: conversa.current_demanda_id ?? null,
+    motivoId: motivo.id,
+    actorUserId,
   });
-  if (pesquisa.pedida) {
-    logger.info("[conversations.close] pesquisa de satisfação enviada", {
-      conversation_id: convFechada.id,
-      organization_id: convFechada.organization_id,
-      pedido_id: pesquisa.pedidoId,
+  if (aplicado.ok) {
+    await audit({
+      action: "demanda.motivo_registrado",
+      actorUserId,
+      organizationId: conversa.organization_id,
+      resourceType: "demanda",
+      resourceId: aplicado.demandaId,
       requestId,
+      metadata: { motivo_id: motivo.id, categoria: motivo.categoria, conversation_id: conversa.id },
     });
-  } else if (pesquisa.motivo === "falha_ao_enviar" || pesquisa.motivo === "erro") {
-    logger.warn("[conversations.close] pesquisa de satisfação não saiu", {
-      conversation_id: convFechada.id,
-      organization_id: convFechada.organization_id,
-      motivo: pesquisa.motivo,
+    return {
+      id: motivo.id, nome: motivo.nome, registrado: true,
+      demanda_id: aplicado.demandaId, desfecho: aplicado.desfecho, protocolo: aplicado.protocolo,
+    };
+  }
+  if (aplicado.erro === "falha") {
+    logger.error("[conversations.close] motivo não chegou à demanda", {
+      conversation_id: conversa.id,
+      organization_id: conversa.organization_id,
+      detalhe: aplicado.detalhe,
       requestId,
     });
   }
-
-  const corpo = {
-    ...convFechada,
-    ...(devolucao === null ? {} : { devolucao }),
-    ...(motivoNoFechamento === null ? {} : { motivo_de_encerramento: motivoNoFechamento }),
-  };
-  return ok(corpo, { requestId });
+  return { id: motivo.id, nome: motivo.nome, registrado: false, erro: aplicado.erro };
 }
 
 /**
@@ -314,7 +269,7 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
  *     que é o gesto pedido.
  */
 async function conferirMotivo(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: SupabaseClient,
   organizationId: string,
   motivoId: string | undefined,
   requestId: string,
@@ -340,51 +295,3 @@ async function conferirMotivo(
     return { tipo: "ok", motivo: null };
   }
 }
-
-/**
- * A devolução propriamente dita, pela função compartilhada — e a tradução do
- * desfecho para o corpo da resposta.
- *
- * FALHA AQUI NÃO DERRUBA O FECHAMENTO: encerrar é o gesto pedido, e a devolução
- * veio junto como escolha. Devolver erro faria a tela mostrar "não consegui
- * fechar" para uma conversa que o passo seguinte fecha — mentira que atrapalha
- * mais do que a recusa que se quer contar. O que a recusa faz é viajar no corpo
- * (`devolucao`), para a tela dizer: encerrei, mas a trava CONTINUA.
- *
- * `contato_sempre_humano` (contato marcado "sempre atendimento humano") é a
- * recusa ESPERADA, e a mesma leitura do cron: o contato pediu para ficar com
- * gente e nenhuma devolução pode desfazer isso. As demais ficam no log, porque
- * são defeito de banco: soltar a trava do contato falhou.
- */
-async function devolverAntesDeFechar(deps: {
-  supabase: Awaited<ReturnType<typeof createClient>>;
-  conversationId: string;
-  organizationId: string;
-  actor: Actor;
-  requestId: string;
-  expectedAssignee: string | null;
-}): Promise<DesfechoDaDevolucao> {
-  const resultado: RetomadaResultado = await devolverAtendimentoAoAgente(
-    {
-      supabase: deps.supabase,
-      organizationId: deps.organizationId,
-      actor: deps.actor,
-      requestId: deps.requestId,
-    },
-    { conversationId: deps.conversationId, expectedAssignee: deps.expectedAssignee },
-  );
-
-  if (resultado.ok) return { ok: true };
-
-  if (resultado.erro !== "contato_sempre_humano") {
-    logger.error("[conversations.close] devolução ao automático falhou antes de fechar", {
-      conversation_id: deps.conversationId,
-      organization_id: deps.organizationId,
-      erro: resultado.erro,
-      detalhe: resultado.detalhe,
-      requestId: deps.requestId,
-    });
-  }
-  return { ok: false, motivo: resultado.erro };
-}
-

@@ -3,10 +3,10 @@ import { type NextRequest } from "next/server";
 import { z } from "zod";
 
 import { ok, fail } from "@/lib/api/wrappers";
-import { requireRole } from "@/lib/auth/require-role";
+import { resolveAuthDual, tetoDeEscritaDoToken } from "@/lib/api/auth-dual";
+import { IDIOMA_PADRAO } from "@/lib/i18n/idiomas";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 import { registrarDecisao } from "@/lib/propostas/decisao";
-import { createClient } from "@/lib/supabase/server";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { sePropostasDesligadas } from "@/lib/propostas/porta";
 
@@ -29,23 +29,32 @@ export async function POST(req: NextRequest, ctx: Ctx): Promise<Response> {
   if (supportDenied) return supportDenied;
 
   const requestId = randomUUID();
-  const authz = await requireRole("agent", { requestId, resource: "crm_proposals" });
+  const authz = await resolveAuthDual(req, { requestId, resource: "crm_proposals", role: "agent", scope: "mcp:write" });
   if (!authz.ok) return authz.response;
-  const desligada = await sePropostasDesligadas(authz.org.orgId, requestId);
+  const teto = await tetoDeEscritaDoToken(authz, "proposals_decidir", requestId);
+  if (teto) return teto;
+  const desligada = await sePropostasDesligadas(authz.organizationId, requestId);
   if (desligada) return desligada;
-  const t = (texto: string) => traduzir(texto, authz.user.idioma);
+  const t = (texto: string) => traduzir(texto, authz.idioma ?? IDIOMA_PADRAO);
   const { id } = await ctx.params;
 
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return fail("validation_failed", t("Campos inválidos."), 422, { requestId });
 
-  const supabase = await createClient();
-  const resultado = await registrarDecisao(supabase, {
-    orgId: authz.org.orgId,
+  // Sessão ou token de integração (Spec 33): a decisão é da EQUIPE nos dois
+  // casos; o token não tem usuário, e o seu ator e id vão à linha do tempo e
+  // à auditoria pelo mesmo caminho compartilhado com o link público.
+  const resultado = await registrarDecisao(authz.supabase, {
+    orgId: authz.organizationId,
     propostaId: id,
     decisao: parsed.data.decisao,
     motivo: parsed.data.motivo ?? null,
-    quem: { via: "equipe", userId: authz.user.id },
+    quem: {
+      via: "equipe",
+      userId: authz.actor.type === "user" ? authz.actor.id : null,
+      ator: authz.actor,
+      apiTokenId: authz.apiTokenId ?? null,
+    },
     requestId,
   });
   if (!resultado.ok) {

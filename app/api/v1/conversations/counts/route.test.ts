@@ -67,7 +67,10 @@ vi.mock("@/lib/auth/require-role", () => ({
 }));
 vi.mock("@/lib/channels/desativado", () => ({ idsDosCanaisDesativados: async () => [] }));
 vi.mock("@/lib/ai/agents/org-tem-automatico", () => ({ orgTemAutomatico: async () => true }));
-vi.mock("@/app/api/v1/conversations/_handler", () => ({ idsDeContatosPessoais: async () => [] }));
+vi.mock("@/app/api/v1/conversations/_handler", () => ({
+  idsDeContatosPessoais: async () => [],
+  idsDeContatosPessoaisVisiveis: async () => [],
+}));
 
 const { GET } = await import("./route");
 

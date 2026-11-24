@@ -71,6 +71,7 @@ const conversa = (extra: Linha = {}): Linha => ({
   organization_id: ORG,
   contact_id: "contato-1",
   status: "ai_handling",
+  comando_da_conversa: "automatico",
   assigned_to_user_id: null,
   bot_silenced_until: null,
   ...extra,

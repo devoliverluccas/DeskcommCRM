@@ -63,6 +63,7 @@ import { z } from "zod";
  */
 export const MODULOS_DA_LATERAL = [
   "contato",
+  "anotacoes",
   "tags-do-contato",
   "carteira",
   "anuncio",
@@ -93,6 +94,7 @@ export const CHAVE_DOS_MODULOS = "modulos_da_lateral";
  */
 export const ROTULO_DO_MODULO: Record<IdModuloDaLateral, string> = {
   contato: "Contato",
+  anotacoes: "Anotações do cliente",
   "tags-do-contato": "Tags do contato",
   carteira: "Carteira",
   anuncio: "Anúncio de origem",
@@ -158,6 +160,8 @@ export const ROTULO_DA_ABA: Record<IdAbaDaLateral, string> = {
  */
 export const ABA_DO_MODULO: Record<IdModuloDaLateral, AbaComModulos> = {
   contato: "perfil",
+  // Notas da equipe sobre o cliente (main, #5100-e-tantos): moram junto do contato.
+  anotacoes: "perfil",
   "tags-do-contato": "perfil",
   carteira: "perfil",
   anuncio: "perfil",

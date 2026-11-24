@@ -46,10 +46,13 @@ const CAMPO =
 export function RelatoriosClient({
   podeGerenciar,
   currentUserId,
+  funis,
   fuso,
 }: {
   podeGerenciar: boolean;
   currentUserId: string;
+  /** Funis do recorte dos ganhos da aba Desempenho (#4918). */
+  funis: Array<{ id: string; name: string }>;
   fuso: string;
 }) {
   const t = useT();
@@ -155,7 +158,7 @@ export function RelatoriosClient({
         <p className="mb-2 text-xs text-text-muted">
           {t("Desempenho usa sempre os últimos 30 dias, independente do período escolhido acima.")}
         </p>
-        <MetricsClient canCompare={podeGerenciar} currentUserId={currentUserId} />
+        <MetricsClient canCompare={podeGerenciar} currentUserId={currentUserId} funis={funis} />
       </TabsContent>
       <TabsContent value="atendimentos" className="mt-4">
         {aba === "atendimentos" && <AbaAtendimentos periodo={periodo} />}

@@ -15,6 +15,9 @@ import type { McpToolDefinition } from "../types";
 import { buscarComRelaxamento } from "@/lib/catalogo/busca";
 import { CANDIDATOS_DA_BUSCA, candidatosDaBusca } from "@/lib/catalogo/busca-no-banco";
 import { emPromocao, precoVigente } from "@/lib/catalogo/preco";
+import { INSTRUCOES_DE_SERVICO, vitrineDeServicos } from "@/lib/catalogo/servicos-na-busca";
+import { MODULO_SERVICOS, todosOsDetalhes } from "@/lib/catalogo/servicos-supabase";
+import { moduloLigadoComMemo } from "@/lib/instalacao/modulos";
 import { capacidadesDaOrganizacao } from "@/lib/organizacao/capacidades";
 import { formatCents } from "@/lib/money";
 
@@ -236,6 +239,7 @@ export const crmSearchProducts: McpToolDefinition<typeof produtosInputShape> = {
       moeda: string;
       controla_estoque: boolean;
       quantidade: number;
+      ativo: boolean;
       fotos: string[] | null;
     };
 
@@ -246,22 +250,76 @@ export const crmSearchProducts: McpToolDefinition<typeof produtosInputShape> = {
     const preparar = (linhas: Linha[]): Linha[] =>
       capacidadeLigada ? linhas : linhas.map((linha) => ({ ...linha, capacidade: null }));
 
+    // ─── O catálogo de serviços (módulo opcional, doc 212) ──────────────────
+    //
+    // Desligado: nada muda — nem consulta, nem resposta. Ligado: os detalhes do
+    // módulo decidem quem a IA pode oferecer, a variação responde pelo
+    // principal, e o serviço ganha o bloco `servico`. Sem conseguir ler os
+    // detalhes, a busca FALHA (lança), como já falha sem ler o catálogo: tratar
+    // o erro como "não é serviço" devolveria à conversa o item que a equipe
+    // tirou dela (`ia_oferece = false`).
+    const detalhesDosServicos = (await moduloLigadoComMemo(ctx.supabase, MODULO_SERVICOS))
+      ? await todosOsDetalhes(ctx.supabase, ctx.organizationId)
+      : null;
+
+    // A vitrine precisa da FAMÍLIA inteira (o principal e as variações), e os
+    // candidatos do banco são só os mais parecidos com o termo: uma variação
+    // que casou pode chegar sem o principal, e o principal sem as variações.
+    // Completa-se a família de cada serviço que veio — por isso a família
+    // nunca é parcial aqui (`familiaParcial: false`). Desligado, não consulta.
+    const completarFamilias = async (linhas: Linha[]): Promise<Linha[]> => {
+      if (!detalhesDosServicos) return linhas;
+      const presentes = new Set(linhas.map((l) => l.id));
+      const raizes = new Set<string>();
+      for (const l of linhas) {
+        const d = detalhesDosServicos.get(l.id);
+        if (d) raizes.add(d.pai_product_id ?? l.id);
+      }
+      const faltam = [...detalhesDosServicos]
+        .filter(([id, d]) => !presentes.has(id) && (raizes.has(id) || (d.pai_product_id !== null && raizes.has(d.pai_product_id))))
+        .map(([id]) => id);
+      if (faltam.length === 0) return linhas;
+      const { data, error } = await ctx.supabase
+        .from("catalog_products")
+        .select(COLUNAS_DA_BUSCA)
+        .eq("organization_id", ctx.organizationId)
+        .eq("ativo", true)
+        .in("id", faltam);
+      if (error) throw new Error(`buscar_produtos_falhou: ${error.message}`);
+      return [...linhas, ...((data ?? []) as unknown as Linha[])];
+    };
+
+    const buscar = (linhas: Linha[]) => {
+      const vitrine = detalhesDosServicos
+        ? vitrineDeServicos(linhas, detalhesDosServicos, { familiaParcial: false })
+        : null;
+      const busca = buscarComRelaxamento(vitrine ? vitrine.visiveis : linhas, input.termo);
+      return {
+        vitrine,
+        ignorados: busca.ignorados,
+        achados: vitrine ? vitrine.principalNoLugar(busca.achados) : busca.achados,
+      };
+    };
+
     // `controla_estoque` é o conserto de uma armadilha da versão anterior, que
     // filtrava por quantidade sempre: numa loja que não conta estoque (decant de
     // perfume, item sob encomenda) o catálogo INTEIRO ficava invisível.
-    const vendavel = (p: Linha) => !p.controla_estoque || p.quantidade > 0;
+    // Serviço não tem prateleira: a tela de produtos e a planilha podem marcar
+    // `controla_estoque` num item de serviço, e ele não some por "sem estoque".
+    const vendavel = (p: Linha) =>
+      Boolean(detalhesDosServicos?.has(p.id)) || !p.controla_estoque || p.quantidade > 0;
 
     // Os candidatos chegam SEM o filtro de estoque, de propósito: "existe mas
     // está sem estoque" e "não existe" são vazios diferentes, e o relaxamento
     // de número precisa enxergar o produto esgotado para não dizer "não há 512
     // aqui" a quem pediu um 512 que só acabou.
-    const candidatos = preparar(
-      await candidatosDaBusca<Linha>(ctx.supabase, ctx.organizationId, input.termo, {
-        colunas: COLUNAS_DA_BUSCA,
-      }),
-    );
-    let { achados, ignorados } = buscarComRelaxamento(candidatos, input.termo);
-    let disponiveis = input.somente_disponiveis ? achados.filter((a) => vendavel(a.produto)) : achados;
+    const candidatos = await candidatosDaBusca<Linha>(ctx.supabase, ctx.organizationId, input.termo, {
+      colunas: COLUNAS_DA_BUSCA,
+    });
+    let resultado = buscar(preparar(await completarFamilias(candidatos)));
+    let disponiveis = input.somente_disponiveis
+      ? resultado.achados.filter((a) => vendavel(a.produto))
+      : resultado.achados;
 
     // Os 200 candidatos são os mais PARECIDOS, sem olhar estoque. Numa loja em
     // que os 200 mais parecidos estão esgotados, um vendável pode estar logo
@@ -272,17 +330,16 @@ export const crmSearchProducts: McpToolDefinition<typeof produtosInputShape> = {
       disponiveis.length < input.limite &&
       candidatos.length >= CANDIDATOS_DA_BUSCA
     ) {
-      const soVendaveis = preparar(
-        await candidatosDaBusca<Linha>(ctx.supabase, ctx.organizationId, input.termo, {
-          colunas: COLUNAS_DA_BUSCA,
-          somenteDisponiveis: true,
-        }),
-      );
+      const soVendaveis = await candidatosDaBusca<Linha>(ctx.supabase, ctx.organizationId, input.termo, {
+        colunas: COLUNAS_DA_BUSCA,
+        somenteDisponiveis: true,
+      });
       const vistos = new Set(candidatos.map((c) => c.id));
       const uniao = [...candidatos, ...soVendaveis.filter((c) => !vistos.has(c.id))];
-      ({ achados, ignorados } = buscarComRelaxamento(uniao, input.termo));
-      disponiveis = achados.filter((a) => vendavel(a.produto));
+      resultado = buscar(preparar(await completarFamilias(uniao)));
+      disponiveis = resultado.achados.filter((a) => vendavel(a.produto));
     }
+    const { achados, ignorados, vitrine } = resultado;
 
     const topo = disponiveis.slice(0, input.limite);
 
@@ -312,6 +369,10 @@ export const crmSearchProducts: McpToolDefinition<typeof produtosInputShape> = {
     const empate = topo.length > 1 && topo[0]!.nota === topo[1]!.nota;
 
     const mensagem = avisosDaBusca({ empate, ignorados });
+    const servicos = new Map(topo.flatMap(({ produto }) => {
+      const s = vitrine?.descricao(produto.id);
+      return s ? [[produto.id, s] as const] : [];
+    }));
 
     return {
       produtos: topo.map(({ produto }) => {
@@ -330,13 +391,20 @@ export const crmSearchProducts: McpToolDefinition<typeof produtosInputShape> = {
           ...(produto.marca ? { marca: produto.marca } : {}),
           ...(produto.descricao ? { descricao: produto.descricao } : {}),
           ...(produto.capacidade ? { capacidade: produto.capacidade } : {}),
+          // Serviço não tem prateleira: `vendavel` também pergunta ao módulo.
           disponivel: vendavel(produto),
           // Quantas fotos, e não quais: o caminho é vocabulário interno e a URL
           // assinada expira. Quem manda a foto é o `send_message` do agente, com
           // `produto_codigo` — ele acha as fotos pelo código (migration 0390).
           ...(produto.fotos && produto.fotos.length > 0 ? { fotos: produto.fotos.length } : {}),
+          // Serviço (#3372, módulo ligado): tipo, "a partir de", variações com
+          // preço e sinal, prazo e as instruções internas MARCADAS.
+          ...(servicos.has(produto.id) ? { servico: servicos.get(produto.id) } : {}),
         };
       }),
+      // A orientação viaja com o dado, e só quando há serviço: a descrição da
+      // ferramenta é a mesma com o módulo ligado ou desligado.
+      ...(servicos.size > 0 ? { instrucoes_servico: INSTRUCOES_DE_SERVICO } : {}),
       empate,
       // Relaxamento é o irmão do empate: nos dois a busca sabe que a resposta
       // NÃO é exatamente o que foi pedido, e nos dois quem decide é a pessoa.

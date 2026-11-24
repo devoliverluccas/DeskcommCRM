@@ -32,14 +32,25 @@ import { TituloDeSecao } from "./Secao";
 
 export interface MetaDaEmpresa {
   id: string;
-  escopo: "empresa" | "funil";
+  /** #4796: `vendedor` é a meta individual — a mais estreita das três. */
+  escopo: "empresa" | "funil" | "vendedor";
+  /** #4796: quantidade de vendas ganhas ou valor vendido (em centavos). */
+  indicador: "vendas_ganhas" | "valor_vendido";
   pipeline_id: string | null;
   pipeline_nome: string | null;
+  /** #4796: dono da meta individual; `null` nas metas de empresa/funil. */
+  vendedor_id: string | null;
+  /** #4796: moeda do alvo em valor; `null` na meta por quantidade. */
+  moeda: string | null;
   alvo: number;
   realizado: number;
   percentual: number;
   falta: number;
   atingida: boolean;
+  /** #4796: projeção até o fim do mês no ritmo medido; `null` sem o que projetar. */
+  projecao: number | null;
+  /** #4796: em valor, o realizado veio de leitura paginada e pode ser um piso. */
+  realizado_truncado: boolean;
 }
 
 export type EstadoDaMeta = "carregando" | "erro" | "vazio" | "ok";
@@ -56,9 +67,26 @@ interface Props {
    * `null` = nada a mostrar (resposta antiga ou leitura ainda sem o bloco).
    */
   valores?: ValoresDoPeriodo | null;
+  /** #4796: nome de exibição de cada vendedor com meta (ausente = rótulo genérico). */
+  nomes?: Readonly<Record<string, string>>;
 }
 
-export function MetaDoMesPanel({ estado, periodo, metas, podeConfigurar, valores }: Props) {
+/** Número da meta na UNIDADE do indicador: reais em valor, contagem em quantidade. */
+function numeroDaMeta(meta: MetaDaEmpresa, valor: number): string {
+  if (meta.indicador === "valor_vendido") {
+    return formatValorDoNegocio(valor, meta.moeda ?? MOEDA_PADRAO);
+  }
+  return String(valor);
+}
+
+export function MetaDoMesPanel({
+  estado,
+  periodo,
+  metas,
+  podeConfigurar,
+  valores,
+  nomes,
+}: Props) {
   const t = useT();
   const mes = mesLegivel(periodo);
 
@@ -113,9 +141,13 @@ export function MetaDoMesPanel({ estado, periodo, metas, podeConfigurar, valores
       {estado === "ok" ? (
         <div className="grid gap-x-10 gap-y-6 md:grid-cols-2">
           {metas.map((m) => (
-            <div key={m.id} className="flex min-w-0 flex-col gap-2">
+            <div key={m.id} className="flex min-w-0 flex-col gap-2" data-meta={m.indicador}>
               <p className="truncate text-xs text-text-muted">
-                {m.escopo === "funil" ? (m.pipeline_nome ?? t("Funil")) : t("Empresa")}
+                {m.escopo === "vendedor"
+                  ? (nomes?.[m.vendedor_id ?? ""] ?? t("Vendedor"))
+                  : m.escopo === "funil"
+                    ? (m.pipeline_nome ?? t("Funil"))
+                    : t("Empresa (total)")}
               </p>
               <p className="flex items-baseline gap-2">
                 <span
@@ -126,7 +158,6 @@ export function MetaDoMesPanel({ estado, periodo, metas, podeConfigurar, valores
                 </span>
                 <span className="text-sm text-text-muted">{t("da meta")}</span>
               </p>
-
               <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-elevated">
                 <div
                   data-meta="barra"
@@ -140,13 +171,13 @@ export function MetaDoMesPanel({ estado, periodo, metas, podeConfigurar, valores
               <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs text-text-muted">
                 <span>
                   <span className="font-medium text-text tabular-nums" data-meta="realizado">
-                    {m.realizado}
+                    {numeroDaMeta(m, m.realizado)}
                   </span>{" "}
                   {t("de")}{" "}
                   <span className="font-medium text-text tabular-nums" data-meta="alvo">
-                    {m.alvo}
+                    {numeroDaMeta(m, m.alvo)}
                   </span>{" "}
-                  {t("Vendas ganhas")}
+                  {m.indicador === "valor_vendido" ? t("vendidos") : t("Vendas ganhas")}
                 </span>
                 <span>
                   {m.atingida ? (
@@ -155,13 +186,32 @@ export function MetaDoMesPanel({ estado, periodo, metas, podeConfigurar, valores
                     <>
                       {t("Faltam")}{" "}
                       <span className="font-medium text-text tabular-nums" data-meta="falta">
-                        {m.falta}
+                        {numeroDaMeta(m, m.falta)}
                       </span>{" "}
                       {t("para a meta")}
                     </>
                   )}
                 </span>
               </div>
+
+              {/* A projeção até o fim do mês (#4796) usa o MESMO cálculo para
+                  os dois indicadores: quantidade projetada em vendas, valor
+                  projetado na moeda da organização. */}
+              {m.projecao !== null ? (
+                <p className="text-xs text-text-muted">
+                  {t("No ritmo atual, o mês fecha em")}{" "}
+                  <span className="font-medium text-text tabular-nums" data-meta="projecao">
+                    {numeroDaMeta(m, m.projecao)}
+                  </span>
+                  .
+                </p>
+              ) : null}
+
+              {m.realizado_truncado ? (
+                <p className="text-xs text-text-subtle" data-meta="piso">
+                  {t("Leitura parcial: o realizado em valor soma o que foi lido no período.")}
+                </p>
+              ) : null}
             </div>
           ))}
         </div>

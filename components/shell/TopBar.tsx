@@ -10,6 +10,7 @@ import { MobileSidebar } from "./MobileSidebar";
 import { TenantSwitcher } from "./TenantSwitcher";
 import { UserMenu } from "./UserMenu";
 import { SearchTrigger } from "./SearchTrigger";
+import { BotaoDoPainelDoModulo, PainelDoModuloProvider } from "@/components/modulo/PainelDoModulo";
 
 /**
  * Onde a pessoa está: "Grupo › Tela", tirado do MESMO catálogo que desenha o
@@ -42,22 +43,25 @@ function Trilha() {
 
 export function TopBar() {
   return (
-    <header className="sticky top-[var(--faixas-de-cima,0px)] z-20 flex h-14 items-center justify-between gap-2 border-b bg-background px-3 md:gap-4 md:bg-surface md:px-4" data-casca="topo">
-      <div className="flex min-w-0 items-center gap-3">
-        <MobileSidebar />
-        <TenantSwitcher />
-        <Trilha />
-        {/* A fila mora NA barra, depois da trilha, e não numa faixa acima: a
-            altura do topo (3.5rem) é contrato de cinco telas que calculam a
-            própria altura, e uma linha a mais deslocaria todas. */}
-        <FaixaDaFila />
-      </div>
-      <div className="flex shrink-0 items-center gap-2">
-        <SearchTrigger />
-        <AlertsBell />
-        <AvisoDePropostaEmDestaque />
-        <UserMenu />
-      </div>
-    </header>
+    <PainelDoModuloProvider>
+      <header className="sticky top-[var(--faixas-de-cima,0px)] z-20 flex h-14 items-center justify-between gap-2 border-b bg-background px-3 md:gap-4 md:bg-surface md:px-4" data-casca="topo">
+        <div className="flex min-w-0 items-center gap-3">
+          <MobileSidebar />
+          <TenantSwitcher />
+          <Trilha />
+          {/* A fila mora NA barra, depois da trilha, e não numa faixa acima: a
+              altura do topo (3.5rem) é contrato de cinco telas que calculam a
+              própria altura, e uma linha a mais deslocaria todas. */}
+          <FaixaDaFila />
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <SearchTrigger />
+          <BotaoDoPainelDoModulo />
+          <AlertsBell />
+          <AvisoDePropostaEmDestaque />
+          <UserMenu />
+        </div>
+      </header>
+    </PainelDoModuloProvider>
   );
 }
