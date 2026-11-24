@@ -149,6 +149,7 @@ const ACOES = [
   { id: "acao-ver-contato", rotulo: "Ver contato" },
   { id: "acao-chamar", rotulo: "Chamar" },
   { id: "acao-reservar-servico", rotulo: "Reservar serviço" },
+  { id: "acao-orcamento", rotulo: "Orçamento" },
   { id: "btn-videochamada", rotulo: "Vídeo" },
   { id: "convidar-participante", rotulo: "Convidar" },
   { id: "pausar-o-automatico", rotulo: "Pausar o automático" },
@@ -275,7 +276,32 @@ const PESSOAL: Cenario = {
   ],
 };
 
-const CENARIOS = [FILA, MINHA_TRAVADA, COM_DONO_AUTO_DE_PE, ENCERRADA, PESSOAL];
+/**
+ * ORÇAMENTO (fase 2, item 2.1): o item só existe com a capacidade `propostas`
+ * ligada — sem ela as rotas de proposta são 404, e o menu não oferece o que a
+ * rota recusa. Nos outros cenários a capacidade está desligada e o item some.
+ */
+const COM_PROPOSTAS: Cenario = {
+  nome: "fila com propostas ligadas — o Orçamento entra no menu",
+  auth: {
+    user: { id: "u1", support: null, is_platform_admin: true },
+    activeOrg: { orgId: "org-1", role: "agent", capacidades_ligadas: ["propostas"] },
+  },
+  visiveis: ["buscar-na-conversa", "acao-assumir", "acao-transferir", "acao-fechar"],
+  noMenu: [
+    "acao-ver-contato",
+    "acao-chamar",
+    "acao-reservar-servico",
+    "acao-orcamento",
+    "btn-videochamada",
+    "convidar-participante",
+    "acao-lembrar",
+    "acao-arquivar",
+    "marcar-pessoal",
+  ],
+};
+
+const CENARIOS = [FILA, MINHA_TRAVADA, COM_DONO_AUTO_DE_PE, ENCERRADA, PESSOAL, COM_PROPOSTAS];
 
 function montar(cenario: Cenario, abrirMenu = true) {
   // `activeOrg` existe porque `ReservarServicoNaConversa` exige papel de

@@ -4935,8 +4935,10 @@ export type Database = {
           organization_id: string;
           origem: string;
           preco_cents: number;
+          preco_promocional_cents: number | null;
           quantidade: number;
           updated_at: string;
+          busca_normalizada: string | null;
         };
         ComputedFields: never;
         Insert: {
@@ -4958,8 +4960,10 @@ export type Database = {
           organization_id: string;
           origem?: string;
           preco_cents: number;
+          preco_promocional_cents?: number | null;
           quantidade?: number;
           updated_at?: string;
+          busca_normalizada?: never;
         };
         Update: {
           ativo?: boolean;
@@ -4980,8 +4984,10 @@ export type Database = {
           organization_id?: string;
           origem?: string;
           preco_cents?: number;
+          preco_promocional_cents?: number | null;
           quantidade?: number;
           updated_at?: string;
+          busca_normalizada?: never;
         };
         Relationships: [
           {
@@ -7646,6 +7652,58 @@ export type Database = {
           },
         ];
       };
+      crm_proposal_links: {
+        Row: {
+          created_at: string;
+          criado_por: string | null;
+          expira_em: string;
+          id: string;
+          organization_id: string;
+          proposal_id: string;
+          revogado_em: string | null;
+          token_hash: string;
+          ultimo_acesso_em: string | null;
+        };
+        ComputedFields: never;
+        Insert: {
+          created_at?: string;
+          criado_por?: string | null;
+          expira_em: string;
+          id?: string;
+          organization_id: string;
+          proposal_id: string;
+          revogado_em?: string | null;
+          token_hash: string;
+          ultimo_acesso_em?: string | null;
+        };
+        Update: {
+          created_at?: string;
+          criado_por?: string | null;
+          expira_em?: string;
+          id?: string;
+          organization_id?: string;
+          proposal_id?: string;
+          revogado_em?: string | null;
+          token_hash?: string;
+          ultimo_acesso_em?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "crm_proposal_links_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "crm_proposal_links_proposal_id_fkey";
+            columns: ["proposal_id"];
+            isOneToOne: false;
+            referencedRelation: "crm_proposals";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       crm_proposals: {
         Row: {
           ano: number | null;
@@ -7656,9 +7714,12 @@ export type Database = {
           created_at: string;
           decided_at: string | null;
           decided_by_user_id: string | null;
+          decided_via: string;
           decision_reason: string | null;
+          desconto_cents: number;
           destinatario_nome: string | null;
           drafted_by_agent_id: string | null;
+          frete_cents: number;
           id: string;
           lead_id: string | null;
           message_id: string | null;
@@ -7700,9 +7761,12 @@ export type Database = {
           created_at?: string;
           decided_at?: string | null;
           decided_by_user_id?: string | null;
+          decided_via?: string;
           decision_reason?: string | null;
+          desconto_cents?: number;
           destinatario_nome?: string | null;
           drafted_by_agent_id?: string | null;
+          frete_cents?: number;
           id?: string;
           lead_id?: string | null;
           message_id?: string | null;
@@ -7743,9 +7807,12 @@ export type Database = {
           created_at?: string;
           decided_at?: string | null;
           decided_by_user_id?: string | null;
+          decided_via?: string;
           decision_reason?: string | null;
+          desconto_cents?: number;
           destinatario_nome?: string | null;
           drafted_by_agent_id?: string | null;
+          frete_cents?: number;
           id?: string;
           lead_id?: string | null;
           message_id?: string | null;
@@ -15593,6 +15660,27 @@ export type Database = {
         Returns: Json;
       };
       fn_autonomous_turn_revoked: { Args: { p_job: string; p_org: string }; Returns: boolean };
+      fn_buscar_produtos: {
+        Args: {
+          p_categoria?: string | null;
+          p_limite?: number;
+          p_offset?: number;
+          p_org: string;
+          p_somente_disponiveis?: boolean;
+          p_termo: string;
+        };
+        Returns: Database["public"]["Tables"]["catalog_products"]["Row"][];
+        SetofOptions: {
+          from: "*";
+          to: "catalog_products";
+          isOneToOne: false;
+          isSetofReturn: true;
+        };
+      };
+      fn_categorias_do_catalogo: {
+        Args: { p_org: string };
+        Returns: { categoria: string; quantidade: number }[];
+      };
       fn_buscar_trechos_das_fontes: {
         Args: {
           p_embedding: string;

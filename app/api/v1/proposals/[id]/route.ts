@@ -23,6 +23,9 @@ const patchSchema = z.object({
   valid_until: z.string().date().nullable().optional(),
   prazo_dias_uteis: z.number().int().min(1).max(365).nullable().optional(),
   pagamento: z.string().trim().max(500).nullable().optional(),
+  // 9480 — o desconto e o frete DA PROPOSTA. Ausentes = os gravados ficam.
+  desconto_cents: z.number().int().nonnegative().max(1_000_000_000_00).optional(),
+  frete_cents: z.number().int().nonnegative().max(1_000_000_000_00).optional(),
   itens: z.array(propostaItemSchema),
 });
 
@@ -111,7 +114,7 @@ export async function PATCH(req: NextRequest, ctx: Ctx): Promise<Response> {
   // outra organização"), não o 404 do plano, de propósito.
   const { data: propostaAtual } = await supabase
     .from("crm_proposals")
-    .select("moeda")
+    .select("moeda, desconto_cents, frete_cents")
     .eq("organization_id", authz.org.orgId)
     .eq("id", id)
     .maybeSingle();
@@ -123,7 +126,12 @@ export async function PATCH(req: NextRequest, ctx: Ctx): Promise<Response> {
       { requestId },
     );
   }
-  const resolvido = await resolverItensDaProposta(supabase, authz.org.orgId, input.itens, (propostaAtual as { moeda: string }).moeda);
+  const atual = propostaAtual as { moeda: string; desconto_cents?: number | null; frete_cents?: number | null };
+  const ajustes = {
+    desconto_cents: input.desconto_cents ?? Number(atual.desconto_cents ?? 0),
+    frete_cents: input.frete_cents ?? Number(atual.frete_cents ?? 0),
+  };
+  const resolvido = await resolverItensDaProposta(supabase, authz.org.orgId, input.itens, atual.moeda, ajustes);
   if (!resolvido.ok) {
     return fail("validation_failed", t(resolvido.motivo), 422, { requestId });
   }
@@ -135,6 +143,8 @@ export async function PATCH(req: NextRequest, ctx: Ctx): Promise<Response> {
       ...(input.valid_until !== undefined ? { valid_until: input.valid_until } : {}),
       ...(input.prazo_dias_uteis !== undefined ? { prazo_dias_uteis: input.prazo_dias_uteis } : {}),
       ...(input.pagamento !== undefined ? { pagamento: input.pagamento === "" ? null : input.pagamento } : {}),
+      ...(input.desconto_cents !== undefined ? { desconto_cents: input.desconto_cents } : {}),
+      ...(input.frete_cents !== undefined ? { frete_cents: input.frete_cents } : {}),
       total_cents: resolvido.totalCents,
       pricing_status: resolvido.pricingStatus,
       revision: input.revision + 1,

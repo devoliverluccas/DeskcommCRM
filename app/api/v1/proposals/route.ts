@@ -21,6 +21,23 @@ import { createClient } from "@/lib/supabase/server";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { fusoDaOrganizacao, somarDiasNoFuso } from "@/lib/propostas/data-no-fuso";
 import { sePropostasDesligadas } from "@/lib/propostas/porta";
+import { listarModelosDaOrganizacao } from "@/lib/propostas/modelos/catalogo-da-organizacao";
+import { resolverModelo } from "@/lib/propostas/modelos/resolver";
+import { z } from "zod";
+
+/**
+ * O contrato de criação, mais o que o ORÇAMENTO PELA CONVERSA (fase 2, item
+ * 2.1) precisa: o desconto e o frete da proposta (9480), a conversa de onde
+ * ele saiu (o envio prefere ESSA conversa — D5) e o modelo do documento (sem
+ * modelo confirmado não há envio — C1). Tudo opcional: quem cria como antes
+ * cria igual.
+ */
+const criacaoSchema = propostaCreateSchema.extend({
+  desconto_cents: z.number().int().nonnegative().max(1_000_000_000_00).optional(),
+  frete_cents: z.number().int().nonnegative().max(1_000_000_000_00).optional(),
+  conversation_id: z.string().uuid().optional(),
+  template_slug: z.string().min(1).max(100).optional(),
+});
 
 export const dynamic = "force-dynamic";
 
@@ -34,9 +51,14 @@ export async function GET(req: NextRequest): Promise<Response> {
   const supabase = await createClient();
   const status = req.nextUrl.searchParams.get("status");
   const leadId = req.nextUrl.searchParams.get("lead_id");
+  // A lista "Orçamentos" do painel do Inbox (9480): as propostas DO CONTATO.
+  const contactId = req.nextUrl.searchParams.get("contact_id");
+  if (contactId !== null && !z.string().uuid().safeParse(contactId).success) {
+    return fail("validation_failed", traduzir("Campos inválidos.", authz.user.idioma), 422, { requestId });
+  }
   let q = supabase
     .from("crm_proposals")
-    .select("id, lead_id, titulo, status, total_cents, moeda, numero, ano, versao, valid_until, created_at, drafted_by_agent_id")
+    .select("id, lead_id, contact_id, titulo, status, total_cents, desconto_cents, frete_cents, moeda, numero, ano, versao, valid_until, created_at, sent_at, decided_at, decided_via, drafted_by_agent_id")
     .eq("organization_id", authz.org.orgId)
     .order("created_at", { ascending: false })
     .limit(500);
@@ -44,6 +66,7 @@ export async function GET(req: NextRequest): Promise<Response> {
   // D10: a tela de excluir negócio consulta este filtro para avisar quando
   // há proposta enviada antes de apagar (KanbanCardActions / BulkActionBar).
   if (leadId) q = q.eq("lead_id", leadId);
+  if (contactId) q = q.eq("contact_id", contactId);
 
   const { data, error } = await q;
   if (error) return fail("internal_error", "Falha ao listar propostas.", 500, { requestId });
@@ -65,7 +88,7 @@ export async function POST(req: NextRequest): Promise<Response> {
   if (desligada) return desligada;
   const t = (texto: string) => traduzir(texto, authz.user.idioma);
 
-  const parsed = propostaCreateSchema.safeParse(await req.json().catch(() => null));
+  const parsed = criacaoSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
     return fail("validation_failed", t("Campos inválidos."), 422, { requestId, details: parsed.error.flatten() });
   }
@@ -114,10 +137,40 @@ export async function POST(req: NextRequest): Promise<Response> {
     );
   }
 
+  // A conversa de onde o orçamento saiu: só vale se for DESTE contato e desta
+  // organização — o envio confere de novo (`.eq("contact_id", …)`), mas uma
+  // referência errada não deve nem ser gravada.
+  if (input.conversation_id) {
+    const { data: conversa } = await supabase
+      .from("conversations")
+      .select("id")
+      .eq("organization_id", authz.org.orgId)
+      .eq("id", input.conversation_id)
+      .eq("contact_id", lead.contact_id)
+      .maybeSingle();
+    if (!conversa) {
+      return fail("validation_failed", t("A conversa não é deste contato."), 422, { requestId });
+    }
+  }
+
+  // O modelo escolhido na criação: só um que a organização oferece (oculto não
+  // entra), resolvido no servidor — slug e versão nunca vêm prontos do corpo.
+  let modelo: { slug: string; version: number } | null = null;
+  if (input.template_slug) {
+    const admin = createAdminClient();
+    const visiveis = (await listarModelosDaOrganizacao(admin, authz.org.orgId)).filter((m) => !m.oculto);
+    const resolvido = visiveis.some((m) => m.slug === input.template_slug)
+      ? await resolverModelo(admin, authz.org.orgId, input.template_slug)
+      : null;
+    if (!resolvido) return fail("validation_failed", t("Modelo não encontrado."), 422, { requestId });
+    modelo = { slug: resolvido.slug, version: resolvido.version };
+  }
+
   // D11 — a proposta nasce na moeda da organização; item de catálogo em
   // moeda diferente é recusado dentro do resolvedor, nunca convertido.
   const moeda = await moedaDaOrganizacao(supabase, authz.org.orgId);
-  const resolvido = await resolverItensDaProposta(supabase, authz.org.orgId, input.itens, moeda);
+  const ajustes = { desconto_cents: input.desconto_cents ?? 0, frete_cents: input.frete_cents ?? 0 };
+  const resolvido = await resolverItensDaProposta(supabase, authz.org.orgId, input.itens, moeda, ajustes);
   if (!resolvido.ok) {
     return fail("validation_failed", t(resolvido.motivo), 422, { requestId });
   }
@@ -145,6 +198,10 @@ export async function POST(req: NextRequest): Promise<Response> {
       pricing_status: resolvido.pricingStatus,
       moeda,
       status: "rascunho",
+      desconto_cents: ajustes.desconto_cents,
+      frete_cents: ajustes.frete_cents,
+      ...(input.conversation_id ? { conversation_id: input.conversation_id } : {}),
+      ...(modelo ? { template_slug: modelo.slug, template_version: modelo.version } : {}),
     })
     .select("id")
     .single();

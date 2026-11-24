@@ -156,3 +156,21 @@ describe("montarPdfDaProposta", () => {
     expect(mocks.renderDocumentoPdf).not.toHaveBeenCalled();
   });
 });
+
+describe("montarPdfDaProposta — desconto e frete da proposta (9480)", () => {
+  it("leva o desconto e o frete gravados ao PDF (o MESMO arquivo da prévia e do envio)", async () => {
+    const r = await montarPdfDaProposta(
+      montarAdmin() as never,
+      ORG_ID,
+      { ...propostaBase("site_institucional"), desconto_cents: 5000, frete_cents: 1200 },
+      { numero: 1, ano: 2026, t: (x) => x },
+    );
+    expect(r.ok).toBe(true);
+    expect(mocks.renderDocumentoPdf).toHaveBeenCalledWith(expect.objectContaining({ descontoCents: 5000, freteCents: 1200 }));
+  });
+
+  it("proposta lida sem as colunas (leitura antiga): zero, nunca NaN", async () => {
+    await montarPdfDaProposta(montarAdmin() as never, ORG_ID, propostaBase("site_institucional"), { numero: 1, ano: 2026, t: (x) => x });
+    expect(mocks.renderDocumentoPdf).toHaveBeenCalledWith(expect.objectContaining({ descontoCents: 0, freteCents: 0 }));
+  });
+});

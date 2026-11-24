@@ -1,7 +1,10 @@
 // lib/propostas/preco-do-catalogo.ts
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { precoVigente } from "@/lib/catalogo/preco";
+
 export interface PrecoDoCatalogo {
+  /** O preço que VALE AGORA: o promocional quando há (`precoVigente`), senão o de venda. */
   preco_cents: number;
   moeda: string;
 }
@@ -20,10 +23,14 @@ export async function buscarPrecoDoCatalogo(
 ): Promise<PrecoDoCatalogo | null> {
   const { data } = await db
     .from("catalog_products")
-    .select("preco_cents, moeda")
+    .select("preco_cents, preco_promocional_cents, moeda")
     .eq("organization_id", organizationId)
     .eq("id", productId)
     .eq("ativo", true)
     .maybeSingle();
-  return data ? (data as PrecoDoCatalogo) : null;
+  if (!data) return null;
+  // A mesma régua do agente e da tela (`lib/catalogo/preco.ts`): o orçamento
+  // cobra o preço que o atendente responde — com promoção, o promocional.
+  const linha = data as { preco_cents: number; preco_promocional_cents?: number | null; moeda: string };
+  return { preco_cents: precoVigente(linha), moeda: linha.moeda };
 }

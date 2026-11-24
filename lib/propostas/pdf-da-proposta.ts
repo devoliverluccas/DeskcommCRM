@@ -30,6 +30,9 @@ export interface PropostaParaPdf extends PropostaParaDocumento {
   titulo: string;
   versao: number;
   condicoes: string | null;
+  /** 9480 — o desconto e o frete DA PROPOSTA; ausentes (leitura antiga) = zero. */
+  desconto_cents?: number | null;
+  frete_cents?: number | null;
 }
 
 export interface OpcoesDoPdfDaProposta {
@@ -170,6 +173,10 @@ export async function montarPdfDaProposta(
     secoes: documento.secoes,
     itens: itensDoPdf,
     totalCents: proposta.total_cents,
+    // As linhas de desconto e frete só aparecem quando há valor (o PDF de quem
+    // não usa os dois fica idêntico ao de antes da 9480).
+    descontoCents: Number(proposta.desconto_cents ?? 0),
+    freteCents: Number(proposta.frete_cents ?? 0),
     moeda: proposta.moeda,
     validUntil: proposta.valid_until,
     condicoes: proposta.condicoes,

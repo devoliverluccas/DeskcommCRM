@@ -29,14 +29,27 @@ import { modoDeReabertura, recusaReabertura } from "@/lib/leads/reabertura";
 import { ocultarProvaMetaNaResposta } from "@/lib/leads/prova-meta-lead-submitted";
 import {
   camposComAnexo,
+  ehRequisito,
   recusaDeCamposObrigatorios,
   recusaDeMotivoDoGanho,
   settingsDoFunil,
   validaCamposExigidos,
+  type CampoFaltando,
 } from "@/lib/leads/campos-exigidos";
+import { ROTULO_DO_REQUISITO, permiteMoverMesmoAssim } from "@/lib/leads/requisitos-da-etapa";
+import type { TipoDeRequisitoDaEtapa } from "@/lib/schemas/settings";
+import { roleAtLeast } from "@/lib/auth/types";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { z } from "zod";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * "MOVER MESMO ASSIM" (item 2.3) — só nesta rota, que é o arrasto de uma pessoa.
+ * O `moveLeadSchema` compartilhado não ganha a chave: o lote, a IA e o MCP não
+ * forçam, e um campo que eles aceitassem e ignorassem seria promessa falsa.
+ */
+const moveComForcarSchema = moveLeadSchema.extend({ forcar: z.boolean().optional() });
 
 export async function POST(
   req: NextRequest,
@@ -57,7 +70,7 @@ export async function POST(
 
   let input;
   try {
-    input = await validateRequest(moveLeadSchema, req);
+    input = await validateRequest(moveComForcarSchema, req);
   } catch (err) {
     if (err instanceof ApiError) {
       return fail(err.code, err.message, err.status, {
@@ -163,7 +176,10 @@ export async function POST(
     : validaCamposExigidos({
         lead: lead as Record<string, unknown>,
         settingsDoFunil: settings,
-        camposComAnexo: await camposComAnexo(supabase, settings, lead.organization_id, lead.id),
+        camposComAnexo: await camposComAnexo(supabase, settings, lead.organization_id, lead.id, {
+          stageId: stage.id,
+          contactId: (lead as { contact_id?: string | null }).contact_id ?? null,
+        }),
         destino: {
           stageId: stage.id,
           desfecho: stage.is_won ? "won" : stage.is_lost ? "lost" : null,
@@ -171,13 +187,40 @@ export async function POST(
         motivoDeGanho: input.won_reason ?? null,
         customFieldsPropostos: input.custom_fields ?? null,
       });
-  if (vereditoDeCampos.faltando.length > 0) {
-    const recusa = recusaDeCamposObrigatorios(vereditoDeCampos.faltando, user.idioma);
+
+  // ── "MOVER MESMO ASSIM" (item 2.3) ──────────────────────────────────────────
+  //
+  // Pula SÓ os requisitos da etapa (orçamento, agenda, tarefa), e só quando as
+  // duas chaves concordam: o funil ligou `permitir_mover_mesmo_assim` e quem
+  // arrasta é manager+ (o papel já resolvido por `requireRole`, lido com
+  // `roleAtLeast`). Campo obrigatório e motivo de ganho/perda NUNCA são pulados:
+  // eles são dado do negócio, e forçar não os inventa. Sem o campo, a recusa
+  // devolve a lista inteira — o diálogo pede o campo e oferece forçar o resto.
+  const podeForcar =
+    permiteMoverMesmoAssim(settings) &&
+    // `?.`: dublês de `requireRole` em teste nem sempre trazem a org.
+    roleAtLeast((authz.org as { role?: string } | undefined)?.role, "manager");
+  const requisitosFaltando = vereditoDeCampos.faltando.filter(ehRequisito);
+  const camposFaltando = vereditoDeCampos.faltando.filter((item) => !ehRequisito(item));
+  const forcando = input.forcar === true && podeForcar && requisitosFaltando.length > 0;
+  if (camposFaltando.length > 0 || (requisitosFaltando.length > 0 && !forcando)) {
+    const faltando: CampoFaltando[] = podeForcar
+      ? vereditoDeCampos.faltando.map((item) =>
+          ehRequisito(item) ? { ...item, pode_forcar: true } : item,
+        )
+      : vereditoDeCampos.faltando;
+    const recusa = recusaDeCamposObrigatorios(faltando, user.idioma);
     return fail(recusa.codigo, recusa.mensagem, 422, {
       requestId,
-      details: { faltando: vereditoDeCampos.faltando },
+      details: {
+        faltando,
+        ...(podeForcar && requisitosFaltando.length > 0 ? { pode_forcar: true } : {}),
+      },
     });
   }
+  const requisitosPulados = forcando
+    ? requisitosFaltando.map((item) => item.chave as TipoDeRequisitoDaEtapa)
+    : [];
 
   // O MOTIVO DE GANHO (issue #1536): vocabulário do funil quando há lista, e
   // obrigatoriedade opt-in (`settings.won_reason_required`) quando o funil pede.
@@ -313,11 +356,20 @@ export async function POST(
     sourceModule: "crm",
     sourceId: leadId,
     actor: { type: "user", id: user.id },
-    reason: stageChangeReason(fromStage?.name ?? null, stage.name),
+    // Forçado, a MESMA linha da timeline diz o que foi pulado — quem abrir o
+    // negócio depois vê que ele entrou sem o orçamento, e não precisa do painel
+    // de auditoria para descobrir.
+    reason:
+      requisitosPulados.length > 0
+        ? `${stageChangeReason(fromStage?.name ?? null, stage.name)}. ${t(
+            "Movido mesmo assim, sem: {itens}.",
+          ).replace("{itens}", requisitosPulados.map((tipo) => t(ROTULO_DO_REQUISITO[tipo])).join(", "))}`
+        : stageChangeReason(fromStage?.name ?? null, stage.name),
     payload: {
       from_stage_id: lead.stage_id,
       to_stage_id: input.stage_id,
       pipeline_id: lead.pipeline_id,
+      ...(requisitosPulados.length > 0 ? { requisitos_pulados: requisitosPulados } : {}),
     },
   });
   if (!atividade.ok) {
@@ -378,6 +430,22 @@ export async function POST(
       position_in_stage: position,
     },
   });
+
+  if (requisitosPulados.length > 0) {
+    await audit({
+      action: "lead.stage_gate_overridden",
+      actorUserId: user.id,
+      organizationId: lead.organization_id,
+      resourceType: "crm_lead",
+      resourceId: leadId,
+      requestId,
+      metadata: {
+        from_stage_id: lead.stage_id,
+        to_stage_id: input.stage_id,
+        requisitos_pulados: requisitosPulados,
+      },
+    });
+  }
 
   return ok(ocultarProvaMetaNaResposta(finalLead as Record<string, unknown>), { requestId });
 }

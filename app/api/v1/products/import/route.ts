@@ -51,7 +51,8 @@ import { apagarDoBucket } from "@/lib/catalogo/fotos-no-bucket";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { CSV_MAX_BYTES, CSV_MAX_DATA_ROWS, decodificarCsv } from "@/lib/contacts/csv";
 import { capacidadesDaOrganizacao } from "@/lib/organizacao/capacidades";
-import { COLUNAS_DO_PRODUTO } from "@/lib/schemas/produtos";
+import { violouAPromocao } from "@/lib/catalogo/preco";
+import { COLUNAS_DO_PRODUTO, PROMOCAO_ACIMA_DO_PRECO } from "@/lib/schemas/produtos";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -335,7 +336,11 @@ export async function POST(req: NextRequest): Promise<Response> {
       for (const produto of lote) {
         const { error: individual } = await enviar([semALinha(produto)]);
         if (individual) {
-          erros.push({ linha: produto.linha, motivo: `"${produto.nome}": ${individual.message}` });
+          // Preço novo abaixo da promoção que o produto já tem: o CHECK da
+          // migration 9481 recusa, e a linha diz o porquê em vez do nome da
+          // constraint. A promoção não é apagada em silêncio — quem decide é a pessoa.
+          const motivo = violouAPromocao(individual) ? t(PROMOCAO_ACIMA_DO_PRECO) : individual.message;
+          erros.push({ linha: produto.linha, motivo: `"${produto.nome}": ${motivo}` });
           continue;
         }
         gravados += 1;

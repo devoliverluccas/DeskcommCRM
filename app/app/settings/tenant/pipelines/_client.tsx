@@ -629,7 +629,11 @@ function CardDoFunil({
               depois se decide o que o assistente faz com ele. Invertido, a
               primeira coisa que o dono da clínica vê é um mapeamento sobre
               colunas de e-commerce que ele nem sabia que dava para trocar. */}
-          <StagesSection pipelineId={pipeline.id} ancoraMapeamento={ancoraDoMapeamento(pipeline.id)} />
+          <StagesSection
+            pipelineId={pipeline.id}
+            ancoraMapeamento={ancoraDoMapeamento(pipeline.id)}
+            {...(podeEditarConfig ? { travas: { settings: pipeline.settings } } : {})}
+          />
           <div className="border-t border-border pt-6">
             <AgentMappingSection pipelineId={pipeline.id} ancoraEtapas={ancoraDasEtapas(pipeline.id)} />
           </div>

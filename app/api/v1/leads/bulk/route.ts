@@ -261,8 +261,14 @@ export async function POST(req: NextRequest): Promise<Response> {
         const veredito = validaCamposExigidos({
           lead: linha as unknown as Record<string, unknown>,
           settingsDoFunil: settingsDaLinha,
-          // ponytail: uma ida ao banco por card, e só em funil com campo de arquivo exigível.
-          camposComAnexo: await camposComAnexo(supabase, settingsDaLinha, organizationId, linha.id),
+          // ponytail: uma ida ao banco por card, e só em funil com campo de arquivo exigível
+          // — mais uma por requisito que a etapa de destino pede (item 2.3; o lote não força).
+          camposComAnexo: await camposComAnexo(supabase, settingsDaLinha, organizationId, linha.id, {
+            stageId: etapaDeDestino.id,
+            ...((linha as { contact_id?: string | null }).contact_id !== undefined
+              ? { contactId: (linha as { contact_id?: string | null }).contact_id ?? null }
+              : {}),
+          }),
           destino: {
             stageId: etapaDeDestino.id,
             desfecho: etapaDeDestino.is_won

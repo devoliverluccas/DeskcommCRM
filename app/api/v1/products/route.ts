@@ -2,6 +2,8 @@ import { requireSupportWrite } from "@/lib/impersonate/support";
 /**
  * GET  /api/v1/products — o catálogo da organização ativa. `?busca=` filtra no
  *      servidor; `?pagina=N` (opcional) devolve 50 por página com `meta.total`.
+ *      `?categoria=` (exata) e `?estoque=1` (só o que dá para vender) são
+ *      opcionais e somam com a busca (migration 9481).
  * POST /api/v1/products — cadastra um produto.
  *
  * `fotos` (lista de URLs, até 5, na ordem da capa) é aceita no corpo: o
@@ -19,9 +21,13 @@ import { type NextRequest } from "next/server";
 import { audit } from "@/lib/audit";
 import { fail, ok } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
+import { z } from "zod";
+
 import {
   FAIXA_ALEM_DO_FIM,
+  FILTRO_COM_ESTOQUE,
   filtroDaBuscaDoCatalogo,
+  filtrosDaUrl,
   intervaloDaPagina,
   paginaPedida,
   PRODUTOS_POR_PAGINA,
@@ -30,11 +36,21 @@ import { moedaDaOrganizacao } from "@/lib/catalogo/moeda-da-org";
 import { guardarFotosPorUrl } from "@/lib/catalogo/fotos-por-url";
 import { apagarDoBucket } from "@/lib/catalogo/fotos-no-bucket";
 import { capacidadesDaOrganizacao } from "@/lib/organizacao/capacidades";
-import { COLUNAS_DO_PRODUTO, produtoCreateSchema } from "@/lib/schemas/produtos";
+import { violouAPromocao } from "@/lib/catalogo/preco";
+import { COLUNAS_DO_PRODUTO, PROMOCAO_ACIMA_DO_PRECO, produtoCreateSchema } from "@/lib/schemas/produtos";
 import { createClient } from "@/lib/supabase/server";
 import { traduzir } from "@/lib/i18n/dicionario";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * Os filtros opcionais da listagem. Ausentes, a resposta é a de sempre — o
+ * seletor de produtos da proposta lê esta rota só com `?busca=`.
+ */
+const filtrosDaListagem = z.object({
+  categoria: z.string().trim().max(80).optional(),
+  estoque: z.enum(["0", "1", "true", "false"]).optional(),
+});
 
 export async function GET(req: NextRequest): Promise<Response> {
   const requestId = randomUUID();
@@ -43,6 +59,17 @@ export async function GET(req: NextRequest): Promise<Response> {
 
   const params = req.nextUrl.searchParams;
   const filtro = filtroDaBuscaDoCatalogo(params.get("busca"));
+  const pedidos = filtrosDaListagem.safeParse({
+    categoria: params.get("categoria") ?? undefined,
+    estoque: params.get("estoque") ?? undefined,
+  });
+  if (!pedidos.success) {
+    return fail("validation_failed", traduzir("Dados inválidos.", authz.user.idioma), 422, {
+      requestId,
+      details: pedidos.error.flatten().fieldErrors as Record<string, unknown>,
+    });
+  }
+  const filtros = filtrosDaUrl(pedidos.data);
   // Paginação é OPCIONAL: sem `pagina`, a resposta é a de sempre (até 500
   // linhas, sem `meta`) — o seletor de produtos da proposta lê esta rota assim.
   // `?pagina=` inválido (`0`, `abc`) conta como ausente: responder `meta.pagina:
@@ -71,6 +98,11 @@ export async function GET(req: NextRequest): Promise<Response> {
   // A régua do termo (vírgula, parêntese, `%`, termo só de pontuação) mora em
   // `filtroDaBuscaDoCatalogo` — a mesma que a tela usa.
   if (filtro) q = q.or(filtro);
+  // Categoria e estoque entram em toda consulta desta listagem — a da página e
+  // a da contagem. O estoque vai num `.or()` PRÓPRIO: o PostgREST junta dois
+  // `or` com E (ver FILTRO_COM_ESTOQUE).
+  if (filtros.categoria) q = q.eq("categoria", filtros.categoria);
+  if (filtros.soComEstoque) q = q.or(FILTRO_COM_ESTOQUE);
 
   q = q.order("ativo", { ascending: false }).order("nome").order("id");
   const { data, error, count } = paginado ? await q.range(...intervaloDaPagina(pagina)) : await q.limit(500);
@@ -83,6 +115,8 @@ export async function GET(req: NextRequest): Promise<Response> {
       .select("id", { count: "exact", head: true })
       .eq("organization_id", authz.org.orgId);
     if (filtro) contagem = contagem.or(filtro);
+    if (filtros.categoria) contagem = contagem.eq("categoria", filtros.categoria);
+    if (filtros.soComEstoque) contagem = contagem.or(FILTRO_COM_ESTOQUE);
     const { count: agora } = await contagem;
     return ok([], {
       requestId,
@@ -189,6 +223,12 @@ export async function POST(req: NextRequest): Promise<Response> {
     // nomeia o campo porque quem lê é quem digitou.
     if (error.code === "23505") {
       return fail("conflict", t("Já existe um produto com esse código."), 409, { requestId });
+    }
+    if (violouAPromocao(error)) {
+      return fail("validation_failed", t(PROMOCAO_ACIMA_DO_PRECO), 422, {
+        requestId,
+        details: { preco_promocional_cents: [t(PROMOCAO_ACIMA_DO_PRECO)] },
+      });
     }
     return fail("internal_error", "Erro ao salvar o produto.", 500, { requestId });
   }

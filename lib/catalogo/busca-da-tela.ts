@@ -32,8 +32,12 @@
  * proposta); a tela mostra a lista sem filtro, como se não houvesse busca.
  *
  * A busca da TELA continua sendo substring simples, de propósito: quem opera a
- * loja digita como cadastrou. A busca por token, que tolera "ifone", é a do
- * agente, em `lib/catalogo/busca.ts`, e responde a outra pergunta.
+ * loja digita como cadastrou, e a lista tem contagem exata e páginas. A busca
+ * por token, que tolera "ifone", é a do agente, em `lib/catalogo/busca.ts`.
+ * Desde a migration 9481 a tela usa a do agente quando a substring não acha
+ * nada: em vez de "nenhum produto", mostra os mais parecidos
+ * (`parecidosDaBusca`, na página) — o mesmo `fn_buscar_produtos` e a mesma
+ * pontuação, sem paginar.
  */
 import { buscaValeConsulta, normalizarTermoDeBusca } from "@/lib/inbox/termo-de-busca";
 
@@ -49,7 +53,14 @@ export function filtroDaBuscaDoCatalogo(bruto: string | null | undefined): strin
   const termo = (bruto ?? "").trim();
   if (!buscaValeConsulta(termo)) return null;
   const s = normalizarTermoDeBusca(termo.replace(/[()]/g, " ")).replace(/[\\%_]/g, (m) => `\\${m}`);
-  return ["nome", "codigo", "marca", "categoria"].map((c) => `${c}.ilike.*${s}*`).join(",");
+  const colunas = ["nome", "codigo", "marca", "categoria"].map((c) => `${c}.ilike.*${s}*`);
+  // SEM ACENTO (9481): "sofa" acha "Sofá". A coluna gerada `busca_normalizada`
+  // guarda o texto sem acento e minúsculo; o termo é dobrado do mesmo jeito.
+  // Só ACRESCENTA uma condição ao `or`: tudo que a substring achava continua
+  // achado, e a contagem segue exata.
+  const semAcento = s.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
+  colunas.push(`busca_normalizada.ilike.*${semAcento}*`);
+  return colunas.join(",");
 }
 
 /**
@@ -92,10 +103,64 @@ export function ultimaPagina(total: number, porPagina = PRODUTOS_POR_PAGINA): nu
   return Math.max(1, Math.ceil(total / porPagina));
 }
 
-/** A query string da tela: busca vazia e página 1 ficam de fora. */
-export function queryDaTela(busca: string, pagina: number): string {
+/**
+ * OS FILTROS DA TELA E DA ROTA — categoria e "só com estoque" (migration 9481).
+ *
+ * Moram na URL como a busca: a lista que a pessoa vê é a do servidor, do
+ * catálogo inteiro, e o link copiado abre a mesma lista.
+ */
+export interface FiltrosDoCatalogo {
+  /** Categoria exata (como cadastrada). `null` = todas. */
+  categoria: string | null;
+  /** Só o que dá para vender: sem controle de estoque, ou com quantidade. */
+  soComEstoque: boolean;
+}
+
+export const SEM_FILTROS: FiltrosDoCatalogo = { categoria: null, soComEstoque: false };
+
+/** Mesmo teto do campo no schema do produto: categoria maior que isso não existe. */
+const TETO_DA_CATEGORIA = 80;
+
+/** A categoria pedida, aparada; `null` para ausente, vazia ou maior que o campo. */
+export function categoriaPedida(bruto: string | null | undefined): string | null {
+  const c = (bruto ?? "").trim();
+  return c === "" || c.length > TETO_DA_CATEGORIA ? null : c;
+}
+
+/** `?estoque=1` (ou `true`) liga o filtro; qualquer outra coisa, não. */
+export function soComEstoquePedido(bruto: string | null | undefined): boolean {
+  const v = (bruto ?? "").trim().toLowerCase();
+  return v === "1" || v === "true";
+}
+
+/** Os filtros lidos da URL (tela) ou da query string (rota). */
+export function filtrosDaUrl(params: {
+  categoria?: string | null;
+  estoque?: string | null;
+}): FiltrosDoCatalogo {
+  return { categoria: categoriaPedida(params.categoria), soComEstoque: soComEstoquePedido(params.estoque) };
+}
+
+/**
+ * O filtro `or=` de "só com estoque": a mesma regra da busca do agente
+ * (`controla_estoque` falso conta como disponível — decant, sob encomenda).
+ *
+ * Vai num `.or()` PRÓPRIO, separado do da busca: o PostgREST junta dois
+ * parâmetros `or` com E (medido contra o PostgREST local: `or=(a,b)&or=(b,c)`
+ * devolve só `b`).
+ */
+export const FILTRO_COM_ESTOQUE = "controla_estoque.eq.false,quantidade.gt.0";
+
+/** A query string da tela: busca vazia, página 1 e filtros desligados ficam de fora. */
+export function queryDaTela(
+  busca: string,
+  pagina: number,
+  filtros: FiltrosDoCatalogo = SEM_FILTROS,
+): string {
   const qs = new URLSearchParams();
   if (busca.trim() !== "") qs.set("busca", busca.trim());
+  if (filtros.categoria) qs.set("categoria", filtros.categoria);
+  if (filtros.soComEstoque) qs.set("estoque", "1");
   if (pagina > 1) qs.set("pagina", String(pagina));
   const s = qs.toString();
   return s ? `?${s}` : "";

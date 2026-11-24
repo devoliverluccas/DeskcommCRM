@@ -10,7 +10,7 @@ import { describe, expect, it } from "vitest";
 
 import { extractPdfText } from "@/lib/ai/rag/extractors/pdf";
 
-import { blocosDoDocumento, renderDocumentoPdf, type DocumentoPdfInput } from "./pdf-do-documento";
+import { ajustes, blocosDoDocumento, renderDocumentoPdf, type DocumentoPdfInput } from "./pdf-do-documento";
 
 const secao = (id: string) => ({ id, title: id, body: `corpo ${id}`, faltantes: [] });
 
@@ -78,5 +78,28 @@ describe("renderDocumentoPdf", () => {
     const texto = await extractPdfText(buf);
     expect(texto).not.toContain("Prévia — sem número");
     expect(texto).not.toContain("Proposta 0000");
+  });
+});
+
+describe("desconto e frete da proposta no PDF (9480)", () => {
+  it("sem desconto e sem frete, nenhuma linha nova (o PDF de antes não muda)", () => {
+    expect(ajustes(BASE)).toEqual([]);
+  });
+
+  it("com os dois: subtotal, desconto e frete, nessa ordem", () => {
+    const linhas = ajustes({ ...BASE, descontoCents: 50000, freteCents: 2000 });
+    expect(linhas.map((l) => l.rotulo)).toEqual(["Subtotal", "Desconto", "Frete"]);
+  });
+
+  it("só o frete: subtotal e frete, sem linha de desconto zerada", () => {
+    expect(ajustes({ ...BASE, freteCents: 2000 }).map((l) => l.rotulo)).toEqual(["Subtotal", "Frete"]);
+  });
+
+  it("o PDF escreve as linhas", async () => {
+    const buf = await renderDocumentoPdf({ ...BASE, descontoCents: 50000, freteCents: 2000, totalCents: 302000 });
+    const texto = await extractPdfText(buf);
+    expect(texto).toContain("Desconto");
+    expect(texto).toContain("Frete");
+    expect(texto).toContain("Subtotal");
   });
 });

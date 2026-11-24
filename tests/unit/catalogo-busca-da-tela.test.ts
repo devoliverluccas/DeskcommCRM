@@ -13,13 +13,19 @@ import {
 const condicoes = (f: string | null) => (f ?? "").split(",");
 
 describe("filtroDaBuscaDoCatalogo — o termo digitado, antes de virar filtro", () => {
-  it("procura nas quatro colunas que a tela mostra", () => {
+  it("procura nas quatro colunas que a tela mostra, e na forma sem acento", () => {
     expect(condicoes(filtroDaBuscaDoCatalogo("g17"))).toEqual([
       "nome.ilike.*g17*",
       "codigo.ilike.*g17*",
       "marca.ilike.*g17*",
       "categoria.ilike.*g17*",
+      "busca_normalizada.ilike.*g17*",
     ]);
+  });
+
+  it("sem acento: 'Sofá' digitado ou 'sofa' acham o mesmo produto", () => {
+    expect(condicoes(filtroDaBuscaDoCatalogo("Sofá Retrátil")).at(-1)).toBe("busca_normalizada.ilike.*sofa*retratil*");
+    expect(condicoes(filtroDaBuscaDoCatalogo("sofa")).at(-1)).toBe("busca_normalizada.ilike.*sofa*");
   });
 
   it("espaço vira curinga: 'glock 17' acha 'Glock G17'", () => {
@@ -27,7 +33,7 @@ describe("filtroDaBuscaDoCatalogo — o termo digitado, antes de virar filtro", 
   });
 
   it("vírgula não injeta condição", () => {
-    expect(condicoes(filtroDaBuscaDoCatalogo("pistola,ativo.eq.false"))).toHaveLength(4);
+    expect(condicoes(filtroDaBuscaDoCatalogo("pistola,ativo.eq.false"))).toHaveLength(5);
   });
 
   it("parêntese sem par não derruba o filtro", () => {

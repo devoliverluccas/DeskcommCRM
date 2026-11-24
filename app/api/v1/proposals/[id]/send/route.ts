@@ -22,6 +22,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { sePropostasDesligadas } from "@/lib/propostas/porta";
 import { resolverAvisoDeRevisaoSeProntaOuEncerrada } from "@/lib/propostas/aviso-de-revisao";
+import { criarLinkDaProposta, revogarLink, urlDoLink, type LinkCriado } from "@/lib/propostas/link-publico";
+import { env } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
 type Ctx = { params: Promise<{ id: string }> };
@@ -46,7 +48,10 @@ export async function POST(_req: NextRequest, ctx: Ctx): Promise<Response> {
   if (supportDenied) return supportDenied;
 
   const requestId = randomUUID();
-  const authz = await requireRole("manager", { requestId, resource: "crm_proposals" });
+  // Piso `agent` (decisão do dono, fase 2 — item 2.1): o atendente envia a
+  // proposta cujo preço veio TODO do catálogo. Preço digitado à mão continua
+  // exigindo gestor — a segunda checagem, logo depois de ler a proposta.
+  const authz = await requireRole("agent", { requestId, resource: "crm_proposals" });
   if (!authz.ok) return authz.response;
   const desligada = await sePropostasDesligadas(authz.org.orgId, requestId);
   if (desligada) return desligada;
@@ -92,6 +97,18 @@ export async function POST(_req: NextRequest, ctx: Ctx): Promise<Response> {
       422,
       { requestId },
     );
+  }
+
+  // Quem envia preço que NÃO veio do catálogo (`manual`, ou `approved` de
+  // uma onda futura) é o gestor: o preço à mão é decisão comercial. `catalog`
+  // quer dizer que o servidor resolveu TODO item pelo catálogo
+  // (`resolverItensDaProposta`) — o atendente não escolheu valor nenhum, só
+  // o que oferecer. O desconto e o frete da proposta NÃO mudam
+  // `pricing_status`: são da proposta, e o envio do atendente os leva como
+  // estão (ver o relatório da fase 2).
+  if (proposta.pricing_status !== "catalog") {
+    const gestor = await requireRole("manager", { requestId, resource: "crm_proposals" });
+    if (!gestor.ok) return gestor.response;
   }
 
   // C1 da spec de 27/09 — sem modelo CONFIRMADO não há documento. Antes a
@@ -230,6 +247,10 @@ export async function POST(_req: NextRequest, ctx: Ctx): Promise<Response> {
   let pdfPath: string;
   let signedUrl: string;
   let mensagem: Awaited<ReturnType<typeof sendMessageHandler>>;
+  // O LINK PÚBLICO (9480) — vai junto do PDF, na legenda. Best-effort: sem ele
+  // o cliente ainda recebe o PDF, que é o que o envio sempre entregou; uma
+  // falha ao gravar o link não pode custar o envio inteiro.
+  let link: LinkCriado | null = null;
   try {
     // A montagem do PDF é a MESMA função que a prévia da tela chama
     // (`lib/propostas/pdf-da-proposta.ts`): uma diferença entre o arquivo que
@@ -250,12 +271,32 @@ export async function POST(_req: NextRequest, ctx: Ctx): Promise<Response> {
     pdfPath = salvo.path;
     signedUrl = salvo.signedUrl;
 
+    try {
+      link = await criarLinkDaProposta(admin, {
+        orgId: authz.org.orgId,
+        propostaId: propostaAlvo.id,
+        validUntil: propostaAlvo.valid_until ?? null,
+        criadoPor: authz.user.id,
+      });
+    } catch (erro) {
+      logger.warn("proposal.send: link público não foi criado — o PDF segue sem ele", {
+        organizationId: authz.org.orgId, propostaId: propostaAlvo.id,
+        erro: erro instanceof Error ? erro.message : String(erro),
+      });
+    }
+    const legenda = link
+      ? `${t("Para ver, aceitar ou recusar:")} ${urlDoLink(env.NEXT_PUBLIC_APP_URL, link.token)}`
+      : null;
+
     await espacarEnvio(conversa.channel_session_id);
 
     mensagem = await sendMessageHandler(
       admin,
       { organization_id: authz.org.orgId, actor: { type: "user", id: authz.user.id }, requestId, idioma: authz.user.idioma },
-      { conversation_id: conversa.id, type: "document", media_url: signedUrl, media_mime: "application/pdf" },
+      {
+        conversation_id: conversa.id, type: "document", media_url: signedUrl, media_mime: "application/pdf",
+        ...(legenda ? { body: legenda } : {}),
+      },
     );
 
     // O clique no anexo depois (GET /api/v1/messages/[id]/media) só reaproveita
@@ -271,6 +312,8 @@ export async function POST(_req: NextRequest, ctx: Ctx): Promise<Response> {
       .eq("organization_id", authz.org.orgId)
       .eq("id", mensagem.id);
   } catch (erro) {
+    // O rascunho que volta não deixa link vivo: o próximo envio cria outro.
+    if (link) await revogarLink(admin, authz.org.orgId, link.id).catch(() => undefined);
     const { data: revertida } = await admin
       .from("crm_proposals")
       .update({
@@ -285,6 +328,7 @@ export async function POST(_req: NextRequest, ctx: Ctx): Promise<Response> {
   // ─── Desfecho decidido pelo status DEVOLVIDO pela mensagem, nunca pela
   // ausência de exceção (D3 — "pior do que parece") ───
   if (mensagem.status === "failed") {
+    if (link) await revogarLink(admin, authz.org.orgId, link.id).catch(() => undefined);
     const { data: revertida } = await admin
       .from("crm_proposals")
       .update({

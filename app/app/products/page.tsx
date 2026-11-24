@@ -6,19 +6,23 @@ import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { ROLE_RANK } from "@/lib/auth/types";
 import {
   FAIXA_ALEM_DO_FIM,
+  FILTRO_COM_ESTOQUE,
   filtroDaBuscaDoCatalogo,
+  filtrosDaUrl,
   intervaloDaPagina,
   paginaDaUrl,
   PRODUTOS_POR_PAGINA,
   queryDaTela,
   ultimaPagina,
 } from "@/lib/catalogo/busca-da-tela";
+import { categoriasDoCatalogo, parecidosDaBusca } from "@/lib/catalogo/busca-no-banco";
 import { apresentacaoDoCatalogoLigada } from "@/lib/catalogo/apresentacao-ligada";
 import { BUCKET_DAS_FOTOS, fotoPertenceAoProduto } from "@/lib/catalogo/fotos";
 import { fonteDoFeedNaTela } from "@/lib/catalogo/fonte-do-feed";
 import { tagDeIdioma } from "@/lib/i18n/datas";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { moduloLigado } from "@/lib/instalacao/modulos";
+import { logger } from "@/lib/logger";
 import { capacidadesDaOrganizacao } from "@/lib/organizacao/capacidades";
 import { COLUNAS_DO_PRODUTO, type Produto } from "@/lib/schemas/produtos";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -66,14 +70,20 @@ export default async function ProdutosPage({
   const busca = (parametros.busca ?? "").trim();
   const pagina = paginaDaUrl(parametros.pagina);
   const filtro = filtroDaBuscaDoCatalogo(busca);
+  // Categoria e "só com estoque" (migration 9481): na URL, como a busca.
+  const filtros = filtrosDaUrl({ categoria: parametros.categoria, estoque: parametros.estoque });
 
   const supabase = await createClient();
   const consultaDoCatalogo = (soContar: boolean) => {
-    const q = supabase
+    let q = supabase
       .from("catalog_products")
       .select(soContar ? "id" : COLUNAS_DO_PRODUTO, { count: "exact", head: soContar })
       .eq("organization_id", activeOrg.orgId);
-    return filtro ? q.or(filtro) : q;
+    if (filtro) q = q.or(filtro);
+    if (filtros.categoria) q = q.eq("categoria", filtros.categoria);
+    // `.or()` próprio: o PostgREST junta dois `or` com E (ver FILTRO_COM_ESTOQUE).
+    if (filtros.soComEstoque) q = q.or(FILTRO_COM_ESTOQUE);
+    return q;
   };
 
   let produtos: Produto[] = [];
@@ -95,7 +105,7 @@ export default async function ProdutosPage({
     const alemDoFim = error?.code === FAIXA_ALEM_DO_FIM || (!error && pagina > 1 && (data ?? []).length === 0);
     if (alemDoFim) {
       const agora = error ? (await consultaDoCatalogo(true)).count : count;
-      redirect(`/app/products${queryDaTela(busca, ultimaPagina(agora ?? 0))}`);
+      redirect(`/app/products${queryDaTela(busca, ultimaPagina(agora ?? 0), filtros)}`);
     }
     // Erro do banco não vira "nenhum produto cadastrado": a tela de erro do app
     // diz que algo falhou, em vez de afirmar que o catálogo está vazio.
@@ -104,10 +114,27 @@ export default async function ProdutosPage({
     total = count ?? produtos.length;
   }
 
+  // O texto digitado não está em produto nenhum ("ifone" num catálogo que
+  // escreve "iPhone"): em vez de só "nenhum produto", os mais parecidos, pela
+  // MESMA busca do atendente de IA (`fn_buscar_produtos` + a nota de
+  // `lib/catalogo/busca.ts`). É conforto: se falhar, a tela segue com o vazio.
+  let parecidos: Produto[] = [];
+  if (filtro !== null && total === 0 && pagina === 1) {
+    try {
+      parecidos = await parecidosDaBusca<Produto>(supabase, activeOrg.orgId, busca, filtros, COLUNAS_DO_PRODUTO);
+    } catch (erro) {
+      logger.warn("produtos: parecidos da busca indisponíveis", {
+        organization_id: activeOrg.orgId,
+        detalhe: erro instanceof Error ? erro.message : String(erro),
+      });
+    }
+  }
+  const categorias = await categoriasDoCatalogo(supabase, activeOrg.orgId);
+
   // O bucket é privado: a tela recebe URL assinada de 1 h, montada aqui. Só
   // caminho que é DO produto (ver `fotoPertenceAoProduto`) — a assinatura é
   // por service role, e a linha é gravável pelo PostgREST.
-  const caminhos = produtos.flatMap((p) =>
+  const caminhos = [...produtos, ...parecidos].flatMap((p) =>
     (p.fotos ?? []).filter((c) => fotoPertenceAoProduto(c, activeOrg.orgId, p.id)),
   );
   const urlsDasFotos: Record<string, string> = {};
@@ -156,6 +183,9 @@ export default async function ProdutosPage({
       capacidadeLigada={capacidadeLigada}
       apresentacaoLigada={await apresentacaoDoCatalogoLigada(createAdminClient(), activeOrg.orgId)}
       fonteDoFeed={fonteDoFeed}
+      categorias={categorias}
+      filtros={filtros}
+      parecidos={parecidos}
       textos={{
         titulo: t("Produtos"),
         subtitulo: t(

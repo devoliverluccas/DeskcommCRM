@@ -498,3 +498,27 @@ describe("GET /api/v1/proposals/[id]", () => {
     expect(body.data.itens[0].preco_catalogo_atual_cents).toBeNull();
   });
 });
+
+describe("PATCH /api/v1/proposals/[id] — desconto e frete da proposta (9480)", () => {
+  it("grava desconto e frete e devolve o total já com os dois", async () => {
+    const mundo = montarMundoDeEdicao();
+    const res = await mundo.PATCH({ revision: 1, itens: [item], desconto_cents: 100000, frete_cents: 5000 });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ data: { id: PROPOSAL_ID, revision: 2, total_cents: 700000 - 100000 + 5000 } });
+    expect(mundo.propostaAtualizada).toMatchObject({ desconto_cents: 100000, frete_cents: 5000, total_cents: 605000 });
+  });
+
+  it("omitir desconto e frete mantém os gravados — e o total continua a aplicá-los", async () => {
+    const mundo = montarMundoDeEdicao();
+    await mundo.PATCH({ revision: 1, itens: [item], desconto_cents: 100000, frete_cents: 5000 });
+    const res = await mundo.PATCH({ revision: 2, itens: [item] });
+    expect(res.status).toBe(200);
+    expect(mundo.propostaAtualizada).toMatchObject({ desconto_cents: 100000, frete_cents: 5000, total_cents: 605000 });
+  });
+
+  it("frete negativo: 422", async () => {
+    const mundo = montarMundoDeEdicao();
+    const res = await mundo.PATCH({ revision: 1, itens: [item], frete_cents: -5 });
+    expect(res.status).toBe(422);
+  });
+});

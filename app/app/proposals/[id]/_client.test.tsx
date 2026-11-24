@@ -413,3 +413,47 @@ describe("ProposalEditorClient — Enviar envia o que está NA TELA", () => {
     expect(post).not.toHaveBeenCalled();
   });
 });
+
+describe("ProposalEditorClient — desconto, frete e link do cliente (9480)", () => {
+  const ITEM = { id: "i1", product_id: null, descricao: "Peça", quantidade: 2, preco_unitario_cents: 5000, desconto_cents: 0, position: 1000 };
+
+  it("mostra subtotal, desconto, frete e o total com os dois", async () => {
+    responderProposta({
+      data: { ...PROPOSTA_BASE, status: "rascunho", ultima_falha_envio: null, itens: [ITEM], desconto_cents: 1000, frete_cents: 2500 },
+    });
+    render(<ProposalEditorClient id="p1" podeEditar={true} />);
+    const ajustes = await screen.findByTestId("ajustes-da-proposta");
+    expect(ajustes.textContent).toContain("Desconto");
+    expect(ajustes.textContent).toContain("Frete");
+    expect(screen.getByText(/115,00/)).toBeInTheDocument();
+  });
+
+  it("Salvar leva o desconto e o frete editados no PATCH", async () => {
+    responderProposta({ data: { ...PROPOSTA_BASE, status: "rascunho", ultima_falha_envio: null, itens: [ITEM] } });
+    vi.mocked(apiClient.patch).mockResolvedValue({ data: { id: "p1", revision: 2, total_cents: 9500 } });
+    render(<ProposalEditorClient id="p1" podeEditar={true} />);
+    fireEvent.change(await screen.findByLabelText("Desconto"), { target: { value: "5" } });
+    fireEvent.change(screen.getByLabelText("Frete"), { target: { value: "0" } });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar" }));
+    await waitFor(() => expect(apiClient.patch).toHaveBeenCalled());
+    expect(vi.mocked(apiClient.patch).mock.calls.at(-1)?.[1]).toMatchObject({ desconto_cents: 500, frete_cents: 0 });
+  });
+
+  it("proposta enviada: 'Copiar link' gera o link e o põe na área de transferência", async () => {
+    responderProposta({ data: { ...PROPOSTA_BASE, status: "enviada", ultima_falha_envio: null, itens: [ITEM] } });
+    vi.mocked(apiClient.post).mockResolvedValue({ data: { url: "https://crm.exemplo.com/o/TOKEN" } });
+    const writeText = vi.fn(async () => undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    render(<ProposalEditorClient id="p1" podeEditar={true} />);
+    fireEvent.click(await screen.findByTestId("copiar-link-da-proposta"));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith("https://crm.exemplo.com/o/TOKEN"));
+    expect(apiClient.post).toHaveBeenCalledWith("/api/v1/proposals/p1/link", {});
+  });
+
+  it("rascunho não oferece 'Copiar link' (não há o que o cliente decidir)", async () => {
+    responderProposta({ data: { ...PROPOSTA_BASE, status: "rascunho", ultima_falha_envio: null, itens: [ITEM] } });
+    render(<ProposalEditorClient id="p1" podeEditar={true} />);
+    await screen.findByDisplayValue("Proposta X");
+    expect(screen.queryByTestId("copiar-link-da-proposta")).toBeNull();
+  });
+});

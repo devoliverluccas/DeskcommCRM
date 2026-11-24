@@ -19,6 +19,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  camposComAnexo,
   recusaDeCamposObrigatorios,
   recusaDeMotivoDoGanho,
   settingsDoFunil,
@@ -437,5 +438,159 @@ describe("campo de escopo contato não entra na régua do negócio (issue #2791)
         destino: { stageId: ETAPA_PROPOSTA },
       }).faltando.map((c) => c.chave),
     ).toEqual(["concorrente"]);
+  });
+});
+
+// ── AS TRAVAS DE ETAPA (fase 2, item 2.3) ─────────────────────────────────────
+//
+// O requisito entra no MESMO `faltando`, com `tipo: "requisito"`. A regra
+// registrada no topo do módulo ("funil sem a régua devolve exatamente o de
+// antes") vale para ele: sem `requisitos_por_etapa`, nem item, nem consulta.
+describe("travas de etapa — requisitos no faltando", () => {
+  const REQUISITOS = {
+    requisitos_por_etapa: {
+      [ETAPA_PROPOSTA]: [{ tipo: "orcamento_vinculado" }, { tipo: "tarefa_concluida" }],
+    },
+  };
+
+  it("funil SEM requisitos_por_etapa: faltando idêntico ao de antes, com ou sem anexos lidos", () => {
+    const lead = { custom_fields: {} };
+    const settings = settingsDeCampo({ obrigatorio_em: { etapas: [ETAPA_PROPOSTA] } });
+    const antes = [{ chave: "concorrente", rotulo: "Concorrente", tipo: "text" }];
+    for (const camposComAnexoLidos of [undefined, new Set<string>()]) {
+      expect(
+        validaCamposExigidos({
+          lead,
+          settingsDoFunil: settings,
+          destino: { stageId: ETAPA_PROPOSTA },
+          camposComAnexo: camposComAnexoLidos,
+        }).faltando,
+      ).toEqual(antes);
+    }
+  });
+
+  it("etapa com requisito e negócio sem ele: entra no faltando depois dos campos", () => {
+    const settings = {
+      ...(settingsDeCampo({ obrigatorio_em: { etapas: [ETAPA_PROPOSTA] } }) as object),
+      ...REQUISITOS,
+    };
+    expect(
+      validaCamposExigidos({
+        lead: { custom_fields: {} },
+        settingsDoFunil: settings,
+        destino: { stageId: ETAPA_PROPOSTA },
+        camposComAnexo: new Set(),
+      }).faltando,
+    ).toEqual([
+      { chave: "concorrente", rotulo: "Concorrente", tipo: "text" },
+      { chave: "orcamento_vinculado", rotulo: "Orçamento vinculado ao negócio", tipo: "requisito" },
+      { chave: "tarefa_concluida", rotulo: "Tarefa concluída", tipo: "requisito" },
+    ]);
+  });
+
+  it("requisito cumprido (marca lida do banco) não entra; outra etapa não cobra", () => {
+    const cumprido = validaCamposExigidos({
+      lead: { custom_fields: {} },
+      settingsDoFunil: REQUISITOS,
+      destino: { stageId: ETAPA_PROPOSTA },
+      camposComAnexo: new Set(["requisito:orcamento_vinculado"]),
+    });
+    expect(cumprido.faltando.map((c) => c.chave)).toEqual(["tarefa_concluida"]);
+    expect(
+      validaCamposExigidos({
+        lead: { custom_fields: {} },
+        settingsDoFunil: REQUISITOS,
+        destino: { stageId: ETAPA_OUTRA },
+        camposComAnexo: new Set(),
+      }).faltando,
+    ).toEqual([]);
+  });
+
+  it("criação (semAnexosAinda) e perda não cobram requisito", () => {
+    expect(
+      validaCamposExigidos({
+        lead: { custom_fields: {} },
+        settingsDoFunil: REQUISITOS,
+        destino: { stageId: ETAPA_PROPOSTA },
+        semAnexosAinda: true,
+      }).faltando,
+    ).toEqual([]);
+    expect(
+      validaCamposExigidos({
+        lead: { custom_fields: {} },
+        settingsDoFunil: REQUISITOS,
+        destino: { stageId: ETAPA_PROPOSTA, desfecho: "lost" },
+        camposComAnexo: new Set(),
+      }).faltando,
+    ).toEqual([]);
+  });
+
+  it("a recusa com requisito não manda 'preencher'; só campos, a frase de sempre", () => {
+    const comRequisito = recusaDeCamposObrigatorios(
+      [{ chave: "orcamento_vinculado", rotulo: "Orçamento vinculado ao negócio", tipo: "requisito" }],
+      "pt-BR",
+    );
+    expect(comRequisito.mensagem).toBe(
+      "Antes de mover para esta etapa, falta: Orçamento vinculado ao negócio.",
+    );
+    const soCampos = recusaDeCamposObrigatorios([{ chave: "c", rotulo: "Concorrente" }], "pt-BR");
+    expect(soCampos.mensagem).toBe(
+      "Preencha os campos obrigatórios antes de continuar: Concorrente.",
+    );
+  });
+});
+
+describe("camposComAnexo — a consulta dos requisitos viaja no mesmo conjunto", () => {
+  const ORG = "22222222-2222-4222-8222-222222222222";
+  const LEAD = "33333333-3333-4333-8333-333333333333";
+
+  function banco(linhas: Record<string, unknown[]>) {
+    const tabelas: string[] = [];
+    const from = (tabela: string) => {
+      tabelas.push(tabela);
+      const chain: Record<string, unknown> = {
+        select: () => chain,
+        eq: () => chain,
+        in: () => chain,
+        order: () => chain,
+        limit: async () => ({ data: linhas[tabela] ?? [], error: null }),
+        maybeSingle: async () => ({ data: (linhas[tabela] ?? [])[0] ?? null, error: null }),
+      };
+      return chain;
+    };
+    return { cliente: { from } as never, tabelas };
+  }
+
+  it("funil sem requisito e sem arquivo: nenhuma consulta (o caminho de sempre)", async () => {
+    const { cliente, tabelas } = banco({});
+    const r = await camposComAnexo(cliente, { fields: [] }, ORG, LEAD, { stageId: ETAPA_PROPOSTA });
+    expect([...r]).toEqual([]);
+    expect(tabelas).toEqual([]);
+  });
+
+  it("com destino, consulta só o que AQUELA etapa pede e marca o cumprido", async () => {
+    const settings = {
+      requisitos_por_etapa: {
+        [ETAPA_PROPOSTA]: [{ tipo: "orcamento_vinculado" }],
+        [ETAPA_OUTRA]: [{ tipo: "tarefa_concluida" }],
+      },
+    };
+    const { cliente, tabelas } = banco({ crm_proposals: [{ id: "p" }] });
+    const r = await camposComAnexo(cliente, settings, ORG, LEAD, { stageId: ETAPA_PROPOSTA });
+    expect([...r]).toEqual(["requisito:orcamento_vinculado"]);
+    expect(tabelas).toEqual(["crm_proposals"]);
+  });
+
+  it("sem destino (caminhos antigos), consulta os tipos de qualquer etapa do funil", async () => {
+    const settings = {
+      requisitos_por_etapa: {
+        [ETAPA_PROPOSTA]: [{ tipo: "orcamento_vinculado" }],
+        [ETAPA_OUTRA]: [{ tipo: "tarefa_concluida" }],
+      },
+    };
+    const { cliente, tabelas } = banco({ crm_tasks: [{ id: "t" }] });
+    const r = await camposComAnexo(cliente, settings, ORG, LEAD);
+    expect([...r]).toEqual(["requisito:tarefa_concluida"]);
+    expect(tabelas.sort()).toEqual(["crm_proposals", "crm_tasks"]);
   });
 });

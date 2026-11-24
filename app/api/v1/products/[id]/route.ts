@@ -17,7 +17,8 @@ import { removeCatalogPresentationAudio } from "@/lib/catalogo/apresentacao-no-b
 import { apagarDoBucket } from "@/lib/catalogo/fotos-no-bucket";
 import { guardarFotosPorUrl } from "@/lib/catalogo/fotos-por-url";
 import { capacidadesDaOrganizacao } from "@/lib/organizacao/capacidades";
-import { COLUNAS_DO_PRODUTO, produtoPatchSchema } from "@/lib/schemas/produtos";
+import { violouAPromocao } from "@/lib/catalogo/preco";
+import { COLUNAS_DO_PRODUTO, PROMOCAO_ACIMA_DO_PRECO, produtoPatchSchema } from "@/lib/schemas/produtos";
 import { createClient } from "@/lib/supabase/server";
 import { traduzir } from "@/lib/i18n/dicionario";
 
@@ -111,6 +112,14 @@ export async function PATCH(
     if (caminhos?.length) await apagarDoBucket(authz.org.orgId, id, caminhos, requestId);
     if (error.code === "23505") {
       return fail("conflict", t("Já existe um produto com esse código."), 409, { requestId });
+    }
+    // O PATCH só de preço não sabe a promoção guardada: quem confere é o CHECK
+    // da migration 9481, e a recusa volta como 422 com o campo nomeado.
+    if (violouAPromocao(error)) {
+      return fail("validation_failed", t(PROMOCAO_ACIMA_DO_PRECO), 422, {
+        requestId,
+        details: { preco_promocional_cents: [t(PROMOCAO_ACIMA_DO_PRECO)] },
+      });
     }
     return fail("internal_error", "Erro ao salvar o produto.", 500, { requestId });
   }

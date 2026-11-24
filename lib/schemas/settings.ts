@@ -404,6 +404,43 @@ export const camposDoFunilPatchSchema = z
     }
   });
 
+/**
+ * AS TRAVAS DE ETAPA (item 2.3 da fase 2) — o que precisa EXISTIR no negócio,
+ * fora dos campos, para ele entrar numa etapa.
+ *
+ * Campo obrigatório (`obrigatorio_em`) pergunta "o card tem este VALOR?";
+ * requisito pergunta "existe esta COISA ligada ao negócio?" — um orçamento
+ * enviado, um agendamento marcado, uma tarefa feita. A decisão é do servidor
+ * (`lib/leads/requisitos-da-etapa.ts`, aplicada por `validaCamposExigidos`);
+ * aqui só se diz o que PODE ser pedido.
+ *
+ * Vocabulário FECHADO, e por isso enum: um tipo novo pede consulta nova no
+ * servidor — não existe requisito declarável só por configuração.
+ */
+export const TIPOS_DE_REQUISITO_DA_ETAPA = [
+  "orcamento_vinculado",
+  "agendamento_marcado",
+  "tarefa_concluida",
+] as const;
+export type TipoDeRequisitoDaEtapa = (typeof TIPOS_DE_REQUISITO_DA_ETAPA)[number];
+
+/** Um requisito: objeto (e não string solta) para caber parâmetro no futuro sem migrar dado. */
+export const requisitoDaEtapaSchema = z.object({ tipo: z.enum(TIPOS_DE_REQUISITO_DA_ETAPA) });
+export type RequisitoDaEtapa = z.infer<typeof requisitoDaEtapaSchema>;
+
+/**
+ * `settings.requisitos_por_etapa` na ESCRITA: `{ [stageId]: [{ tipo }] }`.
+ *
+ * Mora no funil, ao lado de `fields`, porque é o funil quem decide a régua das
+ * etapas dele — e porque assim não há mudança de banco. A LEITURA não usa este
+ * schema: ela é tolerante item a item (`requisitosDaEtapa`), para um valor torto
+ * gravado por script não apagar os requisitos certos da mesma etapa.
+ */
+export const requisitosPorEtapaSchema = z.record(
+  z.string().uuid(),
+  z.array(requisitoDaEtapaSchema).max(TIPOS_DE_REQUISITO_DA_ETAPA.length),
+);
+
 /** Os campos que a retomada de negócio encerrado pode copiar (issue #1538). */
 export const CAMPOS_COPIAVEIS_NA_RETOMADA = [
   "custom_fields",
@@ -486,6 +523,18 @@ export const pipelineConfigPatchSchema = z.object({
   won_reasons: z.array(z.string().min(1).max(80)).max(50).optional(),
   /** Obrigatóriedade do motivo de ganho, opt-in por funil (padrão: não exigir). */
   won_reason_required: z.boolean().optional(),
+  /**
+   * As travas de etapa (ver `requisitosPorEtapaSchema`). AUSENTE é o estado de
+   * todo funil instalado: nenhuma etapa pede nada além dos campos, e o move se
+   * comporta byte a byte como antes. A tela grava o mapa INTEIRO a cada mudança.
+   */
+  requisitos_por_etapa: requisitosPorEtapaSchema.optional(),
+  /**
+   * "Mover mesmo assim": gestor (manager+) pode pular os REQUISITOS da etapa —
+   * nunca os campos obrigatórios nem o motivo de ganho/perda. Ausente ou `false`
+   * é desligado; só o `true` explícito liga.
+   */
+  permitir_mover_mesmo_assim: z.boolean().optional(),
   /**
    * A comanda do ganho, opt-in por funil (CR do PR #2220, #1477). Ausente ou
    * `false` é DESLIGADO — o padrão que a doutrina de extensões exige ("se

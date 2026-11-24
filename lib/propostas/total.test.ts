@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calcularTotal } from "./total";
+import { calcularSubtotal, calcularTotal } from "./total";
 import type { ProposalItemInput } from "./tipos";
 
 function item(over: Partial<ProposalItemInput> = {}): ProposalItemInput {
@@ -44,5 +44,34 @@ describe("calcularTotal", () => {
 
   it("todos os itens sem preço: total zero, sem lançar", () => {
     expect(calcularTotal([item({ preco_unitario_cents: null })])).toBe(0);
+  });
+});
+
+describe("calcularTotal — desconto e frete da proposta (migration 9480)", () => {
+  const itens = [item({ quantidade: 2, preco_unitario_cents: 1000 })]; // 2000
+
+  it("sem ajustes, o total é o de sempre", () => {
+    expect(calcularTotal(itens)).toBe(2000);
+    expect(calcularTotal(itens, {})).toBe(2000);
+  });
+
+  it("o desconto da proposta sai da soma dos itens", () => {
+    expect(calcularTotal(itens, { desconto_cents: 300 })).toBe(1700);
+  });
+
+  it("o frete soma depois do desconto", () => {
+    expect(calcularTotal(itens, { desconto_cents: 300, frete_cents: 1500 })).toBe(3200);
+  });
+
+  it("desconto maior que os itens trava em zero e NÃO come o frete", () => {
+    expect(calcularTotal(itens, { desconto_cents: 99_999, frete_cents: 500 })).toBe(500);
+  });
+
+  it("nulos valem zero", () => {
+    expect(calcularTotal(itens, { desconto_cents: null, frete_cents: null })).toBe(2000);
+  });
+
+  it("calcularSubtotal é a soma dos itens, sem ajustes", () => {
+    expect(calcularSubtotal(itens)).toBe(2000);
   });
 });

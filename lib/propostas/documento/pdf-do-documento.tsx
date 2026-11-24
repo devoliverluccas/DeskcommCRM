@@ -16,6 +16,7 @@ const styles = StyleSheet.create({
   itemImagem: { width: 32, height: 32, objectFit: "cover", marginRight: 8 },
   itemTexto: { flexDirection: "row", alignItems: "center" },
   total: { marginTop: 8, fontSize: 12, fontWeight: 700, textAlign: "right" },
+  ajuste: { marginTop: 4, fontSize: 10, textAlign: "right" },
   footer: { position: "absolute", bottom: 24, left: 32, right: 32, fontSize: 8, color: "#666" },
 });
 
@@ -36,6 +37,9 @@ export interface DocumentoPdfInput {
   secoes: SecaoRenderizada[];
   itens: ItemDoPdf[];
   totalCents: number;
+  /** 9480 — desconto e frete da PROPOSTA. Zero (ou ausente) = a linha não aparece. */
+  descontoCents?: number;
+  freteCents?: number;
   moeda: string;
   validUntil: string | null;
   condicoes: string | null;
@@ -69,6 +73,24 @@ export function blocosDoDocumento(secoes: SecaoRenderizada[]): BlocoDoPdf[] {
   return blocos;
 }
 
+/**
+ * As linhas entre os itens e o total (9480): subtotal, desconto e frete da
+ * proposta — só quando há desconto ou frete. Sem os dois, nada muda no PDF.
+ */
+export function ajustes(d: Pick<DocumentoPdfInput, "itens" | "descontoCents" | "freteCents" | "moeda">): Array<{ rotulo: string; valor: string }> {
+  const desconto = d.descontoCents ?? 0;
+  const frete = d.freteCents ?? 0;
+  if (desconto === 0 && frete === 0) return [];
+  const subtotal = d.itens.reduce(
+    (acc, it) => acc + Math.max(0, Math.round(it.quantidade * it.precoUnitarioCents) - it.descontoCents),
+    0,
+  );
+  const linhas = [{ rotulo: "Subtotal", valor: formatarMoeda(subtotal, d.moeda) }];
+  if (desconto !== 0) linhas.push({ rotulo: "Desconto", valor: `- ${formatarMoeda(desconto, d.moeda)}` });
+  if (frete !== 0) linhas.push({ rotulo: "Frete", valor: formatarMoeda(frete, d.moeda) });
+  return linhas;
+}
+
 function Itens({ d, accent }: { d: DocumentoPdfInput; accent: string | undefined }): React.ReactElement {
   return (
     <View style={{ marginTop: 8 }}>
@@ -82,6 +104,11 @@ function Itens({ d, accent }: { d: DocumentoPdfInput; accent: string | undefined
           </View>
           <Text>{formatarMoeda(it.quantidade * it.precoUnitarioCents - it.descontoCents, d.moeda)}</Text>
         </View>
+      ))}
+      {ajustes(d).map((linha) => (
+        <Text key={linha.rotulo} style={styles.ajuste}>
+          {linha.rotulo}: {linha.valor}
+        </Text>
       ))}
       <Text style={[styles.total, accent ? { color: accent } : {}]}>Total: {formatarMoeda(d.totalCents, d.moeda)}</Text>
     </View>

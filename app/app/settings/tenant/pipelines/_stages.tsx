@@ -35,6 +35,11 @@ import { SeloDeAutoria } from "@/components/operacao/SeloDeAutoria";
 import { useT } from "@/hooks/i18n/useT";
 
 import { mensagemDeErro } from "./_mapping";
+import {
+  PermitirMoverMesmoAssim,
+  RequisitosDaEtapa,
+  useTravasDoFunil,
+} from "./_travas-de-etapa";
 
 /**
  * Onde o dono do negócio transforma o funil que veio de fábrica no funil dele.
@@ -361,12 +366,20 @@ function SugestaoDeTaxa({
 export function StagesSection({
   pipelineId,
   ancoraMapeamento,
+  travas: entradaDasTravas,
 }: {
   pipelineId: string;
   /** Para onde mandar quem precisa desfazer o vínculo de uma etapa com o assistente. */
   ancoraMapeamento: string;
+  /**
+   * As travas de etapa (fase 2, item 2.3) — só para quem administra: a porta de
+   * gravação (`updatePipelineConfig`) é admin. Ausente, a seção é a de sempre.
+   */
+  travas?: { settings: unknown };
 }) {
   const t = useT();
+  // Chamado sempre (regra dos hooks); só RENDERIZA quando `travas` veio.
+  const travasDoFunil = useTravasDoFunil(pipelineId, entradaDasTravas?.settings ?? null);
   const consulta = useAgentMapping(pipelineId);
   const taxas = useTaxasDasEtapas(pipelineId);
   // Confere o FORMATO antes de confiar: esta chave pode receber o corpo de
@@ -505,6 +518,11 @@ export function StagesSection({
             "é onde ele se perde. Cada funil precisa de uma de cada — por isso a marcação se muda de lugar, não se apaga.",
           )}
         </p>
+        {/* Fase 2, item 2.3: a chave do funil fica no topo, antes das etapas que
+            ela afeta — quem marca uma trava abaixo já sabe se gestor passa por cima. */}
+        {entradaDasTravas ? (
+          <PermitirMoverMesmoAssim travas={travasDoFunil} desabilitado={ocupado} />
+        ) : null}
       </div>
 
       {/* ⚠️ O CABEÇALHO NÃO É ENFEITE. Sem ele a linha tem um campo de texto sem
@@ -745,6 +763,18 @@ export function StagesSection({
                 />
                 {t("Avisar a equipe na Central quando um negócio entrar aqui")}
               </label>
+
+              {/* Fase 2, item 2.3. A etapa de PERDA não oferece trava: desistir
+                  nunca depende de ter feito algo antes, e o servidor também não
+                  cobra requisito na perda (`validaCamposExigidos`). */}
+              {entradaDasTravas && !etapa.is_lost ? (
+                <RequisitosDaEtapa
+                  stageId={etapa.id}
+                  nomeDaEtapa={etapa.name}
+                  travas={travasDoFunil}
+                  desabilitado={ocupado}
+                />
+              ) : null}
 
               {passo && (
                 <p className="text-xs text-text-muted" data-testid={`passo-de-${etapa.id}`}>

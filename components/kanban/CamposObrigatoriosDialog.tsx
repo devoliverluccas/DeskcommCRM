@@ -1,6 +1,13 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
+import Link from "next/link";
+import { QueryClientContext, type QueryClient } from "@tanstack/react-query";
 import { useT } from "@/hooks/i18n/useT";
+import { apiClient } from "@/lib/api/client";
+import { showApiError } from "@/components/feedback/ApiErrorToast";
+import { TIPO_DO_ITEM_REQUISITO } from "@/lib/leads/requisitos-da-etapa";
+import type { BoardData } from "@/lib/kanban/types";
+import { Warning } from "@/lib/ui/icons";
 import { useMoedaDaOrgAtiva } from "@/hooks/auth/AuthProvider";
 import { exemploDoCampoDeMoeda, lerCampoDeMoeda } from "@/lib/leads/campo-de-moeda";
 import { MOEDA_PADRAO } from "@/lib/money";
@@ -61,6 +68,45 @@ interface CamposObrigatoriosDialogProps {
 /** `won_reason` NÃO é campo do funil: sai como parâmetro próprio do move. */
 const CHAVE_DO_MOTIVO_DE_GANHO = "won_reason";
 
+/**
+ * O atalho de cada requisito — a porta para RESOLVER o que falta, em vez de só
+ * ler que falta. Exportado para o teste conferir os destinos.
+ */
+export function atalhoDoRequisito(
+  chave: string,
+  leadId: string,
+  t: (texto: string) => string = (texto) => texto,
+): { href: string; rotulo: string } | null {
+  switch (chave) {
+    case "orcamento_vinculado":
+      return {
+        href: `/app/proposals/novo?lead_id=${encodeURIComponent(leadId)}`,
+        rotulo: t("Criar orçamento"),
+      };
+    case "agendamento_marcado":
+      return { href: "/app/agenda", rotulo: t("Agendar") };
+    case "tarefa_concluida":
+      // As tarefas do negócio moram na página inteira dele (bloco de tarefas).
+      return { href: `/app/leads/${encodeURIComponent(leadId)}/pagina`, rotulo: t("Ver tarefas") };
+    default:
+      return null;
+  }
+}
+
+/**
+ * O nome da etapa de destino, lido do quadro que já está em cache — o título
+ * "Para mover para Proposta enviada falta:" sem nova ida à rede. Fora do quadro
+ * (página do negócio, teste sem provider) não há cache e o título fica genérico.
+ */
+function nomeDaEtapaNoCache(queryClient: QueryClient | undefined, stageId: string): string | null {
+  if (!queryClient) return null;
+  for (const [, dados] of queryClient.getQueriesData<BoardData>({ queryKey: ["board"] })) {
+    const etapa = dados?.stages?.find((s) => s.id === stageId);
+    if (etapa?.name) return etapa.name;
+  }
+  return null;
+}
+
 function inputHtmlParaTipo(tipo: string | undefined): string {
   switch (tipo) {
     case "date":
@@ -91,6 +137,11 @@ export function CamposObrigatoriosDialog({
   // O campo de moeda na moeda da organização, não em real fixo.
   const moeda = useMoedaDaOrgAtiva() ?? MOEDA_PADRAO;
   const [valores, setValores] = useState<Record<string, string>>({});
+  const [forcando, setForcando] = useState(false);
+  // `useContext` e não `useQueryClient`: este diálogo também é montado fora de
+  // um provider (testes, telas sem quadro), e lá ele só perde o título com o
+  // nome da etapa e a atualização do quadro — nunca quebra.
+  const queryClient = useContext(QueryClientContext);
 
   // Troca de recusa zera o formulário: um diálogo reaproveitado com os valores
   // do card anterior pediria ao operador para confirmar dados que não são dele.
@@ -100,7 +151,19 @@ export function CamposObrigatoriosDialog({
 
   if (!recusa) return null;
 
-  const campos = recusa.faltando;
+  // As TRAVAS DE ETAPA (item 2.3) chegam na MESMA lista, com `tipo: "requisito"`:
+  // não são input — são coisas que precisam existir (orçamento, agenda, tarefa).
+  // Viram linha com atalho; o formulário continua só com os campos.
+  const requisitos = recusa.faltando.filter((item) => item.tipo === TIPO_DO_ITEM_REQUISITO);
+  const campos = recusa.faltando.filter((item) => item.tipo !== TIPO_DO_ITEM_REQUISITO);
+  // Quem decide se a pessoa logada pode forçar é o servidor (funil + papel); a
+  // tela só obedece à marca que ele pôs no item.
+  // (`RecusaDeCampos` do hook não declara a marca — ela é aditiva no contrato.)
+  const podeForcar = requisitos.some(
+    (item) => (item as { pode_forcar?: unknown }).pode_forcar === true,
+  );
+  const leadId = recusa.args.leadId;
+  const nomeDaEtapa = nomeDaEtapaNoCache(queryClient, recusa.args.stageId);
 
   const valido = campos.every((campo) => {
     if (campo.tipo === "boolean") return true;
@@ -121,8 +184,7 @@ export function CamposObrigatoriosDialog({
     return true;
   });
 
-  const confirmar = () => {
-    if (!valido || isPending) return;
+  const valoresColetados = () => {
     const customFields: Record<string, unknown> = {};
     let wonReason: string | undefined;
     for (const campo of campos) {
@@ -149,20 +211,92 @@ export function CamposObrigatoriosDialog({
       }
       customFields[campo.chave] = valor;
     }
-    onConfirmar({ customFields, ...(wonReason !== undefined ? { wonReason } : {}) });
+    return { customFields, ...(wonReason !== undefined ? { wonReason } : {}) };
   };
+
+  const confirmar = () => {
+    if (!valido || isPending || forcando) return;
+    onConfirmar(valoresColetados());
+  };
+
+  /**
+   * "MOVER MESMO ASSIM" — o diálogo reenvia o move ele mesmo, com `forcar: true`.
+   *
+   * Não passa pelo `onConfirmar` do pai de propósito: o hook do arrasto
+   * (`useMoveCard`) não conhece `forcar`, e ensiná-lo seria abrir a chave para
+   * todo consumidor do hook. Os campos preenchidos aqui vão JUNTO — forçar pula
+   * só os requisitos, e o servidor recusa de novo se faltar campo.
+   */
+  const moverMesmoAssim = async () => {
+    if (!valido || isPending || forcando) return;
+    const { customFields, wonReason } = valoresColetados();
+    const { args } = recusa;
+    setForcando(true);
+    try {
+      await apiClient.post(`/api/v1/leads/${args.leadId}/move`, {
+        stage_id: args.stageId,
+        ...(args.positionInStage !== undefined ? { position_in_stage: args.positionInStage } : {}),
+        expected_updated_at: args.expectedUpdatedAt,
+        ...(Object.keys(customFields).length > 0 ? { custom_fields: customFields } : {}),
+        ...(wonReason !== undefined ? { won_reason: wonReason } : {}),
+        ...(args.lostReason !== undefined ? { lost_reason: args.lostReason } : {}),
+        forcar: true,
+      });
+      await queryClient?.invalidateQueries({ queryKey: ["board"] });
+      onOpenChange(false);
+    } catch (erro) {
+      showApiError(erro);
+    } finally {
+      setForcando(false);
+    }
+  };
+
+  const ocupado = isPending || forcando;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{t("Campos obrigatórios")}</DialogTitle>
+          <DialogTitle>
+            {requisitos.length > 0
+              ? nomeDaEtapa
+                ? t("Para mover para {nome} falta:").replace("{nome}", nomeDaEtapa)
+                : t("Para mover para esta etapa falta:")
+              : t("Campos obrigatórios")}
+          </DialogTitle>
           <DialogDescription>
-            {t(
-              "Este funil exige alguns dados antes de mover o negócio. Preencha o que falta para continuar.",
-            )}
+            {requisitos.length > 0
+              ? t("Resolva o que falta e arraste o negócio de novo.")
+              : t(
+                  "Este funil exige alguns dados antes de mover o negócio. Preencha o que falta para continuar.",
+                )}
           </DialogDescription>
         </DialogHeader>
+
+        {requisitos.length > 0 ? (
+          <ul className="divide-y divide-border border-y border-border" data-testid="requisitos-faltando">
+            {requisitos.map((item) => {
+              const atalho = atalhoDoRequisito(item.chave, leadId, t);
+              return (
+                <li
+                  key={item.chave}
+                  className="flex min-h-11 items-center justify-between gap-3 py-2"
+                  data-testid={`requisito-${item.chave}`}
+                >
+                  <span className="flex items-center gap-2 text-sm text-text">
+                    <Warning size={16} aria-hidden className="shrink-0 text-warning-fg" />
+                    {t(item.rotulo)}
+                  </span>
+                  {atalho ? (
+                    <Button asChild variant="ghost" size="sm">
+                      <Link href={atalho.href}>{atalho.rotulo}</Link>
+                    </Button>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+        ) : null}
 
         <div className="space-y-3">
           {campos.map((campo) => {
@@ -258,12 +392,25 @@ export function CamposObrigatoriosDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={ocupado}>
             {t("Cancelar")}
           </Button>
-          <Button onClick={confirmar} disabled={!valido || isPending}>
-            {isPending ? t("Salvando…") : t("Mover agora")}
-          </Button>
+          {/* Com requisito na lista, "Mover agora" não resolveria nada: o
+              servidor recusaria de novo. A saída é o atalho — ou forçar. */}
+          {requisitos.length === 0 ? (
+            <Button onClick={confirmar} disabled={!valido || ocupado}>
+              {isPending ? t("Salvando…") : t("Mover agora")}
+            </Button>
+          ) : podeForcar ? (
+            <Button
+              variant="outline"
+              onClick={moverMesmoAssim}
+              disabled={!valido || ocupado}
+              data-testid="mover-mesmo-assim"
+            >
+              {forcando ? t("Salvando…") : t("Mover mesmo assim")}
+            </Button>
+          ) : null}
         </DialogFooter>
       </DialogContent>
     </Dialog>

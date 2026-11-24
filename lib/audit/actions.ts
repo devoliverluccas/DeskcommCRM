@@ -950,6 +950,10 @@ export const AUDIT_ACTIONS = [
   "proposal.discarded",
   "proposal.aceita",
   "proposal.recusada",
+  // Link público da proposta (9480) gerado pela tela ("Copiar link"). O token
+  // não entra no metadata — só o id da linha do link. A decisão do CLIENTE
+  // pelo link é `proposal.aceita`/`proposal.recusada` com `decided_via`.
+  "proposal.link_gerado",
   // Cron de vencimento — lote, sem resourceId de uma linha só.
   "proposal.expired_batch",
   // Últimos dois sinais do laço de retorno — cron em lote.
@@ -1644,6 +1648,10 @@ export const AUDIT_ACTIONS = [
   // leva só contagens e a chave do arquivo — nunca preço de linha.
   "tabela_de_valores.criada",
   "tabela_de_valores.importada",
+  // "Mover mesmo assim" (fase 2, item 2.3): um gestor levou o negócio para uma
+  // etapa sem os requisitos dela (orçamento, agendamento, tarefa). Metadata leva
+  // as duas etapas e os tipos pulados; o `lead.moved` da mesma escrita continua.
+  "lead.stage_gate_overridden",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

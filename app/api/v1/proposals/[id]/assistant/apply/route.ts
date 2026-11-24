@@ -43,7 +43,7 @@ export async function POST(req: NextRequest, ctx: Ctx): Promise<Response> {
   // duas vezes) — ja traz lead_id/contact_id que so seriam usados depois.
   const { data: proposta } = await supabase
     .from("crm_proposals")
-    .select("lead_id, contact_id, titulo, condicoes, valid_until, briefing_json, status, revision, moeda")
+    .select("lead_id, contact_id, titulo, condicoes, valid_until, briefing_json, status, revision, moeda, desconto_cents, frete_cents")
     .eq("organization_id", authz.org.orgId)
     .eq("id", id)
     .maybeSingle();
@@ -83,6 +83,12 @@ export async function POST(req: NextRequest, ctx: Ctx): Promise<Response> {
     authz.org.orgId,
     estadoDepois.itens,
     (proposta as { moeda: string }).moeda,
+    // 9480 — o assistente mexe nos itens, não no desconto e no frete da
+    // proposta: os gravados continuam valendo no total.
+    {
+      desconto_cents: Number(proposta.desconto_cents ?? 0),
+      frete_cents: Number(proposta.frete_cents ?? 0),
+    },
   );
   if (!resolvido.ok) {
     return fail("validation_failed", t(resolvido.motivo), 422, { requestId });

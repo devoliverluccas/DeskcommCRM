@@ -353,7 +353,11 @@ export function PipelinePageClient({
           limite curto) + botão na mesma linha sem quebra empurrava o botão pra
           fora da viewport em telas estreitas. De `sm:` pra cima volta a ser
           uma linha só, como sempre foi. */}
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      {/* `flex-wrap` e não linha fixa: o grupo da direita (densidade, cinco
+          visões, ações) é largo, e espremido ao lado do título cortava o nome
+          do funil em 1440 ("CRM Vivo — Clín…"). Agora o título reserva um
+          piso e, quando os dois não cabem, o grupo desce para a linha de baixo. */}
+      <header className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         {/*
           O TÍTULO É O SELETOR. Com um funil só, `h1` puro (nada para trocar);
           com vários, o gatilho do `Select` veste o título e o `h1` real vai
@@ -361,10 +365,10 @@ export function PipelinePageClient({
           o leitor de tela perde o título da página. Trocar zera a query
           string: filtro de um funil aplicado no outro é resultado fantasma.
         */}
-        <div className="flex min-w-0 flex-col gap-0.5 sm:max-w-[60%]">
+        <div className="flex min-w-0 flex-col items-start gap-0.5 sm:min-w-[18rem] sm:flex-1">
           <h1
             className={
-              podeTrocar ? "sr-only" : "min-w-0 truncate text-xl font-semibold tracking-tight"
+              podeTrocar ? "sr-only" : "min-w-0 max-w-full truncate text-xl font-semibold tracking-tight"
             }
           >
             {nomeAtual}
@@ -437,7 +441,7 @@ export function PipelinePageClient({
           (#3172, item 4 do CR), e é o endereço que faz a aba ser alcançável sem
           passar pelo quadro.
         */}
-        <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
+        <div className="flex shrink-0 flex-wrap items-center gap-2 sm:ml-auto sm:justify-end">
           {/* A DENSIDADE DOS CARDS (issue #3461, item 2) mora AO LADO das abas
               da visão, e só no Quadro: é a mesma família de escolha ("como eu
               olho este funil"), mas ela não muda o que se vê — muda quanto cabe.

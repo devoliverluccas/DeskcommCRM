@@ -88,3 +88,20 @@ describe("resolverItensDaProposta", () => {
     expect(r.ok).toBe(true);
   });
 });
+
+describe("resolverItensDaProposta — desconto e frete da proposta (9480)", () => {
+  it("o total devolvido já desconta o desconto e soma o frete", async () => {
+    const db = montarSupabase(1000);
+    const r = await resolverItensDaProposta(db, "org-1", [itemDoCatalogo({ quantidade: 3 })], "BRL", {
+      desconto_cents: 500,
+      frete_cents: 2000,
+    });
+    expect(r.ok && r.totalCents).toBe(3000 - 500 + 2000);
+  });
+
+  it("sem ajustes, o total é a soma dos itens (o contrato de antes)", async () => {
+    const db = montarSupabase(1000);
+    const r = await resolverItensDaProposta(db, "org-1", [itemDoCatalogo({ quantidade: 3 })], "BRL");
+    expect(r.ok && r.totalCents).toBe(3000);
+  });
+});

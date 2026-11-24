@@ -25,7 +25,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { JanelaSelo } from "@/components/inbox/JanelaSelo";
 import { ChannelLogo } from "@/components/inbox/ChannelLogo";
-import { Phone, MagnifyingGlass, DotsThree, Pause, Archive, EyeSlash, UserCircle, UsersThree, Robot, Check, DownloadSimple, CalendarCheck } from "@/lib/ui/icons";
+import { Phone, MagnifyingGlass, DotsThree, Pause, Archive, EyeSlash, UserCircle, UsersThree, Robot, Check, DownloadSimple, CalendarCheck, Receipt } from "@/lib/ui/icons";
+import { OrcamentoDaConversa } from "@/components/inbox/OrcamentoDaConversa";
 import { useAuth } from "@/hooks/auth/AuthProvider";
 import { NovaTarefaDaConversa } from "@/components/inbox/NovaTarefaDaConversa";
 import { useClaimConversation } from "@/hooks/inbox/useClaimConversation";
@@ -177,6 +178,9 @@ export function ConversationHeader({
   // menu, pelo mesmo motivo do convite acima.
   const [filaAberta, setFilaAberta] = useState(false);
   const [tarefaAberta, setTarefaAberta] = useState(false);
+  // O ORÇAMENTO (fase 2, item 2.1): o item do ⋯ só levanta a bandeira; a
+  // gaveta mora fora do menu e só existe aberta (o mesmo desenho da fila).
+  const [orcamentoAberto, setOrcamentoAberto] = useState(false);
   // O menu ⋯ é controlado só para o atalho de "Lembrar" poder abri-lo já com o
   // foco no item (as durações moram no submenu do `SnoozeButton`).
   const [menuAberto, setMenuAberto] = useState(false);
@@ -252,6 +256,14 @@ export function ConversationHeader({
   // Reservar exige papel de atendente (o mesmo gate da rota); grupo não é pessoa.
   const podeReservar =
     !conversation.is_group && !!c?.id && activeOrg != null && ROLE_RANK[activeOrg.role] >= ROLE_RANK.agent;
+  // Orçamento: a capacidade `propostas` ligada (sem ela as rotas são 404) e o
+  // papel de quem CRIA proposta (`POST /proposals` é agent). Grupo não é pessoa.
+  const podeOrcar =
+    !conversation.is_group &&
+    !!c?.id &&
+    activeOrg != null &&
+    ROLE_RANK[activeOrg.role] >= ROLE_RANK.agent &&
+    (activeOrg.capacidades_ligadas ?? []).includes("propostas");
   /**
    * EXPORTAR CONVERSA (#1982, F1) — o MESMO gate da rota, e nada além dele.
    *
@@ -819,6 +831,16 @@ export function ConversationHeader({
               </DropdownMenuItem>
             )}
             {podeReservar && <ItemReservarServico onSelect={() => setReservaAberta(true)} />}
+            {podeOrcar && (
+              <DropdownMenuItem
+                data-testid="acao-orcamento"
+                title={t("Monta um orçamento com os produtos do catálogo e envia ao cliente nesta conversa.")}
+                onSelect={() => setOrcamentoAberto(true)}
+              >
+                <Receipt size={16} aria-hidden className="mr-2" />
+                <span>{t("Orçamento")}</span>
+              </DropdownMenuItem>
+            )}
             {/* Vídeo: sem JITSI_SERVER_URL o componente devolve `null` e o item
                 não existe — o menu não promete o que a instalação não tem. */}
             <VideoCallButton
@@ -1222,6 +1244,15 @@ export function ConversationHeader({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      {orcamentoAberto && c?.id && (
+        <OrcamentoDaConversa
+          aberto
+          onAbertoChange={setOrcamentoAberto}
+          conversationId={conversation.id}
+          contactId={c.id}
+          contactName={displayName}
+        />
+      )}
       {tarefaAberta && c?.id && (
         <NovaTarefaDaConversa
           contactId={c.id}

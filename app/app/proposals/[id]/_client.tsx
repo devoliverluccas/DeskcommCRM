@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 
 import { showApiError } from "@/components/feedback/ApiErrorToast";
 import { Button } from "@/components/ui/button";
@@ -9,6 +10,7 @@ import { apiClient } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/types";
 import type { ApiSuccess } from "@/lib/api/wrappers";
 import { formatCents } from "@/lib/money";
+import { calcularSubtotal, calcularTotal } from "@/lib/propostas/total";
 import type { ProposalStatus } from "@/lib/propostas/tipos";
 import { AssistantPanel } from "./_components/AssistantPanel";
 import { DocumentoCanvas } from "./_components/DocumentoCanvas";
@@ -40,6 +42,9 @@ interface Proposta {
   ultima_falha_envio: string | null;
   /** C1 — modelo CONFIRMADO. Nulo/vazio: a rota de envio recusa com 422. */
   template_slug: string | null;
+  /** 9480 — desconto e frete DA PROPOSTA (além do desconto por item). */
+  desconto_cents?: number;
+  frete_cents?: number;
 }
 
 interface Produto {
@@ -68,6 +73,8 @@ function assinaturaDoRascunho(p: Proposta): string {
     valid_until: p.valid_until,
     prazo_dias_uteis: p.prazo_dias_uteis,
     pagamento: p.pagamento,
+    desconto_cents: p.desconto_cents ?? 0,
+    frete_cents: p.frete_cents ?? 0,
     itens: p.itens.map((it) => [
       it.product_id,
       it.descricao,
@@ -197,11 +204,12 @@ export function ProposalEditorClient({ id, podeEditar, podeRevisar = false }: { 
 
   if (!proposta) return <div className="p-6">{t("Carregando…")}</div>;
 
-  const total = proposta.itens.reduce((acc, it) => {
-    if (it.preco_unitario_cents === null) return acc;
-    const subtotal = Math.round(it.quantidade * it.preco_unitario_cents);
-    return acc + Math.max(0, subtotal - it.desconto_cents);
-  }, 0);
+  // A MESMA conta do servidor (`lib/propostas/total.ts`), com o desconto e o
+  // frete da proposta (9480). O total oficial continua sendo o que a rota grava.
+  const ajustes = { desconto_cents: proposta.desconto_cents ?? 0, frete_cents: proposta.frete_cents ?? 0 };
+  const subtotalDosItens = calcularSubtotal(proposta.itens);
+  const total = calcularTotal(proposta.itens, ajustes);
+  const temAjustes = ajustes.desconto_cents !== 0 || ajustes.frete_cents !== 0;
 
   // N4 — itens de catálogo cujo preço mudou desde que entraram na proposta.
   // Item manual (sem product_id) nunca participa; produto apagado
@@ -287,6 +295,8 @@ export function ProposalEditorClient({ id, podeEditar, podeRevisar = false }: { 
           valid_until: proposta.valid_until,
           prazo_dias_uteis: proposta.prazo_dias_uteis,
           pagamento: proposta.pagamento,
+          desconto_cents: proposta.desconto_cents ?? 0,
+          frete_cents: proposta.frete_cents ?? 0,
           itens,
         },
       );
@@ -406,6 +416,21 @@ export function ProposalEditorClient({ id, podeEditar, podeRevisar = false }: { 
       setErro(t("Não foi possível gerar a prévia agora."));
     } finally {
       setGerandoPrevia(false);
+    }
+  }
+
+  /**
+   * "Copiar link" (9480) — o link público que o cliente abre para ver, aceitar
+   * ou recusar. O banco só guarda o hash do token, então copiar GERA um link
+   * novo (o que foi no WhatsApp continua valendo).
+   */
+  async function copiarLink() {
+    try {
+      const res = await apiClient.post<ApiSuccess<{ url: string }>>(`/api/v1/proposals/${id}/link`, {});
+      await navigator.clipboard.writeText(res.data.url);
+      toast.success(t("Link copiado."));
+    } catch (e) {
+      showApiError(e);
     }
   }
 
@@ -683,6 +708,56 @@ export function ProposalEditorClient({ id, podeEditar, podeRevisar = false }: { 
         </div>
       )}
 
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-2">
+          <label htmlFor="desconto-da-proposta" className="block text-sm font-medium">{t("Desconto")}</label>
+          <input
+            id="desconto-da-proposta"
+            type="number"
+            min="0"
+            step="0.01"
+            className="w-full rounded-md border p-2 text-right text-sm disabled:bg-muted"
+            value={(proposta.desconto_cents ?? 0) / 100}
+            disabled={!editavel}
+            onChange={(e) => setProposta((p) => p && { ...p, desconto_cents: Math.max(0, Math.round(Number(e.target.value) * 100) || 0) })}
+          />
+        </div>
+        <div className="space-y-2">
+          <label htmlFor="frete-da-proposta" className="block text-sm font-medium">{t("Frete")}</label>
+          <input
+            id="frete-da-proposta"
+            type="number"
+            min="0"
+            step="0.01"
+            className="w-full rounded-md border p-2 text-right text-sm disabled:bg-muted"
+            value={(proposta.frete_cents ?? 0) / 100}
+            disabled={!editavel}
+            onChange={(e) => setProposta((p) => p && { ...p, frete_cents: Math.max(0, Math.round(Number(e.target.value) * 100) || 0) })}
+          />
+        </div>
+      </div>
+
+      {temAjustes && (
+        <dl className="space-y-1 px-4 text-sm text-text-muted" data-testid="ajustes-da-proposta">
+          <div className="flex justify-between">
+            <dt>{t("Subtotal")}</dt>
+            <dd className="tabular-nums">{formatCents(subtotalDosItens, proposta.moeda)}</dd>
+          </div>
+          {ajustes.desconto_cents !== 0 && (
+            <div className="flex justify-between">
+              <dt>{t("Desconto")}</dt>
+              <dd className="tabular-nums">− {formatCents(ajustes.desconto_cents, proposta.moeda)}</dd>
+            </div>
+          )}
+          {ajustes.frete_cents !== 0 && (
+            <div className="flex justify-between">
+              <dt>{t("Frete")}</dt>
+              <dd className="tabular-nums">{formatCents(ajustes.frete_cents, proposta.moeda)}</dd>
+            </div>
+          )}
+        </dl>
+      )}
+
       <div className="flex items-center justify-between rounded-lg border bg-muted p-4">
         <div className="text-lg font-semibold">{t("Total")}</div>
         <div className="text-2xl font-bold tabular-nums">{formatCents(total, proposta.moeda)}</div>
@@ -734,6 +809,9 @@ export function ProposalEditorClient({ id, podeEditar, podeRevisar = false }: { 
             }}
           >
             {t("Marcar como recusada")}
+          </Button>
+          <Button variant="outline" onClick={() => void copiarLink()} data-testid="copiar-link-da-proposta">
+            {t("Copiar link")}
           </Button>
           <Button
             variant="outline"

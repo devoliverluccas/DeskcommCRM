@@ -7,6 +7,13 @@ import { PORTAS_DE_TOKEN } from "@/lib/auth/portas-de-token";
 export const PUBLIC_PATHS: RegExp[] = [
   // Link público persistido: org e destino são resolvidos exclusivamente no servidor.
   /^\/api\/v1\/rastreio\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+  // ORÇAMENTO PÚBLICO (migration 9480): quem abre é o CLIENTE FINAL, pelo link
+  // que foi junto do PDF no WhatsApp — nunca teve sessão nossa. A autoridade é o
+  // token (32 bytes, base64url = 43 caracteres; o banco guarda só o SHA-256),
+  // conferido DENTRO da página e da rota de decisão, que resolvem a organização
+  // pela linha do link. Forma exata do token e âncora `$`: só a página e o
+  // `decidir`, nenhum sub-path nasce público de carona.
+  /^\/o\/[A-Za-z0-9_-]{43}(\/decidir)?$/,
   /^\/$/,
   /^\/login(\/.*)?$/,
   /^\/signup$/,

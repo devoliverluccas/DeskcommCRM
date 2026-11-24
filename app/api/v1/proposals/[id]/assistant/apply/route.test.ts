@@ -44,6 +44,9 @@ interface MundoOpts {
   moedaDoCatalogo?: string;
   /** briefing_json já gravado na proposta (M4). Default: null (proposta pré-M1). */
   briefingJson?: Record<string, unknown> | null;
+  /** 9480 — desconto e frete já gravados na proposta. */
+  descontoDaProposta?: number;
+  freteDaProposta?: number;
 }
 
 const PRODUCT_ID = "66666666-6666-4666-8666-666666666666";
@@ -87,6 +90,8 @@ function montarMundoDeAplicar(opts: MundoOpts = {}) {
     status: "rascunho",
     revision: revisionAtual,
     moeda: opts.moedaDaProposta ?? "BRL",
+    desconto_cents: opts.descontoDaProposta ?? 0,
+    frete_cents: opts.freteDaProposta ?? 0,
   };
 
   const itens = opts.itemDeCatalogo
@@ -318,5 +323,19 @@ describe("POST /api/v1/proposals/[id]/assistant/apply", () => {
     });
     expect(res.status).toBe(200);
     expect(mundo.propostaAtualizada).toMatchObject({ briefing_json: { project: { name: "Já preenchido" } } });
+  });
+});
+
+describe("POST /api/v1/proposals/[id]/assistant/apply — desconto e frete (9480)", () => {
+  beforeEach(() => vi.restoreAllMocks());
+
+  it("o assistente muda itens, e o total gravado continua aplicando o desconto e o frete da proposta", async () => {
+    const mundo = montarMundoDeAplicar({ revisionAtual: 1, descontoDaProposta: 20000, freteDaProposta: 5000 });
+    const res = await mundo.POST({
+      revision: 1,
+      mudancas: [{ tipo: "editar_item", item_id: mundo.itemId, campo: "preco_unitario_cents", de: 800000, para: 720000 }],
+    });
+    expect(res.status).toBe(200);
+    expect(mundo.propostaAtualizada?.total_cents).toBe(720000 - 20000 + 5000);
   });
 });

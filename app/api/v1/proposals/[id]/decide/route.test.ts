@@ -204,3 +204,20 @@ describe("POST /api/v1/proposals/[id]/decide", () => {
     expect(mundo.propostaAtualizada).toBeNull();
   });
 });
+
+describe("POST /api/v1/proposals/[id]/decide — a porta da EQUIPE (9480)", () => {
+  it("grava o usuário e não escreve decided_via (a coluna fica 'equipe'; 'cliente' é só do link)", async () => {
+    const mundo = montarMundoDeDecisao({ status: "enviada" });
+    const res = await mundo.POST({ decisao: "aceita" });
+    expect(res.status).toBe(200);
+    expect(mundo.propostaAtualizada).toMatchObject({ status: "aceita", decided_by_user_id: USER_ID });
+    expect(mundo.propostaAtualizada).not.toHaveProperty("decided_via");
+  });
+
+  it("o efeito no negócio mora no caminho compartilhado com o link público", async () => {
+    const { readFileSync } = await import("node:fs");
+    const fonte = readFileSync("app/api/v1/proposals/[id]/decide/route.ts", "utf8");
+    expect(fonte).toMatch(/registrarDecisao\(/);
+    expect(fonte).not.toMatch(/emitLeadActivity\(/);
+  });
+});

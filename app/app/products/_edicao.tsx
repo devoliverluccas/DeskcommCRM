@@ -78,7 +78,7 @@ export function EdicaoDoProduto({
   }
 
   return (
-    <div className="border-t bg-muted/30 p-3" data-testid={`edicao-${produto.codigo}`}>
+    <div className="border-t border-border bg-surface-elevated p-3" data-testid={`edicao-${produto.codigo}`}>
       {somenteLeitura ? (
         <p
           className="mb-3 rounded-md border border-warning bg-warning-bg p-3 text-sm text-warning-fg"
@@ -95,7 +95,7 @@ export function EdicaoDoProduto({
           <input
             value={rascunho.codigo}
             onChange={(e) => setRascunho({ ...rascunho, codigo: e.target.value })}
-            className="mt-1 h-9 w-full rounded-md border px-3"
+            className="mt-1 h-9 min-h-11 w-full rounded-md border border-border bg-surface px-3 lg:min-h-0"
             disabled={desabilitado}
             data-testid="edicao-codigo"
           />
@@ -105,7 +105,7 @@ export function EdicaoDoProduto({
           <input
             value={rascunho.nome}
             onChange={(e) => setRascunho({ ...rascunho, nome: e.target.value })}
-            className="mt-1 h-9 w-full rounded-md border px-3"
+            className="mt-1 h-9 min-h-11 w-full rounded-md border border-border bg-surface px-3 lg:min-h-0"
             disabled={desabilitado}
             data-testid="edicao-nome"
           />
@@ -116,7 +116,7 @@ export function EdicaoDoProduto({
             value={rascunho.descricao}
             onChange={(e) => setRascunho({ ...rascunho, descricao: e.target.value })}
             rows={3}
-            className="mt-1 w-full rounded-md border px-3 py-2 text-sm"
+            className="mt-1 w-full rounded-md border border-border bg-surface px-3 py-2 text-sm"
             disabled={desabilitado}
             data-testid="edicao-descricao"
           />
@@ -126,7 +126,7 @@ export function EdicaoDoProduto({
           <input
             value={rascunho.marca}
             onChange={(e) => setRascunho({ ...rascunho, marca: e.target.value })}
-            className="mt-1 h-9 w-full rounded-md border px-3"
+            className="mt-1 h-9 min-h-11 w-full rounded-md border border-border bg-surface px-3 lg:min-h-0"
             disabled={desabilitado}
             data-testid="edicao-marca"
           />
@@ -136,7 +136,7 @@ export function EdicaoDoProduto({
           <input
             value={rascunho.categoria}
             onChange={(e) => setRascunho({ ...rascunho, categoria: e.target.value })}
-            className="mt-1 h-9 w-full rounded-md border px-3"
+            className="mt-1 h-9 min-h-11 w-full rounded-md border border-border bg-surface px-3 lg:min-h-0"
             disabled={desabilitado}
             data-testid="edicao-categoria"
           />
@@ -149,7 +149,7 @@ export function EdicaoDoProduto({
               onChange={(e) => setRascunho({ ...rascunho, capacidade: e.target.value })}
               placeholder={t("Ex.: 128GB")}
               maxLength={60}
-              className="mt-1 h-9 w-full rounded-md border px-3"
+              className="mt-1 h-9 min-h-11 w-full rounded-md border border-border bg-surface px-3 lg:min-h-0"
               disabled={desabilitado}
               data-testid="edicao-capacidade"
             />
@@ -161,18 +161,33 @@ export function EdicaoDoProduto({
             value={rascunho.preco}
             onChange={(e) => setRascunho({ ...rascunho, preco: e.target.value })}
             placeholder="5.499,00"
-            className="mt-1 h-9 w-full rounded-md border px-3"
+            className="mt-1 h-9 min-h-11 w-full rounded-md border border-border bg-surface px-3 lg:min-h-0"
             disabled={desabilitado}
             data-testid="edicao-preco"
           />
         </label>
         <label className="text-sm">
-          {t("Custo")} <span className="text-muted-foreground">{t("(opcional)")}</span>
+          {t("Preço promocional")} <span className="text-text-muted">{t("(opcional)")}</span>
+          <input
+            value={rascunho.promocional}
+            onChange={(e) => setRascunho({ ...rascunho, promocional: e.target.value })}
+            placeholder="4.999,00"
+            inputMode="decimal"
+            className="mt-1 h-9 min-h-11 w-full rounded-md border border-border bg-surface px-3 lg:min-h-0"
+            disabled={desabilitado}
+            data-testid="edicao-promocional"
+          />
+          <span className="mt-1 block text-xs text-text-muted">
+            {t("Vazio, sem promoção. Com valor, é o preço que o atendente responde e que o orçamento usa.")}
+          </span>
+        </label>
+        <label className="text-sm">
+          {t("Custo")} <span className="text-text-muted">{t("(opcional)")}</span>
           <input
             value={rascunho.custo}
             onChange={(e) => setRascunho({ ...rascunho, custo: e.target.value })}
             placeholder="4.100,00"
-            className="mt-1 h-9 w-full rounded-md border px-3"
+            className="mt-1 h-9 min-h-11 w-full rounded-md border border-border bg-surface px-3 lg:min-h-0"
             disabled={desabilitado}
             data-testid="edicao-custo"
           />
@@ -195,7 +210,7 @@ export function EdicaoDoProduto({
           <input
             value={rascunho.quantidade}
             onChange={(e) => setRascunho({ ...rascunho, quantidade: e.target.value })}
-            className="mt-1 h-9 w-32 rounded-md border px-3"
+            className="mt-1 h-9 min-h-11 w-32 rounded-md border border-border bg-surface px-3 lg:min-h-0"
             disabled={desabilitado}
             data-testid="edicao-quantidade"
           />

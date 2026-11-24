@@ -145,7 +145,7 @@ const fotos = z
     });
   });
 
-export const produtoCreateSchema = z.object({
+const produtoBase = z.object({
   codigo,
   nome,
   descricao: z.string().trim().max(2000).optional(),
@@ -167,12 +167,33 @@ export const produtoCreateSchema = z.object({
   // do `produtoPatchSchema` (que é este `.partial()`), e isso é o certo: a
   // linha guarda a moeda com que nasceu.
   custo_cents: z.number().int().min(0).nullable().optional(),
+  /**
+   * Preço de promoção (migration 9481). Nulo = sem promoção. Quando há, é o
+   * preço que o agente responde e o orçamento usa (`precoVigente`). O banco
+   * recusa promoção que não é MENOR que o preço (CHECK
+   * `catalog_products_promocional_valido`); a criação confere antes, e o PATCH,
+   * que não conhece o preço guardado, recebe o 23514 traduzido pela rota.
+   */
+  preco_promocional_cents: z.number().int().min(0, "preço promocional não pode ser negativo").nullable().optional(),
   controla_estoque: z.boolean().default(true),
   quantidade: z.number().int().min(0).default(0),
   ativo: z.boolean().default(true),
   imagem_url: z.string().trim().url().max(2000).optional(),
   /** As URLs das fotos, na ordem da capa (ver `fotos` acima). */
   fotos: fotos.optional(),
+});
+
+/** A mensagem de quando a promoção não é menor que o preço — rota e tela dizem a mesma. */
+export const PROMOCAO_ACIMA_DO_PRECO = "O preço promocional precisa ser menor que o preço de venda.";
+
+export const produtoCreateSchema = produtoBase.superRefine((p, ctx) => {
+  if (
+    p.preco_promocional_cents !== null &&
+    p.preco_promocional_cents !== undefined &&
+    p.preco_promocional_cents >= p.preco_cents
+  ) {
+    ctx.addIssue({ code: "custom", path: ["preco_promocional_cents"], message: PROMOCAO_ACIMA_DO_PRECO });
+  }
 });
 
 /**
@@ -183,7 +204,9 @@ export const produtoCreateSchema = z.object({
  * `ativo: true`, zerando o estoque e reativando o produto. Os campos com default
  * são redeclarados aqui, sem ele.
  */
-export const produtoPatchSchema = produtoCreateSchema.partial().extend({
+// Do schema BASE: o Zod 4 recusa `.partial()` sobre objeto com refinamento, e
+// a comparação com o preço guardado é do banco no PATCH (ver o campo acima).
+export const produtoPatchSchema = produtoBase.partial().extend({
   controla_estoque: z.boolean().optional(),
   quantidade: z.number().int().min(0).optional(),
   ativo: z.boolean().optional(),
@@ -201,6 +224,8 @@ export interface Produto {
   categoria: string | null;
   capacidade: string | null;
   preco_cents: number;
+  /** Nulo = sem promoção (migration 9481). Opcional no tipo: linha montada antes da coluna. */
+  preco_promocional_cents?: number | null;
   moeda: string;
   custo_cents: number | null;
   controla_estoque: boolean;
@@ -215,5 +240,5 @@ export interface Produto {
 
 /** As colunas que a tela e a rota leem — uma lista, não duas. */
 export const COLUNAS_DO_PRODUTO =
-  "id, codigo, nome, descricao, marca, categoria, capacidade, preco_cents, moeda, custo_cents, " +
+  "id, codigo, nome, descricao, marca, categoria, capacidade, preco_cents, preco_promocional_cents, moeda, custo_cents, " +
   "controla_estoque, quantidade, ativo, origem, imagem_url, fotos, updated_at";

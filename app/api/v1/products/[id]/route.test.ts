@@ -79,3 +79,41 @@ describe("PATCH /api/v1/products/:id — a capacidade obedece à chave da empres
     expect(gravado).toEqual({ capacidade: "256GB" });
   });
 });
+
+describe("PATCH /api/v1/products/:id — preço promocional (migration 9481)", () => {
+  /** O banco recusando a linha pelo CHECK da promoção, como o PostgREST devolve. */
+  function bancoQueRecusaAPromocao() {
+    const consulta = {
+      select: () => consulta,
+      eq: () => consulta,
+      update: (linha: Record<string, unknown>) => {
+        gravado = linha;
+        return consulta;
+      },
+      maybeSingle: async () => ({
+        data: null,
+        error: {
+          code: "23514",
+          message:
+            'new row for relation "catalog_products" violates check constraint "catalog_products_promocional_valido"',
+        },
+      }),
+    };
+    return { from: () => consulta };
+  }
+
+  it("⭐ o preço novo abaixo da promoção guardada vira 422 com o campo nomeado, não 500", async () => {
+    vi.mocked(createClient).mockResolvedValue(bancoQueRecusaAPromocao() as never);
+    const res = await patch({ preco_cents: 100 });
+    const corpo = await res.json();
+
+    expect(res.status).toBe(422);
+    expect(corpo.error.details).toHaveProperty("preco_promocional_cents");
+  });
+
+  it("tirar a promoção é mandar `null`", async () => {
+    vi.mocked(createClient).mockResolvedValue(supabaseCom(false) as never);
+    expect((await patch({ preco_promocional_cents: null })).status).toBe(200);
+    expect(gravado).toEqual({ preco_promocional_cents: null });
+  });
+});

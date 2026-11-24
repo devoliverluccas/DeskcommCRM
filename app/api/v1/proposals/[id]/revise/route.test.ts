@@ -58,6 +58,9 @@ interface MundoOpts {
   templateSnapshot?: Record<string, unknown> | null;
   briefingJson?: Record<string, unknown> | null;
   secoesEditadas?: Record<string, string> | null;
+  /** 9480 — desconto e frete gravados na v1. */
+  descontoDaV1?: number;
+  freteDaV1?: number;
 }
 
 function montarMundoDeRevisao(opts: MundoOpts = {}) {
@@ -93,6 +96,8 @@ function montarMundoDeRevisao(opts: MundoOpts = {}) {
     template_snapshot: opts.templateSnapshot ?? null,
     briefing_json: opts.briefingJson ?? null,
     secoes_editadas: opts.secoesEditadas ?? null,
+    desconto_cents: opts.descontoDaV1 ?? 0,
+    frete_cents: opts.freteDaV1 ?? 0,
   };
   const item = {
     id: "item-1",
@@ -338,6 +343,8 @@ describe("POST /api/v1/proposals/[id]/revise", () => {
       ORG_ID,
       expect.arrayContaining([expect.objectContaining({ product_id: "prod-1", preco_unitario_cents: 500000 })]),
       "BRL",
+      // 9480 — o desconto e o frete da v1 viajam para o total da v2.
+      { desconto_cents: 0, frete_cents: 0 },
     );
     expect(mundo.itensCopiados?.[0]).toMatchObject({ preco_unitario_cents: 700000 });
     expect(mundo.propostaCriada).toMatchObject({ total_cents: 700000, pricing_status: "catalog" });
@@ -361,6 +368,7 @@ describe("POST /api/v1/proposals/[id]/revise", () => {
       ORG_ID,
       expect.anything(),
       "USD",
+      expect.anything(),
     );
   });
 
@@ -369,5 +377,21 @@ describe("POST /api/v1/proposals/[id]/revise", () => {
     const res = await mundo.POST();
     expect(res.status).toBe(403);
     expect(mundo.propostaCriada).toBeNull();
+  });
+});
+
+describe("POST /api/v1/proposals/[id]/revise — desconto e frete (9480)", () => {
+  it("a v2 herda o desconto e o frete da v1, e o resolvedor os recebe para o total", async () => {
+    const mundo = montarMundoDeRevisao({ status: "enviada", descontoDaV1: 10000, freteDaV1: 2500 });
+    const res = await mundo.POST();
+    expect(res.status).toBe(201);
+    expect(mocks.resolverItensDaProposta).toHaveBeenCalledWith(
+      expect.anything(),
+      ORG_ID,
+      expect.anything(),
+      "BRL",
+      { desconto_cents: 10000, frete_cents: 2500 },
+    );
+    expect(mundo.propostaCriada).toMatchObject({ desconto_cents: 10000, frete_cents: 2500 });
   });
 });

@@ -35,3 +35,27 @@ describe("buscarPrecoDoCatalogo", () => {
     expect(r).toEqual({ preco_cents: 5000, moeda: "USD" });
   });
 });
+
+describe("buscarPrecoDoCatalogo — preço promocional (9481)", () => {
+  it("produto em promoção: o preço do item é o PROMOCIONAL", async () => {
+    const db = montarSupabase({ data: { preco_cents: 5000, preco_promocional_cents: 3990, moeda: "BRL" }, error: null });
+    expect(await buscarPrecoDoCatalogo(db, "org-1", "prod-1")).toEqual({ preco_cents: 3990, moeda: "BRL" });
+  });
+
+  it("sem promoção (nula): o preço de venda", async () => {
+    const db = montarSupabase({ data: { preco_cents: 5000, preco_promocional_cents: null, moeda: "BRL" }, error: null });
+    expect(await buscarPrecoDoCatalogo(db, "org-1", "prod-1")).toEqual({ preco_cents: 5000, moeda: "BRL" });
+  });
+
+  it("'promoção' maior que o preço não vale: o preço de venda", async () => {
+    const db = montarSupabase({ data: { preco_cents: 5000, preco_promocional_cents: 6000, moeda: "BRL" }, error: null });
+    expect(await buscarPrecoDoCatalogo(db, "org-1", "prod-1")).toEqual({ preco_cents: 5000, moeda: "BRL" });
+  });
+
+  it("pede a coluna da promoção no mesmo SELECT", async () => {
+    const db = montarSupabase({ data: { preco_cents: 5000, moeda: "BRL" }, error: null });
+    await buscarPrecoDoCatalogo(db, "org-1", "prod-1");
+    const chain = (db as unknown as { chain: { select: { mock: { calls: unknown[][] } } } }).chain;
+    expect(String(chain.select.mock.calls[0]?.[0])).toContain("preco_promocional_cents");
+  });
+});

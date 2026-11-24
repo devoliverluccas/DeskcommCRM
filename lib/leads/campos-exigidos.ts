@@ -40,6 +40,9 @@
  * destino — é a regressão que o critério de aceite nº 3 veda: o comportamento de
  * hoje tem de sobreviver byte a byte. `required: true` (o asterisco antigo)
  * NÃO entra nesta decisão: ele continua significando "destaque no formulário".
+ * O mesmo vale para as TRAVAS DE ETAPA (`settings.requisitos_por_etapa`, item
+ * 2.3): funil sem a chave não ganha item, nem consulta, nem frase nova — ver
+ * `lib/leads/requisitos-da-etapa.ts`.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -47,6 +50,14 @@ import { traduzir } from "@/lib/i18n/dicionario";
 import { IDIOMA_PADRAO, type Idioma } from "@/lib/i18n/idiomas";
 import { camposDoFunil, escopoDoCampo } from "@/lib/leads/campos-do-funil";
 import { logger } from "@/lib/logger";
+import {
+  ROTULO_DO_REQUISITO,
+  TIPO_DO_ITEM_REQUISITO,
+  marcaDoRequisito,
+  requisitosAtendidos,
+  requisitosDaEtapa,
+  requisitosDoFunil,
+} from "@/lib/leads/requisitos-da-etapa";
 import { camposVisiveis } from "@/lib/schemas/mostrar-quando";
 import type { CustomFieldDef } from "@/lib/schemas/settings";
 
@@ -94,8 +105,19 @@ export interface CampoFaltando {
    * dele para renderizar o input certo (uma data pede calendário, um select
    * pede as opções cadastradas). Quem só lê `chave`/`rotulo` não muda nada.
    */
-  tipo?: CustomFieldDef["type"];
+  tipo?: CustomFieldDef["type"] | typeof TIPO_DO_ITEM_REQUISITO;
   opcoes?: { value: string; label: string }[];
+  /**
+   * Só em item `tipo: "requisito"`, e só na resposta do arrasto: quem está
+   * logado pode "mover mesmo assim" (funil permite + manager+). Vai NO ITEM, e
+   * não só em `details`, porque é a lista que chega ao diálogo.
+   */
+  pode_forcar?: boolean;
+}
+
+/** Item de `faltando` que é requisito da etapa (orçamento, agenda, tarefa), não campo. */
+export function ehRequisito(item: CampoFaltando): boolean {
+  return item.tipo === TIPO_DO_ITEM_REQUISITO;
 }
 
 /** O veredito: lista vazia = pode escrever. */
@@ -176,24 +198,49 @@ export async function camposComAnexo(
   settings: unknown,
   organizationId: string,
   leadId: string,
+  /**
+   * AS TRAVAS DE ETAPA (item 2.3): o mesmo conjunto leva `requisito:<tipo>` de
+   * cada requisito que o negócio JÁ cumpre — ver `lib/leads/requisitos-da-etapa.ts`.
+   * Com `stageId`, só os requisitos dessa etapa são consultados; sem ele (os
+   * caminhos que ainda não informam o destino), os de qualquer etapa do funil.
+   * Funil sem requisito não faz consulta nenhuma, informe-se ou não o destino.
+   */
+  opcoes?: { stageId?: string | null; contactId?: string | null },
 ): Promise<ReadonlySet<string>> {
+  const resultado = new Set<string>();
   const exigiveis = camposDoFunil(settingsComoRecord(settings)).some(
     (campo) => campo.type === "file" && campo.obrigatorio_em,
   );
-  if (!exigiveis) return new Set();
-  const { data, error } = await supabase
-    .from("crm_lead_attachments")
-    .select("field_key")
-    .eq("organization_id", organizationId)
-    .eq("lead_id", leadId);
-  if (error) {
-    logger.warn("[campos-exigidos] anexos não lidos; o campo de arquivo conta como vazio", {
-      leadId,
-      erro: error.message,
-    });
-    return new Set();
+  if (exigiveis) {
+    const { data, error } = await supabase
+      .from("crm_lead_attachments")
+      .select("field_key")
+      .eq("organization_id", organizationId)
+      .eq("lead_id", leadId);
+    if (error) {
+      logger.warn("[campos-exigidos] anexos não lidos; o campo de arquivo conta como vazio", {
+        leadId,
+        erro: error.message,
+      });
+    } else {
+      for (const linha of (data ?? []) as { field_key: string }[]) resultado.add(linha.field_key);
+    }
   }
-  return new Set(((data ?? []) as { field_key: string }[]).map((linha) => linha.field_key));
+
+  const tipos =
+    opcoes && "stageId" in opcoes
+      ? requisitosDaEtapa(settings, opcoes.stageId)
+      : requisitosDoFunil(settings);
+  if (tipos.length > 0) {
+    const atendidos = await requisitosAtendidos(supabase, {
+      organizationId,
+      leadId,
+      ...(opcoes && "contactId" in opcoes ? { contactId: opcoes.contactId ?? null } : {}),
+      tipos,
+    });
+    for (const tipo of atendidos) resultado.add(marcaDoRequisito(tipo));
+  }
+  return resultado;
 }
 
 /** O `settings` do funil como record tolerante — lixo vira objeto vazio. */
@@ -307,6 +354,21 @@ export function validaCamposExigidos(entrada: EntradaDeCampos): VereditoDeCampos
     faltando.push({ chave: "won_reason", rotulo: "Motivo do ganho" });
   }
 
+  // AS TRAVAS DE ETAPA (item 2.3) — depois dos campos, para a lista dos campos
+  // sair na ordem de sempre. Três portas de saída, todas explícitas:
+  //   - funil sem `requisitos_por_etapa`: a lista é vazia e nada muda;
+  //   - CRIAÇÃO (`semAnexosAinda`): o orçamento, a tarefa e o compromisso são DO
+  //     negócio, que ainda vai nascer — a mesma razão do arquivo (#3433);
+  //   - PERDA: desistir nunca depende de ter feito alguma coisa antes.
+  // Fora disso, o requisito vale quando o conjunto lido do banco
+  // (`camposComAnexo`) traz a marca dele; sem a leitura, conta como faltando.
+  if (!entrada.semAnexosAinda && entrada.destino.desfecho !== "lost") {
+    for (const tipo of requisitosDaEtapa(settings, entrada.destino.stageId)) {
+      if (entrada.camposComAnexo?.has(marcaDoRequisito(tipo))) continue;
+      faltando.push({ chave: tipo, rotulo: ROTULO_DO_REQUISITO[tipo], tipo: TIPO_DO_ITEM_REQUISITO });
+    }
+  }
+
   return { faltando };
 }
 
@@ -319,18 +381,26 @@ export function recusaDeCamposObrigatorios(
   faltando: CampoFaltando[],
   idioma?: Idioma | null,
 ): { codigo: "required_fields_missing"; mensagem: string } {
-  // Só o rótulo nativo tem tradução; o de campo personalizado é texto do funil.
+  // Só os rótulos nativos têm tradução (motivo do ganho e requisitos de etapa);
+  // o de campo personalizado é texto do funil.
   const nomes = faltando
     .map((c) =>
-      c.chave === "won_reason" ? traduzir("Motivo do ganho", idioma ?? IDIOMA_PADRAO) : c.rotulo,
+      c.chave === "won_reason" || ehRequisito(c)
+        ? traduzir(c.chave === "won_reason" ? "Motivo do ganho" : c.rotulo, idioma ?? IDIOMA_PADRAO)
+        : c.rotulo,
     )
     .join(", ");
+  // Com requisito na lista a frase não pode mandar "preencher": orçamento e
+  // agenda não se preenchem. Só campos = a frase de sempre, byte a byte.
+  const frase = faltando.some(ehRequisito)
+    ? traduzir("Antes de mover para esta etapa, falta: {campos}.", idioma ?? IDIOMA_PADRAO)
+    : traduzir(
+        "Preencha os campos obrigatórios antes de continuar: {campos}.",
+        idioma ?? IDIOMA_PADRAO,
+      );
   return {
     codigo: "required_fields_missing",
-    mensagem: traduzir(
-      "Preencha os campos obrigatórios antes de continuar: {campos}.",
-      idioma ?? IDIOMA_PADRAO,
-    ).replace("{campos}", nomes),
+    mensagem: frase.replace("{campos}", nomes),
   };
 }
 

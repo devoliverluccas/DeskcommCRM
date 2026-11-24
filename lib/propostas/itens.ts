@@ -3,7 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { calcularPricingStatus, type PricingStatus } from "./precificacao";
 import { buscarPrecoDoCatalogo } from "./preco-do-catalogo";
-import { calcularTotal } from "./total";
+import { calcularTotal, type AjustesDaProposta } from "./total";
 import type { ProposalItemInput } from "./tipos";
 
 export interface ItemResolvido {
@@ -28,12 +28,17 @@ export type ResolverItensResultado =
  * recebido — mesmo que o chamador (IA ou payload adulterado) tenha mandado
  * um valor. `product_id` que não resolve na organização recusa o item
  * inteiro, para nunca aceitar produto de outra empresa nem inventar preço.
+ *
+ * `ajustes` (9480): o desconto e o frete DA PROPOSTA entram no total aqui,
+ * para que nenhum chamador volte a somar por conta própria. Ausente = zero,
+ * que é o total de antes da 9480.
  */
 export async function resolverItensDaProposta(
   db: SupabaseClient,
   organizationId: string,
   itens: readonly ProposalItemInput[],
   moedaDaProposta: string,
+  ajustes: AjustesDaProposta = {},
 ): Promise<ResolverItensResultado> {
   const resolvidos: ItemResolvido[] = [];
   for (const it of itens) {
@@ -75,7 +80,7 @@ export async function resolverItensDaProposta(
   return {
     ok: true,
     itens: resolvidos,
-    totalCents: calcularTotal(resolvidos),
+    totalCents: calcularTotal(resolvidos, ajustes),
     pricingStatus: calcularPricingStatus(resolvidos),
   };
 }

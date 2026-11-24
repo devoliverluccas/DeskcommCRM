@@ -33,10 +33,10 @@ function produto(over: Record<string, unknown> = {}) {
 /**
  * `ctx.supabase` mínimo: encadeável e sempre aguardável.
  *
- * A busca pagina com `.range()`, então as páginas saem na ordem, uma por
- * chamada — é o que monta catálogo vazio, catálogo com achado e varredura
- * parcial sem banco. `count` é o `{ count: "exact" }` do select e chega junto
- * da página.
+ * As respostas saem na ordem, uma por chamada — é o que monta catálogo vazio e
+ * catálogo com achado sem banco. A busca de produtos pede os candidatos a
+ * `fn_buscar_produtos` (`.rpc().select()`, migration 9481); os pedidos leem a
+ * tabela (`.limit()`).
  */
 function bancoDeMentira(paginas: Array<{ linhas: unknown[]; count: number | null }>) {
   const fila = [...paginas];
@@ -44,19 +44,29 @@ function bancoDeMentira(paginas: Array<{ linhas: unknown[]; count: number | null
     const p = fila.shift() ?? { linhas: [] as unknown[], count: 0 };
     return { data: p.linhas, error: null, count: p.count };
   };
-  const cadeia: Record<string, unknown> = {
-    select: () => cadeia,
-    eq: () => cadeia,
-    order: () => cadeia,
-    in: () => cadeia,
-    is: () => cadeia,
-    range: () => Promise.resolve(proxima()),
-    limit: () => Promise.resolve(proxima()),
-    maybeSingle: () => Promise.resolve({ data: null, error: null, count: null }),
-    // Caminho que aguarda a cadeia direto (sem `.range()`) resolve a página da vez.
-    then: (resolve: (v: unknown) => unknown) => Promise.resolve(proxima()).then(resolve),
+  const vazia = () => ({ data: [] as unknown[], error: null, count: 0 });
+  // Só a tabela de PEDIDOS consome a resposta da vez. As leituras de apoio
+  // (capacidades da organização, módulos, telefonia) leem vazio: elas rodam
+  // ANTES da busca de produtos e não podem engolir o que é dela.
+  const cadeiaDe = (tabela: string) => {
+    const daVez = () => (tabela === "orders" ? proxima() : vazia());
+    const cadeia: Record<string, unknown> = {
+      select: () => cadeia,
+      eq: () => cadeia,
+      order: () => cadeia,
+      in: () => cadeia,
+      is: () => cadeia,
+      range: () => Promise.resolve(daVez()),
+      limit: () => Promise.resolve(daVez()),
+      maybeSingle: () => Promise.resolve({ data: null, error: null, count: null }),
+      then: (resolve: (v: unknown) => unknown) => Promise.resolve(daVez()).then(resolve),
+    };
+    return cadeia;
   };
-  return { from: () => cadeia };
+  return {
+    from: (tabela: string) => cadeiaDe(tabela),
+    rpc: () => ({ select: () => Promise.resolve(proxima()) }),
+  };
 }
 
 const auth = {

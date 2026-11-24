@@ -81,6 +81,8 @@ export async function POST(req: NextRequest, ctx: Ctx): Promise<Response> {
     // D11 — a v2 herda a moeda da v1 (já gravada no INSERT abaixo); item
     // cujo produto mudou de moeda no catálogo desde a v1 é recusado aqui.
     proposta.moeda,
+    // 9480 — a v2 herda o desconto e o frete da v1, e o total os aplica.
+    { desconto_cents: Number(proposta.desconto_cents ?? 0), frete_cents: Number(proposta.frete_cents ?? 0) },
   );
   if (!resolvido.ok) {
     return fail("validation_failed", t(resolvido.motivo), 422, { requestId });
@@ -101,6 +103,8 @@ export async function POST(req: NextRequest, ctx: Ctx): Promise<Response> {
       valid_until: proposta.valid_until,
       total_cents: resolvido.totalCents,
       pricing_status: resolvido.pricingStatus,
+      desconto_cents: Number(proposta.desconto_cents ?? 0),
+      frete_cents: Number(proposta.frete_cents ?? 0),
       moeda: proposta.moeda,
       status: "rascunho",
       numero: decisao.herdaNumero,

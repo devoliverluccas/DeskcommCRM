@@ -26,6 +26,8 @@ const mocks: Record<string, any> = vi.hoisted(() => ({
   resolverAvisoDeRevisaoSeProntaOuEncerrada: vi.fn(),
   audit: vi.fn(),
   traduzir: vi.fn((txt: string) => txt),
+  criarLinkDaProposta: vi.fn(),
+  revogarLink: vi.fn(),
 }));
 
 vi.mock("@/lib/propostas/porta", () => ({ sePropostasDesligadas: vi.fn(async () => null) }));
@@ -49,6 +51,13 @@ vi.mock("@/lib/propostas/aviso-de-revisao", () => ({ resolverAvisoDeRevisaoSePro
 vi.mock("@/lib/logger", () => ({ logger: { warn: vi.fn(), error: vi.fn(), info: vi.fn() } }));
 vi.mock("@/lib/audit", () => ({ audit: mocks.audit }));
 vi.mock("@/lib/i18n/dicionario", () => ({ traduzir: mocks.traduzir }));
+// O link público (9480): o dublê devolve um token conhecido para a legenda ser
+// conferida; `urlDoLink` é a de verdade.
+vi.mock("@/lib/propostas/link-publico", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  criarLinkDaProposta: mocks.criarLinkDaProposta,
+  revogarLink: mocks.revogarLink,
+}));
 
 const USER_ID = "11111111-1111-4111-8111-111111111111";
 const ORG_ID = "22222222-2222-4222-8222-222222222222";
@@ -475,6 +484,9 @@ function montarMundoDeEnvio(opts: MundoOpts = {}) {
   mocks.audit.mockImplementation(() => {
     ordemDeChamadas.push("audit");
   });
+
+  mocks.criarLinkDaProposta.mockResolvedValue({ id: "link-1", token: "TOKEN-DO-LINK", expiraEm: "2026-12-31T14:00:00.000Z" });
+  mocks.revogarLink.mockResolvedValue(undefined);
 
   return {
     ordemDeChamadas,
@@ -999,4 +1011,77 @@ describe("P1 — o documento chega ao cliente", () => {
     expect(body.error.message).toContain("Nome do projeto");
   });
 });
+});
+
+describe("POST /api/v1/proposals/[id]/send — atendente envia preço do catálogo (fase 2, item 2.1)", () => {
+  it("agent com pricing_status 'catalog': envia (200) — todo preço veio do catálogo", async () => {
+    const mundo = montarMundoDeEnvio({ papel: "agent", itemDeCatalogo: true, propostaOriginal: { pricing_status: "catalog" } });
+    const res = await mundo.POST();
+    expect(res.status).toBe(200);
+    expect(mundo.mensagemEnviada).toBe(true);
+    expect(mundo.propostaEnviada?.status).toBe("enviada");
+    expect(mocks.requireRole).not.toHaveBeenCalledWith("manager", expect.anything());
+  });
+
+  it("agent com pricing_status 'manual': 403, nada enviado, número NÃO alocado — preço à mão é do gestor", async () => {
+    const mundo = montarMundoDeEnvio({ papel: "agent", propostaOriginal: { pricing_status: "manual" } });
+    const res = await mundo.POST();
+    expect(res.status).toBe(403);
+    expect(mundo.mensagemEnviada).toBe(false);
+    expect(mundo.numeroFoiAlocado).toBe(false);
+  });
+
+  it("manager com pricing_status 'manual': envia normalmente", async () => {
+    const mundo = montarMundoDeEnvio({ papel: "manager", propostaOriginal: { pricing_status: "manual" } });
+    const res = await mundo.POST();
+    expect(res.status).toBe(200);
+    expect(mundo.mensagemEnviada).toBe(true);
+  });
+
+  it("viewer: 403 antes de ler qualquer coisa", async () => {
+    const mundo = montarMundoDeEnvio({ papel: "viewer", propostaOriginal: { pricing_status: "catalog" } });
+    const res = await mundo.POST();
+    expect(res.status).toBe(403);
+    expect(mundo.mensagemEnviada).toBe(false);
+  });
+});
+
+describe("POST /api/v1/proposals/[id]/send — link público na legenda (9480)", () => {
+  it("cria o link e manda 'Para ver, aceitar ou recusar: <url>/o/<token>' junto do PDF", async () => {
+    const mundo = montarMundoDeEnvio({ papel: "manager" });
+    const res = await mundo.POST();
+    expect(res.status).toBe(200);
+    expect(mocks.criarLinkDaProposta).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ orgId: ORG_ID, propostaId: PROPOSTA_ID, criadoPor: USER_ID }),
+    );
+    const payload = mocks.sendMessageHandler.mock.calls[0]?.[2] as { body?: string; type: string };
+    expect(payload.type).toBe("document");
+    expect(payload.body).toMatch(/^Para ver, aceitar ou recusar: \S+\/o\/TOKEN-DO-LINK$/);
+  });
+
+  it("falha ao gravar o link NÃO derruba o envio: o PDF sai sem legenda", async () => {
+    const mundo = montarMundoDeEnvio({ papel: "manager" });
+    mocks.criarLinkDaProposta.mockRejectedValueOnce(new Error("banco fora"));
+    const res = await mundo.POST();
+    expect(res.status).toBe(200);
+    expect(mundo.propostaEnviada?.status).toBe("enviada");
+    const payload = mocks.sendMessageHandler.mock.calls[0]?.[2] as { body?: string };
+    expect(payload.body).toBeUndefined();
+  });
+
+  it("WhatsApp falha: o link criado é revogado — o rascunho não fica com link vivo", async () => {
+    const mundo = montarMundoDeEnvio({
+      papel: "manager",
+      envioResultado: { id: "msg-1", status: "failed", error_message: "canal desconectado" },
+    });
+    await mundo.POST();
+    expect(mocks.revogarLink).toHaveBeenCalledWith(expect.anything(), ORG_ID, "link-1");
+  });
+
+  it("envio bem-sucedido NÃO revoga o link", async () => {
+    const mundo = montarMundoDeEnvio({ papel: "manager" });
+    await mundo.POST();
+    expect(mocks.revogarLink).not.toHaveBeenCalled();
+  });
 });

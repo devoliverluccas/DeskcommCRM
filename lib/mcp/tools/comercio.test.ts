@@ -22,12 +22,15 @@ interface RespostaBusca {
  */
 
 function ctxCom(produtos: Array<Record<string, unknown>>): McpContext {
+  // Os candidatos vêm de `fn_buscar_produtos` (migration 9481); a tabela só é
+  // lida para as capacidades da organização.
   const query = {
     select: () => query,
     eq: () => query,
     order: () => query,
-    range: async () => ({ data: produtos, error: null, count: produtos.length }),
+    maybeSingle: async () => ({ data: null, error: null }),
   };
+  const rpc = () => ({ select: async () => ({ data: produtos, error: null }) });
   return {
     organizationId: "22222222-2222-4222-8222-222222222222",
     role: "agent",
@@ -35,7 +38,7 @@ function ctxCom(produtos: Array<Record<string, unknown>>): McpContext {
     apiTokenId: "33333333-3333-4333-8333-333333333333",
     requestId: "44444444-4444-4444-8444-444444444444",
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    supabase: { from: () => query } as any,
+    supabase: { from: () => query, rpc } as any,
   } as McpContext;
 }
 

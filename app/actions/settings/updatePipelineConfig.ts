@@ -114,6 +114,14 @@ export async function updatePipelineConfig(
   if (parsed.data.atalhos !== undefined) {
     nextSettings.atalhos = parsed.data.atalhos;
   }
+  // AS TRAVAS DE ETAPA (fase 2, item 2.3): o mapa vai INTEIRO, como veio — `{}`
+  // é "nenhuma etapa exige nada", e pular o vazio deixaria a trava antiga gravada.
+  if (parsed.data.requisitos_por_etapa !== undefined) {
+    nextSettings.requisitos_por_etapa = parsed.data.requisitos_por_etapa;
+  }
+  if (parsed.data.permitir_mover_mesmo_assim !== undefined) {
+    nextSettings.permitir_mover_mesmo_assim = parsed.data.permitir_mover_mesmo_assim;
+  }
 
   // Campo que passa a ser do Contato e que uma regra ativa do gatilho por data
   // lê (#2791): a regra seguiria ligada e pararia de disparar em silêncio.
@@ -174,6 +182,9 @@ export async function updatePipelineConfig(
       // auditoria é lida por quem administra, não necessariamente por quem vê o
       // contato.
       atalhos_count: parsed.data.atalhos?.length ?? null,
+      // Fase 2, item 2.3: a trava muda quem consegue mover o quê — fica registrada.
+      requisitos_por_etapa: parsed.data.requisitos_por_etapa ?? null,
+      permitir_mover_mesmo_assim: parsed.data.permitir_mover_mesmo_assim ?? null,
     },
   });
 

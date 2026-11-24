@@ -1,4 +1,4 @@
-import { precoParaCentavos, type Produto } from "@/lib/schemas/produtos";
+import { precoParaCentavos, PROMOCAO_ACIMA_DO_PRECO, type Produto } from "@/lib/schemas/produtos";
 
 /**
  * EDITAR O PRODUTO PELA TELA — o texto de quem digita vira o corpo do PATCH.
@@ -36,6 +36,8 @@ export interface RascunhoDaEdicao {
   categoria: string;
   capacidade: string;
   preco: string;
+  /** Preço promocional em texto; vazio = sem promoção (migration 9481). */
+  promocional: string;
   custo: string;
   quantidade: string;
   controla_estoque: boolean;
@@ -79,6 +81,7 @@ export function rascunhoDaEdicao(produto: Produto): RascunhoDaEdicao {
     categoria: produto.categoria ?? "",
     capacidade: produto.capacidade ?? "",
     preco: centavosParaTexto(produto.preco_cents),
+    promocional: centavosParaTexto(produto.preco_promocional_cents ?? null),
     custo: centavosParaTexto(produto.custo_cents),
     quantidade: String(produto.quantidade),
     controla_estoque: produto.controla_estoque,
@@ -112,6 +115,11 @@ export function corpoDaEdicao(
   if (rascunho.custo.trim() !== "" && custo === null) {
     return { corpo: {}, erro: t("Custo inválido.") };
   }
+  // A promoção também falha fechada, e precisa ser MENOR que o preço — a mesma
+  // regra do CHECK do banco, dita antes de ir ao servidor.
+  const promocional = promocionalDoTexto(rascunho.promocional);
+  if (promocional === "invalido") return { corpo: {}, erro: t("Preço promocional inválido.") };
+  if (promocional !== null && promocional >= preco) return { corpo: {}, erro: t(PROMOCAO_ACIMA_DO_PRECO) };
 
   // O código é identidade: mesma normalização do schema (espaço duplo vira
   // um), senão "IP15  " pareceria mudança e a rota devolveria 409.
@@ -132,10 +140,20 @@ export function corpoDaEdicao(
   if (capacidade !== (produto.capacidade ?? "")) corpo.capacidade = capacidade;
   if (preco !== produto.preco_cents) corpo.preco_cents = preco;
   if (custo !== produto.custo_cents) corpo.custo_cents = custo;
+  if (promocional !== (produto.preco_promocional_cents ?? null)) corpo.preco_promocional_cents = promocional;
   if (rascunho.controla_estoque !== produto.controla_estoque) {
     corpo.controla_estoque = rascunho.controla_estoque;
   }
   if (quantidade !== produto.quantidade) corpo.quantidade = quantidade;
 
   return { corpo };
+}
+
+/**
+ * O texto do campo "Preço promocional" → centavos, `null` (vazio = sem
+ * promoção) ou `"invalido"`. Mesma régua fechada do preço (`precoParaCentavos`).
+ */
+export function promocionalDoTexto(texto: string): number | null | "invalido" {
+  if (texto.trim() === "") return null;
+  return precoParaCentavos(texto) ?? "invalido";
 }

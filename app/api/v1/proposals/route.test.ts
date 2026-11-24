@@ -14,6 +14,18 @@ vi.mock("@/lib/audit", () => ({ audit: vi.fn(async () => undefined) }));
 // Isola o handler do gate de suporte (autoridade própria testada em
 // lib/impersonate/support.test.ts) — nenhum teste aqui exercita acompanhamento.
 vi.mock("@/lib/impersonate/support", () => ({ requireSupportWrite: vi.fn(async () => null) }));
+// O modelo escolhido na criação (orçamento pela conversa, 9480): a lista da
+// organização e o resolvedor são fronteira — o dublê oferece um modelo visível
+// e um oculto.
+vi.mock("@/lib/propostas/modelos/catalogo-da-organizacao", () => ({
+  listarModelosDaOrganizacao: vi.fn(async () => [
+    { slug: "orcamento_simples", nome: "Orçamento", origem: "empresa", secoes: 1, version: 3, oculto: false },
+    { slug: "escondido", nome: "Escondido", origem: "plataforma", secoes: 1, version: 1, oculto: true },
+  ]),
+}));
+vi.mock("@/lib/propostas/modelos/resolver", () => ({
+  resolverModelo: vi.fn(async (_db: unknown, _org: string, slug: string) => ({ slug, version: 3, sections: [], sectionOrder: [], origem: "organizacao" })),
+}));
 
 const USER_ID = "11111111-1111-4111-8111-111111111111";
 const ORG_ID = "22222222-2222-4222-8222-222222222222";
@@ -22,6 +34,8 @@ const CONTACT_ID = "55555555-5555-4555-8555-555555555555";
 const PRODUCT_ID = "66666666-6666-4666-8666-666666666666";
 const PRODUCT_DE_OUTRA_ORG = "77777777-7777-4777-8777-777777777777";
 const RASCUNHO_EXISTENTE_ID = "88888888-8888-4888-8888-888888888888";
+const CONVERSA_DO_CONTATO = "99999999-9999-4999-8999-999999999999";
+const CONVERSA_DE_OUTRO = "aaaaaaaa-9999-4999-8999-999999999999";
 
 const ROLE_RANK: Record<string, number> = { viewer: 1, agent: 2, ai_operator: 3, manager: 4, admin: 5 };
 
@@ -178,6 +192,24 @@ function montarMundoDeProposta(opts: MundoOpts = {}) {
             return { error: null };
           },
         };
+      }
+      if (tabela === "conversations") {
+        // A conversa do orçamento (9480): só existe a CONVERSA_DO_CONTATO, e só
+        // para o contato do negócio.
+        const filtros: Record<string, unknown> = {};
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const cadeia: any = {
+          select: () => cadeia,
+          eq(campo: string, valor: unknown) {
+            filtros[campo] = valor;
+            return cadeia;
+          },
+          maybeSingle: async () => ({
+            data: filtros.id === CONVERSA_DO_CONTATO && filtros.contact_id === CONTACT_ID ? { id: CONVERSA_DO_CONTATO } : null,
+            error: null,
+          }),
+        };
+        return cadeia;
       }
       if (tabela === "crm_lead_activities") {
         return { insert: async () => ({ error: null }) };
@@ -430,5 +462,75 @@ describe("GET /api/v1/proposals — capacidade desligada", () => {
     const res = await mundo.GET();
     expect(res.status).toBe(404);
     expect(res.body).toMatchObject({ error: { code: "not_found" } });
+  });
+});
+
+describe("POST /api/v1/proposals — orçamento pela conversa (9480)", () => {
+  beforeEach(() => vi.restoreAllMocks());
+  const ITEM = { product_id: null, descricao: "Peça", quantidade: 2, preco_unitario_cents: 5000, desconto_cents: 0, position: 1000 };
+
+  it("grava desconto e frete da proposta e o total já os aplica (o servidor calcula)", async () => {
+    const mundo = montarMundoDeProposta();
+    const res = await mundo.POST({ lead_id: mundo.leadId, titulo: "Orçamento", itens: [ITEM], desconto_cents: 1000, frete_cents: 2500 });
+    expect(res.status).toBe(201);
+    const criada = mundo.propostasCriadas.at(-1);
+    expect(criada).toMatchObject({ desconto_cents: 1000, frete_cents: 2500, total_cents: 10000 - 1000 + 2500 });
+  });
+
+  it("desconto negativo: 422, nada gravado", async () => {
+    const mundo = montarMundoDeProposta();
+    const res = await mundo.POST({ lead_id: mundo.leadId, titulo: "x", itens: [ITEM], desconto_cents: -1 });
+    expect(res.status).toBe(422);
+    expect(mundo.propostasCriadas).toHaveLength(0);
+  });
+
+  it("grava a conversa de onde o orçamento saiu quando ela é DO contato do negócio", async () => {
+    const mundo = montarMundoDeProposta();
+    const res = await mundo.POST({ lead_id: mundo.leadId, titulo: "x", itens: [ITEM], conversation_id: CONVERSA_DO_CONTATO });
+    expect(res.status).toBe(201);
+    expect(mundo.propostasCriadas.at(-1)?.conversation_id).toBe(CONVERSA_DO_CONTATO);
+  });
+
+  it("conversa de OUTRO contato: 422, nunca grava a referência errada", async () => {
+    const mundo = montarMundoDeProposta();
+    const res = await mundo.POST({ lead_id: mundo.leadId, titulo: "x", itens: [ITEM], conversation_id: CONVERSA_DE_OUTRO });
+    expect(res.status).toBe(422);
+    expect(mundo.propostasCriadas).toHaveLength(0);
+  });
+
+  it("modelo oferecido pela organização: grava slug e versão resolvidos no servidor", async () => {
+    const mundo = montarMundoDeProposta();
+    const res = await mundo.POST({ lead_id: mundo.leadId, titulo: "x", itens: [ITEM], template_slug: "orcamento_simples" });
+    expect(res.status).toBe(201);
+    expect(mundo.propostasCriadas.at(-1)).toMatchObject({ template_slug: "orcamento_simples", template_version: 3 });
+  });
+
+  it("modelo oculto ou inexistente: 422", async () => {
+    const mundo = montarMundoDeProposta();
+    expect((await mundo.POST({ lead_id: mundo.leadId, titulo: "x", itens: [ITEM], template_slug: "escondido" })).status).toBe(422);
+    expect((await mundo.POST({ lead_id: mundo.leadId, titulo: "x", itens: [ITEM], template_slug: "nao_existe" })).status).toBe(422);
+    expect(mundo.propostasCriadas).toHaveLength(0);
+  });
+});
+
+describe("GET /api/v1/proposals?contact_id — a lista Orçamentos do contato (9480)", () => {
+  it("filtra pelo contato", async () => {
+    const mundo = montarMundoDeProposta();
+    await mundo.POST({
+      lead_id: mundo.leadId, titulo: "do contato", itens: [
+        { product_id: null, descricao: "x", quantidade: 1, preco_unitario_cents: 100, desconto_cents: 0, position: 1000 },
+      ],
+    });
+    const res = await mundo.GET(`?contact_id=${CONTACT_ID}`);
+    expect(res.status).toBe(200);
+    expect(res.body.data).toHaveLength(1);
+    const outro = await mundo.GET(`?contact_id=${CONVERSA_DE_OUTRO}`);
+    expect(outro.body.data).toEqual([]);
+  });
+
+  it("contact_id que não é UUID: 422", async () => {
+    const mundo = montarMundoDeProposta();
+    const res = await mundo.GET(`?contact_id=nao-e-uuid`);
+    expect(res.status).toBe(422);
   });
 });

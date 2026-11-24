@@ -145,6 +145,7 @@ vi.mock("@/lib/impersonate/support", async (importOriginal) => ({
 /** As chamadas que a rota fez no construtor de consulta — o alvo das asserções. */
 interface ConsultaGravada {
   selectOpts: unknown;
+  eq: Array<[string, unknown]>;
   or: string[];
   range: [number, number] | null;
   limit: number | null;
@@ -152,10 +153,13 @@ interface ConsultaGravada {
 let consulta: ConsultaGravada;
 
 function supabaseDeLeitura(linhas: unknown[], total: number) {
-  consulta = { selectOpts: undefined, or: [], range: null, limit: null };
+  consulta = { selectOpts: undefined, eq: [], or: [], range: null, limit: null };
   const resultado = { data: linhas, error: null, count: total };
   const construtor = {
-    eq: () => construtor,
+    eq: (coluna: string, valor: unknown) => {
+      consulta.eq.push([coluna, valor]);
+      return construtor;
+    },
     or: (f: string) => {
       consulta.or.push(f);
       return construtor;
@@ -248,9 +252,10 @@ describe("GET /api/v1/products — o catálogo inteiro, não os 500 primeiros", 
 
     await GET(listar(`?busca=${encodeURIComponent("pistola,ativo.eq.false")}`));
 
-    // Quatro colunas, quatro condições — nenhuma vinda do texto digitado.
+    // Quatro colunas mais a forma sem acento, cinco condições — nenhuma vinda
+    // do texto digitado.
     expect(consulta.or).toHaveLength(1);
-    expect(consulta.or[0]?.split(",")).toHaveLength(4);
+    expect(consulta.or[0]?.split(",")).toHaveLength(5);
   });
 
   // O banco do mock TEM produto: se a rota consultar sem filtro, `data` volta
@@ -322,5 +327,66 @@ describe("GET /api/v1/products — página além da última", () => {
     expect(res.status).toBe(200);
     expect(corpo.data).toEqual([]);
     expect(corpo.meta).toMatchObject({ total: 529, pagina: 99, has_more: false });
+  });
+});
+
+describe("GET /api/v1/products — categoria e \"só com estoque\" (migration 9481)", () => {
+  it("⭐ os dois filtros somam com a busca, cada um no seu lugar", async () => {
+    vi.mocked(createClient).mockResolvedValue(supabaseDeLeitura([], 0) as never);
+    const { GET } = await import("./route");
+
+    const res = await GET(listar(`?busca=perfume&categoria=${encodeURIComponent("Perfumaria")}&estoque=1&pagina=1`));
+
+    expect(res.status).toBe(200);
+    expect(consulta.eq).toContainEqual(["categoria", "Perfumaria"]);
+    // Dois `.or()` separados — o PostgREST os junta com E. Num `.or()` só, a
+    // busca e o estoque virariam alternativas: "perfume OU com estoque".
+    expect(consulta.or).toHaveLength(2);
+    expect(consulta.or[1]).toBe("controla_estoque.eq.false,quantidade.gt.0");
+  });
+
+  it("controle: sem os parâmetros, a consulta é a de antes — o seletor da proposta não muda", async () => {
+    vi.mocked(createClient).mockResolvedValue(supabaseDeLeitura([], 0) as never);
+    const { GET } = await import("./route");
+
+    const res = await GET(listar("?busca=perfume"));
+    const corpo = await res.json();
+
+    expect(consulta.eq.map(([c]) => c)).toEqual(["organization_id"]);
+    expect(consulta.or).toHaveLength(1);
+    expect(consulta.limit).toBe(500);
+    expect(corpo.meta).toBeUndefined();
+  });
+
+  it("`estoque` com valor que não é sim/não é recusado com 422, sem ir ao banco", async () => {
+    vi.mocked(createClient).mockResolvedValue(supabaseDeLeitura([{ id: "p1" }], 1) as never);
+    const { GET } = await import("./route");
+
+    const res = await GET(listar("?estoque=talvez"));
+
+    expect(res.status).toBe(422);
+    expect(consulta.limit).toBeNull();
+  });
+});
+
+describe("POST /api/v1/products — preço promocional (migration 9481)", () => {
+  it("⭐ promoção que não é menor que o preço é recusada com 422 e não grava", async () => {
+    vi.mocked(createClient).mockResolvedValue(supabaseCom("BRL") as never);
+    const { POST } = await import("./route");
+
+    const resposta = await POST(pedido({ ...PRODUTO, preco_promocional_cents: PRODUTO.preco_cents }));
+
+    expect(resposta.status).toBe(422);
+    expect(inserido).toBeNull();
+  });
+
+  it("promoção menor que o preço entra", async () => {
+    vi.mocked(createClient).mockResolvedValue(supabaseCom("BRL") as never);
+    const { POST } = await import("./route");
+
+    const resposta = await POST(pedido({ ...PRODUTO, preco_promocional_cents: PRODUTO.preco_cents - 100 }));
+
+    expect(resposta.status).toBe(201);
+    expect(inserido).toMatchObject({ preco_promocional_cents: PRODUTO.preco_cents - 100 });
   });
 });

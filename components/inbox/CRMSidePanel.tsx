@@ -42,6 +42,8 @@ import { FollowupDoContato } from "./FollowupDoContato";
 import { DialogoDosModulos } from "./DialogoDosModulos";
 import { MidiasDaConversa } from "./MidiasDaConversa";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { OrcamentoDaConversa } from "@/components/inbox/OrcamentoDaConversa";
+import { PropostasDaConversa } from "@/components/inbox/PropostasDaConversa";
 import {
   ABAS_DA_LATERAL,
   ROTULO_DA_ABA,
@@ -988,6 +990,13 @@ export function CRMSidePanel({
   const t = useT();
   const contact = conversation?.contacts ?? null;
   const contactId = contact?.id ?? null;
+  // Mesmo gate do item "Orçamento" do "⋯" (ConversationHeader): capacidade
+  // `propostas` ligada, papel de quem cria proposta, conversa que não é grupo.
+  const podeOrcar =
+    !conversation?.is_group &&
+    roleAtLeast(activeOrg?.role, "agent") &&
+    (activeOrg?.capacidades_ligadas ?? []).includes("propostas");
+  const [orcamentoAberto, setOrcamentoAberto] = useState(false);
   const [desfechoDraft, setDesfechoDraft] = useState<DesfechoDraft | null>(null);
   // A saída do filtro produz null enquanto o detalhe carrega. O rascunho não
   // some nessa lacuna; outra conversa/contato real o descarta, sem expô-lo.
@@ -1810,9 +1819,29 @@ export function CRMSidePanel({
                   </div>
                 ))
               )}
+              {/* ORÇAMENTOS do contato (fase 2, item 2.1) no fim da aba Negócios:
+                  orçamento é do negócio, e uma quinta aba apertaria as outras
+                  quatro na largura da lateral. Só com a capacidade ligada. */}
+              {id === "negocios" && podeOrcar && contactId ? (
+                <div
+                  className="border-b border-border px-4 py-4 [&_h3]:text-xs [&_h3]:font-medium [&_h3]:text-text-muted"
+                  data-testid="lateral-orcamentos"
+                >
+                  <PropostasDaConversa contactId={contactId} onNovo={() => setOrcamentoAberto(true)} />
+                </div>
+              ) : null}
             </TabsContent>
           );
         })}
+        {orcamentoAberto && podeOrcar && contactId ? (
+          <OrcamentoDaConversa
+            aberto
+            onAbertoChange={setOrcamentoAberto}
+            conversationId={conversation.id}
+            contactId={contactId}
+            contactName={displayName}
+          />
+        ) : null}
 
         {/* MÍDIAS só monta aberta: a galeria pergunta ao servidor ao montar, e
             quem nunca abre a aba não paga essa leitura a cada conversa. */}
