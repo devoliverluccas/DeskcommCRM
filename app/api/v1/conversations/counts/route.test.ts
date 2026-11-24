@@ -124,6 +124,16 @@ describe("a faixa do topo: a espera mais antiga e as filas com nome", () => {
     expect(corpo.fila_mais_antiga_desde).toBe("2026-11-18T08:00:00.000Z");
   });
 
+  it("sem awaiting_since, a espera cai na reserva da pílula (last_inbound_at) — e pode ser a mais antiga", async () => {
+    tabelas.conversations = [
+      naFila("c1", "2026-11-20T10:00:00.000Z", VENDAS),
+      { ...naFila("c2", null, SUPORTE), last_inbound_at: "2026-11-10T07:00:00.000Z" },
+    ];
+    const corpo = await contagens();
+    expect(corpo.fila).toBe(2);
+    expect(corpo.fila_mais_antiga_desde).toBe("2026-11-10T07:00:00.000Z");
+  });
+
   it("lista só as filas com gente esperando, com o nome, da mais cheia à mais vazia", async () => {
     tabelas.conversations = [
       naFila("c1", "2026-11-20T10:00:00.000Z", SUPORTE),

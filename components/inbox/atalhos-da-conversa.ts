@@ -34,6 +34,7 @@ export type IdDoAtalho =
   | "lembrar"
   | "criar-tarefa"
   | "ver-contato"
+  | "pendente"
   | "ajuda";
 
 export interface Atalho {
@@ -76,6 +77,9 @@ export const ATALHOS_DO_INBOX: readonly Atalho[] = [
   { id: "lembrar", tecla: "l", exibicao: "L", descricao: "Lembrar" },
   { id: "criar-tarefa", tecla: "c", exibicao: "C", descricao: "Criar tarefa" },
   { id: "ver-contato", tecla: "v", exibicao: "V", descricao: "Ver contato" },
+  // Item 3.7: UMA tecla para o par, como o automático — marcar e tirar nunca
+  // valem ao mesmo tempo.
+  { id: "pendente", tecla: "m", exibicao: "M", descricao: "Marcar ou tirar de pendente" },
   { id: "ajuda", tecla: "?", exibicao: "?", descricao: "Mostrar atalhos" },
 ];
 

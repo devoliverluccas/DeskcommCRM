@@ -76,6 +76,8 @@ import { resolverRoteamentoPorNumero } from "@/lib/routing/decide";
 import { estaDePlantao } from "@/lib/routing/eligibility";
 import { carregarRegraDoNumero } from "@/lib/routing/worker";
 import { availabilityScheduleSchema, routingConfigSchema } from "@/lib/schemas/routing";
+import { carregarFeriadosDaOrganizacao } from "@/lib/feriados/carregar";
+import { predicadoDeFeriado } from "@/lib/feriados/regra";
 
 export type DestinatariosDaMensagem =
   | { tipo: "todos" }
@@ -466,10 +468,14 @@ async function filaDistribuida(
     .eq("organization_id", organizationId)
     .eq("is_available", true) as Resultado<Array<{ user_id: string; schedule: unknown }>>);
   if (disponiveis.error) throw new Error(disponiveis.error.message);
+  // Feriado cadastrado da organização tira do plantão quem tem horário (3.8).
+  const ehFeriado = predicadoDeFeriado(
+    await carregarFeriadosDaOrganizacao(db as unknown as SupabaseClient, organizationId),
+  );
   const dePlantao = (disponiveis.data ?? [])
     .filter((d) => ativos.has(d.user_id) && (permitidos === null || permitidos.has(d.user_id)))
     .filter((d) =>
-      estaDePlantao({ isAvailable: true, schedule: availabilityScheduleSchema.parse(d.schedule ?? {}) }, agora),
+      estaDePlantao({ isAvailable: true, schedule: availabilityScheduleSchema.parse(d.schedule ?? {}) }, agora, ehFeriado),
     )
     .map((d) => d.user_id);
   return { dePlantao, gestores };

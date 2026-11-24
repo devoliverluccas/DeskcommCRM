@@ -17,7 +17,7 @@ import { orgAtivaDaApi } from "@/lib/auth/require-role";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { CONVERSATION_TERMINAL_STATUSES } from "@/lib/schemas";
 import { orgTemAutomatico } from "@/lib/ai/agents/org-tem-automatico";
-import { comandosDaFila, comPreFiltroDoComando } from "@/lib/inbox/comando-da-conversa";
+import { comandosDaFila, comPreFiltroDoComando, esperaDaConversa } from "@/lib/inbox/comando-da-conversa";
 import { aplicarMarcadores, modoDeEtiqueta } from "@/lib/inbox/marcador-da-conversa";
 import { createClient } from "@/lib/supabase/server";
 import { idsDeContatosPessoais } from "../_handler";
@@ -112,6 +112,7 @@ export async function GET(req: NextRequest): Promise<Response> {
   const sp = req.nextUrl.searchParams;
   const auxiliares = filtrosAuxiliaresDaContagem(sp);
   const soNaoLidas = contagemSoNaoLidas(sp);
+  const soPendentes = sp.get("pendente") === "true";
   // ⚠️ O badge conta o MESMO que a lista mostra, então o marcador é lido com
   // `getAll` e o `modo` viaja junto (#1274). Ler com `get` aqui deixaria o badge
   // de um filtro de duas etiquetas contando uma só — e a aba diria "Fila 3"
@@ -144,7 +145,7 @@ export async function GET(req: NextRequest): Promise<Response> {
     let q = supabase
       .from("conversations")
       .select(
-        comLinhas ? "id, awaiting_since" : "id",
+        comLinhas ? "id, awaiting_since, last_inbound_at, created_at" : "id",
         comLinhas ? undefined : { count: "exact", head: true },
       )
       .eq("organization_id", org);
@@ -154,6 +155,8 @@ export async function GET(req: NextRequest): Promise<Response> {
     q = aplicarMarcadores(q, marcadores, modo);
     if (pessoais.length > 0) q = q.not("contact_id", "in", `(${pessoais.join(",")})`);
     if (soNaoLidas) q = q.gt("unread_count_for_assignee", 0);
+    // "Pendentes" (item 3.7): o badge conta o que a lista filtrada mostra.
+    if (soPendentes) q = q.not("pendente_em", "is", null);
     return q;
   };
 
@@ -203,18 +206,25 @@ export async function GET(req: NextRequest): Promise<Response> {
   // Disparada JUNTO com as contagens, e isolada delas: é um complemento da
   // faixa, e falhar aqui devolve `null` (a faixa omite o trecho) em vez de
   // derrubar o badge de todas as abas.
+  // A espera segue `esperaDaConversa` (awaiting_since → last_inbound_at →
+  // created_at), a MESMA régua da pílula e do selo de SLA. O PostgREST não ordena
+  // por coalesce, então são duas leituras: a mais antiga COM awaiting_since e a
+  // mais antiga SEM ele (pela reserva); vale a menor das duas.
   const esperaMaisAntiga = (async (): Promise<string | null> => {
     try {
-      const r = await comPreFiltroDoComando(
-        countExact(auxiliares, true).in("comando_da_conversa", comandosFila),
-        comandosFila,
-      )
-        .not("awaiting_since", "is", null)
-        .order("awaiting_since", { ascending: true })
-        .limit(1);
-      if (r.error) return null;
-      const linha = ((r.data ?? []) as Array<{ awaiting_since?: string | null }>)[0];
-      return linha?.awaiting_since ?? null;
+      const base = () =>
+        comPreFiltroDoComando(countExact(auxiliares, true).in("comando_da_conversa", comandosFila), comandosFila);
+      const [comMarca, semMarca] = await Promise.all([
+        base().not("awaiting_since", "is", null).order("awaiting_since", { ascending: true }).limit(1),
+        base().is("awaiting_since", null).order("last_inbound_at", { ascending: true, nullsFirst: false }).limit(1),
+      ]);
+      const candidatos = [comMarca, semMarca]
+        .filter((r) => !r.error)
+        .flatMap((r) => (r.data ?? []) as Array<{ awaiting_since?: string | null; last_inbound_at?: string | null; created_at?: string | null }>)
+        .map((linha) => esperaDaConversa(linha))
+        .filter((x): x is string => !!x)
+        .sort();
+      return candidatos[0] ?? null;
     } catch {
       return null;
     }

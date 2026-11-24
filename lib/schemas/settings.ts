@@ -1332,3 +1332,130 @@ export function entradaAutomaticaNoFunilDeclarada(settings: unknown): EntradaAut
       : undefined;
   return entradaAutomaticaNoFunilSchema.parse(raiz?.[ENTRADA_AUTOMATICA_NO_FUNIL_CHAVE] ?? {});
 }
+
+/**
+ * AS METAS DE SLA DO ATENDIMENTO (fase 3, item 3.3) — `settings.sla`.
+ *
+ * `{ primeira_resposta_min, resolucao_horas, por_setor? }`. Cada meta é um
+ * número ou `null`, e `null` é "sem meta" — o estado de toda instalação que já
+ * existe: sem meta não há selo na lista, que é a tela de antes. `por_setor`
+ * troca as DUAS metas de um setor de uma vez (o par inteiro, não campo a campo):
+ * um setor que declara só a primeira resposta não herda a resolução da
+ * organização sem ninguém ter escolhido isso.
+ *
+ * A régua que usa as metas é `lib/inbox/sla.ts` (o selo) e
+ * `lib/inbox/sla-relatorio.ts` (a aba SLA dos relatórios) — as duas leem por
+ * `metasDoSla`, que nunca lança: um jsonb torto vira "sem meta", e a lista de
+ * conversas continua de pé.
+ */
+export const SLA_CHAVE = "sla";
+/** Teto da primeira resposta: 7 dias, em minutos. */
+export const SLA_PRIMEIRA_RESPOSTA_MAX_MIN = 7 * 24 * 60;
+/** Teto da resolução: 90 dias, em horas. */
+export const SLA_RESOLUCAO_MAX_HORAS = 90 * 24;
+/** Quantos setores podem ter meta própria. */
+export const SLA_MAX_SETORES = 100;
+
+const metaDoParSchema = z.object({
+  primeira_resposta_min: z.number().int().min(1).max(SLA_PRIMEIRA_RESPOSTA_MAX_MIN).nullable(),
+  resolucao_horas: z.number().int().min(1).max(SLA_RESOLUCAO_MAX_HORAS).nullable(),
+});
+export type MetasDoPar = z.infer<typeof metaDoParSchema>;
+
+/** Escrita (rota `PATCH /api/v1/settings/sla`): estrito, recusa o que não entende. */
+export const slaWriteSchema = metaDoParSchema
+  .extend({
+    por_setor: z
+      .record(z.string().uuid(), metaDoParSchema.strict())
+      .refine((v) => Object.keys(v).length <= SLA_MAX_SETORES, {
+        message: `No máximo ${SLA_MAX_SETORES} setores com meta própria.`,
+      })
+      .optional(),
+  })
+  .strict();
+export type SlaWrite = z.infer<typeof slaWriteSchema>;
+
+export interface MetasDoSla extends MetasDoPar {
+  por_setor: Record<string, MetasDoPar>;
+}
+
+export const SEM_METAS_DE_SLA: MetasDoSla = {
+  primeira_resposta_min: null,
+  resolucao_horas: null,
+  por_setor: {},
+};
+
+const metaLidaSchema = (max: number) => z.number().int().min(1).max(max).nullable().catch(null);
+const parLidoSchema = z
+  .object({
+    primeira_resposta_min: metaLidaSchema(SLA_PRIMEIRA_RESPOSTA_MAX_MIN).default(null),
+    resolucao_horas: metaLidaSchema(SLA_RESOLUCAO_MAX_HORAS).default(null),
+  })
+  .catch({ primeira_resposta_min: null, resolucao_horas: null });
+
+/** O bloco lido de `organizations.settings`. Nunca lança. */
+export function metasDoSla(settings: unknown): MetasDoSla {
+  const raiz =
+    settings && typeof settings === "object" && !Array.isArray(settings)
+      ? (settings as Record<string, unknown>)
+      : undefined;
+  const bloco = raiz?.[SLA_CHAVE];
+  if (!bloco || typeof bloco !== "object" || Array.isArray(bloco)) return SEM_METAS_DE_SLA;
+  const org = parLidoSchema.parse(bloco);
+  const porSetor: Record<string, MetasDoPar> = {};
+  const brutos = (bloco as Record<string, unknown>).por_setor;
+  if (brutos && typeof brutos === "object" && !Array.isArray(brutos)) {
+    for (const [setor, par] of Object.entries(brutos as Record<string, unknown>)) {
+      porSetor[setor] = parLidoSchema.parse(par ?? {});
+    }
+  }
+  return { ...org, por_setor: porSetor };
+}
+
+/**
+ * As metas que valem para uma conversa: as do setor dela, quando o setor tem
+ * meta própria; senão as da organização.
+ */
+export function metasDoSetor(metas: MetasDoSla, setorId: string | null | undefined): MetasDoPar {
+  const doSetor = setorId ? metas.por_setor[setorId] : undefined;
+  return doSetor ?? { primeira_resposta_min: metas.primeira_resposta_min, resolucao_horas: metas.resolucao_horas };
+}
+
+/** Há alguma meta em algum lugar? Sem nenhuma, a lista nem monta o selo. */
+export function temMetaDeSla(metas: MetasDoSla): boolean {
+  const algum = (p: MetasDoPar) => p.primeira_resposta_min != null || p.resolucao_horas != null;
+  return algum(metas) || Object.values(metas.por_setor).some(algum);
+}
+
+/**
+ * ENCERRAMENTO AUTOMÁTICO POR INATIVIDADE (fase 3, item 3.8) —
+ * `settings.atendimento.encerrar_inativas_apos_horas`.
+ *
+ * Horas sem resposta do CLIENTE depois da última mensagem da equipe/IA até o
+ * cron `encerrar-inativas` encerrar a conversa. `null` (ou ausente) = desligado,
+ * o estado de toda instalação que já existe. Lido por `encerrarInativasAposHoras`,
+ * que nunca lança: valor torto vira desligado — o cron não encerra conversa
+ * nenhuma por um jsonb corrompido.
+ */
+export const ENCERRAR_INATIVAS_MIN_HORAS = 1;
+/** Teto: 30 dias. */
+export const ENCERRAR_INATIVAS_MAX_HORAS = 30 * 24;
+
+export const encerrarInativasAposHorasSchema = z
+  .number()
+  .int()
+  .min(ENCERRAR_INATIVAS_MIN_HORAS)
+  .max(ENCERRAR_INATIVAS_MAX_HORAS)
+  .nullable();
+
+/** O prazo em horas, ou `null` (desligado). Nunca lança. */
+export function encerrarInativasAposHoras(settings: unknown): number | null {
+  const raiz = settings && typeof settings === "object" ? (settings as Record<string, unknown>) : {};
+  const bloco = raiz.atendimento;
+  const valor =
+    bloco && typeof bloco === "object" && !Array.isArray(bloco)
+      ? (bloco as Record<string, unknown>).encerrar_inativas_apos_horas
+      : null;
+  const lido = encerrarInativasAposHorasSchema.safeParse(valor ?? null);
+  return lido.success ? lido.data : null;
+}

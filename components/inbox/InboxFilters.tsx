@@ -96,6 +96,8 @@ export interface InboxFiltersValue {
   tagMode?: ModoDeEtiqueta;
   /** A aba "Grupos" (Task 10): manda `is_group=true` na listagem. */
   onlyGroups?: boolean;
+  /** "Pendentes" (item 3.7): só as marcadas pela equipe — `pendente=true` na listagem. */
+  onlyPendentes?: boolean;
   /**
    * Só as conversas deste atendente (id do usuário). Filtro de GERENTE para cima;
    * ausente = todas. A aba Minhas já é "as minhas", então ali ele não vale.
@@ -299,6 +301,7 @@ export function InboxFilters({ value, onChange, filas: filasDaOrganizacao, acao 
   const { data: counts } = useConversationCounts(activeOrg?.orgId ?? null, {
     assigned_to: value.assigned_to,
     unread: value.onlyUnread,
+    pendente: value.onlyPendentes,
     tag: etiquetas,
     tagMode: value.tagMode,
     channel_session_id: value.channel_session_id,
@@ -562,6 +565,17 @@ export function InboxFilters({ value, onChange, filas: filasDaOrganizacao, acao 
             className={cn(CAPSULA, value.onlyUnread ? CAPSULA_LIGADA : CAPSULA_DESLIGADA)}
           >
             {t("Não lidos")}
+          </button>
+          {/* "Pendentes" (item 3.7): a marca que a equipe põe pelo ⋯ da conversa.
+              Mesmo desenho do "Não lidos"; ligado, manda `pendente=true`. */}
+          <button
+            type="button"
+            aria-pressed={value.onlyPendentes ?? false}
+            data-testid="filtro-pendentes"
+            onClick={() => onChange({ ...value, onlyPendentes: !value.onlyPendentes })}
+            className={cn(CAPSULA, value.onlyPendentes ? CAPSULA_LIGADA : CAPSULA_DESLIGADA)}
+          >
+            {t("Pendentes")}
           </button>
           {/* MESMO PADRÃO do botão acima. "Grupos" manda `is_group=true` na
               listagem — sem ele a aba mostra tudo, individual e grupo

@@ -15,6 +15,7 @@ import { traduzir } from "@/lib/i18n/dicionario";
 import { patchConversationSchema, validateRequest } from "@/lib/schemas";
 import { createClient } from "@/lib/supabase/server";
 import { comNomeDoAtendente } from "@/lib/users/com-nome-do-atendente";
+import { protocoloDaDemanda } from "@/lib/atendimento/motivos-de-encerramento-server";
 
 import { getConversationHandler, patchConversationHandler } from "../_handler";
 
@@ -92,7 +93,14 @@ export async function GET(_req: NextRequest, ctx: RouteCtx): Promise<Response> {
     // Mesma razão da listagem: o nome entra na borda HTTP, não no handler que o
     // MCP compartilha. Aqui é UM lookup, não N.
     const [comNome] = await comNomeDoAtendente(activeOrg.orgId, [conv]);
-    return ok(comNome ?? conv, { requestId });
+    // O PROTOCOLO do atendimento vigente (fase 3, item 3.1), para o cabeçalho.
+    // Lido pela SESSÃO (RLS) com a organização ativa; `null` sem demanda.
+    const protocolo = await protocoloDaDemanda(
+      supabase,
+      activeOrg.orgId,
+      (conv as { current_demanda_id?: string | null }).current_demanda_id,
+    );
+    return ok({ ...(comNome ?? conv), protocolo_do_atendimento: protocolo }, { requestId });
   } catch (err) {
     if (err instanceof ApiError) {
       return fail(err.code, err.message, err.status, { requestId });

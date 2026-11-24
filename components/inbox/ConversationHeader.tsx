@@ -1,5 +1,6 @@
 "use client";
-import { useEffect, useState, type ReactNode, type RefObject } from "react";
+import { useContext, useEffect, useState, type ReactNode, type RefObject } from "react";
+import { QueryClientContext } from "@tanstack/react-query";
 import { useHotkeys } from "react-hotkeys-hook";
 import { useT } from "@/hooks/i18n/useT";
 import Link from "next/link";
@@ -25,7 +26,20 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { JanelaSelo } from "@/components/inbox/JanelaSelo";
 import { ChannelLogo } from "@/components/inbox/ChannelLogo";
-import { Phone, MagnifyingGlass, DotsThree, Pause, Archive, EyeSlash, UserCircle, UsersThree, Robot, Check, DownloadSimple, CalendarCheck, Receipt } from "@/lib/ui/icons";
+import { Phone, MagnifyingGlass, DotsThree, Pause, Archive, EyeSlash, UserCircle, UsersThree, Robot, Check, DownloadSimple, CalendarCheck, Receipt, Lock, LockOpen, Flag, XCircle, ClockCountdown } from "@/lib/ui/icons";
+import { Label } from "@/components/ui/label";
+import { SeloDeSla, useHaMetaDeSla, useIgnorarSla } from "@/components/inbox/SeloDeSla";
+import {
+  ProtocoloDoAtendimento,
+  SeletorDeMotivoAoEncerrar,
+  useMotivoAoEncerrar,
+} from "@/components/inbox/MotivoAoEncerrar";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  useBloquearContato,
+  usePendenteDaConversa,
+  usePrivadaDaConversa,
+} from "@/hooks/inbox/useMarcasDaConversa";
 import { OrcamentoDaConversa } from "@/components/inbox/OrcamentoDaConversa";
 import { useAuth } from "@/hooks/auth/AuthProvider";
 import { NovaTarefaDaConversa } from "@/components/inbox/NovaTarefaDaConversa";
@@ -128,6 +142,75 @@ const STATUS_LABEL: Record<string, string> = {
   archived: "Arquivada",
 };
 
+/**
+ * IGNORAR / RETOMAR O SLA (fase 3) — item do ⋯ que só existe com meta de SLA na
+ * organização (`useHaMetaDeSla`, que é falso sem `ProvedorDoSla`) e para
+ * gestor+ (o gate da rota). Componente à parte porque `useIgnorarSla` usa
+ * `useMutation`: montá-lo só quando há meta mantém o cabeçalho de pé nos testes
+ * e telas sem `QueryClientProvider`.
+ */
+function ItemIgnorarSla({ conversationId, ignorado }: { conversationId: string; ignorado: boolean }) {
+  const t = useT();
+  const ignorar = useIgnorarSla(conversationId);
+  return (
+    <DropdownMenuItem
+      data-testid="acao-ignorar-sla"
+      disabled={ignorar.isPending}
+      title={
+        ignorado
+          ? t("A conversa volta a contar no SLA e no relatório de prazos.")
+          : t("Tira esta conversa da conta do SLA: o selo some e ela não entra como estourada no relatório.")
+      }
+      onSelect={() => ignorar.mutate(!ignorado)}
+    >
+      <ClockCountdown size={16} aria-hidden className="mr-2" />
+      {ignorado ? t("Retomar SLA") : t("Ignorar SLA")}
+    </DropdownMenuItem>
+  );
+}
+
+/**
+ * O MOTIVO AO ENCERRAR (fase 3, item 3.2, componentes do agente A) e o rodapé
+ * do diálogo de fechar. Em componente à parte porque `useMotivoAoEncerrar`
+ * consulta (`useQuery`): o `AlertDialogContent` só existe com o diálogo
+ * aberto, então a consulta nasce na abertura e o cabeçalho continua montável
+ * sem `QueryClientProvider`. Sem motivo cadastrado, o seletor não aparece e
+ * `corpo` é `{}` — fechar continua sendo só fechar.
+ */
+function MotivoERodapeDoFechar({ onFechar }: { onFechar: (corpo: { motivo_id?: string }) => void }) {
+  // Sem provedor de consultas (cabeçalho montado isolado) não há de onde ler os
+  // motivos: o diálogo fecha como antes, sem seletor.
+  const temProvedor = useContext(QueryClientContext) !== undefined;
+  return temProvedor ? <RodapeComMotivo onFechar={onFechar} /> : <RodapeDoFechar onFechar={() => onFechar({})} />;
+}
+
+function RodapeComMotivo({ onFechar }: { onFechar: (corpo: { motivo_id?: string }) => void }) {
+  const motivo = useMotivoAoEncerrar(true);
+  return (
+    <>
+      <SeletorDeMotivoAoEncerrar estado={motivo} />
+      <RodapeDoFechar bloqueado={motivo.bloqueiaFechar} onFechar={() => onFechar(motivo.corpo)} />
+    </>
+  );
+}
+
+function RodapeDoFechar({ bloqueado = false, onFechar }: { bloqueado?: boolean; onFechar: () => void }) {
+  const t = useT();
+  return (
+    <AlertDialogFooter>
+      <AlertDialogCancel>{t("Cancelar")}</AlertDialogCancel>
+      <AlertDialogAction disabled={bloqueado} onClick={onFechar}>
+        {t("Fechar")}
+      </AlertDialogAction>
+    </AlertDialogFooter>
+  );
+}
+
+/** O atendimento acabou (os três status terminais). */
+function encerradaDoStatus(status: string): boolean {
+  return status === "closed" || status === "archived" || status === "resolved";
+}
+
 export function ConversationHeader({
   conversation,
   onAbrirConversa,
@@ -185,6 +268,13 @@ export function ConversationHeader({
   // foco no item (as durações moram no submenu do `SnoozeButton`).
   const [menuAberto, setMenuAberto] = useState(false);
   const [focarLembrar, setFocarLembrar] = useState(false);
+  // BLOQUEAR CONTATO (item 3.7): o item do ⋯ só levanta a bandeira; a
+  // confirmação, com o motivo, mora fora do menu (o mesmo desenho do convite).
+  const [confirmBloquearOpen, setConfirmBloquearOpen] = useState(false);
+  const [motivoDoBloqueio, setMotivoDoBloqueio] = useState("");
+  const privada = usePrivadaDaConversa();
+  const pendente = usePendenteDaConversa();
+  const bloquear = useBloquearContato();
 
   const c = conversation.contacts ?? null;
   const podeCriarTarefa = Boolean(
@@ -278,6 +368,28 @@ export function ConversationHeader({
   const podeExportar =
     (user.is_platform_admin && !user.support) ||
     (activeOrg != null && ROLE_RANK[activeOrg.role] >= ROLE_RANK.agent);
+  /**
+   * AS MARCAS DO ITEM 3.7 — cada uma com o MESMO gate da rota dela.
+   *
+   * Privada: o responsável pela conversa ou gestor+ (a RLS esconde a conversa
+   * privada de todo o resto, então quem não pode marcar também não a veria).
+   * Pendente: atendente+, e só com o atendimento vivo — encerrar limpa a marca
+   * (gatilho da 9485), então marcar uma encerrada seria marcar o nada.
+   * Bloquear: gestor+, contato de pessoa (grupo não é pessoa) e ainda não
+   * bloqueado — o desbloqueio mora na ficha do contato (admin).
+   */
+  const ehGestor =
+    (user.is_platform_admin && !user.support) ||
+    (activeOrg != null && ROLE_RANK[activeOrg.role] >= ROLE_RANK.manager);
+  const ehPrivada = conversation.privada === true;
+  const estaPendente = conversation.pendente_em != null;
+  const podeMarcarPrivada = isMineAssigned || ehGestor;
+  const podeMarcarPendente =
+    !encerradaDoStatus(conversation.status) &&
+    ((user.is_platform_admin && !user.support) ||
+      (activeOrg != null && ROLE_RANK[activeOrg.role] >= ROLE_RANK.agent));
+  const podeBloquear = ehGestor && !conversation.is_group && !!c?.id && c?.is_blocked !== true;
+  const haMetaDeSla = useHaMetaDeSla();
   const marcarPessoal = useMarkPersonalContact(c?.id ?? "");
   const desmarcarPessoal = useUnmarkPersonalContact(c?.id ?? "");
 
@@ -409,7 +521,8 @@ export function ConversationHeader({
     conviteAberto ||
     reservaAberta ||
     filaAberta ||
-    tarefaAberta;
+    tarefaAberta ||
+    confirmBloquearOpen;
   const atalhosLigados = user.support?.access_mode !== "support_readonly" && !algumDialogoAberto;
   const podeMoverFila = podeMoverParaFila({
     papel: activeOrg?.role,
@@ -444,6 +557,13 @@ export function ConversationHeader({
     opcoesDaTecla(!encerrada),
   );
   useHotkeys(teclaDo("criar-tarefa"), () => setTarefaAberta(true), opcoesDaTecla(Boolean(c?.id && podeCriarTarefa)));
+  useHotkeys(
+    teclaDo("pendente"),
+    () => {
+      if (!pendente.pendente) void pendente.executar({ conversation_id: conversation.id, pendente: !estaPendente });
+    },
+    opcoesDaTecla(podeMarcarPendente),
+  );
   useHotkeys(
     teclaDo("ver-contato"),
     () => {
@@ -504,6 +624,11 @@ export function ConversationHeader({
           <Badge variant="outline" className="h-4 shrink-0 px-1.5 text-[10px] font-normal text-text-muted">
             {t(STATUS_LABEL[status] ?? status)}
           </Badge>
+          {/* SLA (fase 3): no cabeçalho aparece sempre que há meta, inclusive
+              dentro do prazo. Sem `ProvedorDoSla` acima, não desenha nada. */}
+          <SeloDeSla conversa={conversation} sempre />
+          {/* Protocolo do atendimento (fase 3, item 3.1). Sem protocolo, nada. */}
+          <ProtocoloDoAtendimento protocolo={conversation.protocolo_do_atendimento} className="shrink-0" />
           {/* Ao lado do estado, não escondido num painel: a pergunta "dá para
               escrever agora?" se faz ANTES de digitar, não depois de receber um
               `failed` com um código de cinco dígitos. */}
@@ -948,7 +1073,56 @@ export function ConversationHeader({
                 </span>
               </div>
             )}
+            {/* PENDENTE (item 3.7): a marca da equipe — "tenho algo a resolver
+                aqui". Um item, dois rótulos (marcar / tirar). O filtro
+                "Pendentes" da barra do Inbox lista as marcadas; encerrar limpa. */}
+            {podeMarcarPendente && (
+              <DropdownMenuItem
+                disabled={pendente.pendente}
+                data-testid="acao-pendente"
+                title={
+                  estaPendente
+                    ? t("Tira a marca de pendente. A conversa sai do filtro Pendentes.")
+                    : t("Marca que a equipe tem algo a resolver aqui. A conversa aparece no filtro Pendentes até alguém tirar a marca ou encerrar.")
+                }
+                aria-keyshortcuts={atalhoDo("pendente").exibicao}
+                onSelect={() =>
+                  void pendente.executar({ conversation_id: conversation.id, pendente: !estaPendente })
+                }
+              >
+                <Flag size={16} aria-hidden className="mr-2" weight={estaPendente ? "fill" : "regular"} />
+                <span>{estaPendente ? t("Tirar de pendente") : t("Marcar como pendente")}</span>
+                <DicaDeTecla id="pendente" />
+              </DropdownMenuItem>
+            )}
             <DropdownMenuSeparator />
+            {/* PRIVADA (item 3.7): só o responsável e gestores leem. Quem marca
+                é o responsável ou um gestor — a mesma régua da rota e da RLS. */}
+            {podeMarcarPrivada && (
+              <DropdownMenuItem
+                disabled={privada.pendente}
+                data-testid="acao-privada"
+                title={
+                  ehPrivada
+                    ? t("Volta a conversa para a visibilidade normal da equipe.")
+                    : t("Só o responsável pela conversa e os gestores passam a ver esta conversa e as mensagens dela.")
+                }
+                onSelect={() => void privada.executar({ conversation_id: conversation.id, privada: !ehPrivada })}
+              >
+                {ehPrivada ? (
+                  <LockOpen size={16} aria-hidden className="mr-2" />
+                ) : (
+                  <Lock size={16} aria-hidden className="mr-2" />
+                )}
+                {ehPrivada ? t("Tornar pública") : t("Tornar privada")}
+              </DropdownMenuItem>
+            )}
+            {haMetaDeSla && ehGestor && (
+              <ItemIgnorarSla
+                conversationId={conversation.id}
+                ignorado={Boolean(conversation.sla_ignorado_em)}
+              />
+            )}
             {/* ARQUIVAR (#923): tira da frente sem destruir.
                 A conversa já arquivada não mostra o item — arquivar duas vezes
                 não é um gesto que exista, e o item só reapareceria como um
@@ -997,6 +1171,24 @@ export function ConversationHeader({
               >
                 <EyeSlash size={16} aria-hidden className="mr-2" />
                 {desmarcarPessoal.isPending ? t("Desmarcando...") : t("Desmarcar pessoal")}
+              </DropdownMenuItem>
+            )}
+            {/* BLOQUEAR CONTATO (item 3.7): a mesma trava do pedido de
+                descadastro (`is_blocked`) — nada sai para ele (IA, follow-up,
+                campanha, envio). Pede confirmação e motivo; o desbloqueio é na
+                ficha do contato, por um administrador. */}
+            {podeBloquear && (
+              <DropdownMenuItem
+                data-testid="acao-bloquear-contato"
+                disabled={bloquear.pendente}
+                title={t("Nada mais sai para este contato: sem IA, sem follow-up, sem campanha e sem envio. Pede um motivo.")}
+                onSelect={() => {
+                  setMotivoDoBloqueio("");
+                  setConfirmBloquearOpen(true);
+                }}
+              >
+                <XCircle size={16} aria-hidden className="mr-2" />
+                {t("Bloquear contato")}
               </DropdownMenuItem>
             )}
             {/* EXPORTAR CONVERSA (#1982, F1) — o PDF do histórico desta conversa.
@@ -1162,29 +1354,24 @@ export function ConversationHeader({
               </label>
             </div>
           ) : null}
-          <AlertDialogFooter>
-            <AlertDialogCancel>{t("Cancelar")}</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                // A chave só entra no corpo quando a escolha existe: sem contato
-                // travado a tela não pergunta nada, e o fechamento é o de sempre.
-                const escolha: {
-                  conversation_id: string;
-                  expected_revision?: number;
-                  devolver_ao_automatico?: boolean;
-                } = {
-                  conversation_id: conversation.id,
-                  expected_revision: conversation.service_revision,
-                };
-                if (contatoTravadoComEquipe) {
-                  escolha.devolver_ao_automatico = devolverAoFechar;
-                }
-                close.mutate(escolha);
-              }}
-            >
-              {t("Fechar")}
-            </AlertDialogAction>
-          </AlertDialogFooter>
+          <MotivoERodapeDoFechar
+            onFechar={(corpoDoMotivo) => {
+              // A chave só entra no corpo quando a escolha existe: sem contato
+              // travado a tela não pergunta nada, e o fechamento é o de sempre.
+              const escolha: {
+                conversation_id: string;
+                expected_revision?: number;
+                devolver_ao_automatico?: boolean;
+              } = {
+                conversation_id: conversation.id,
+                expected_revision: conversation.service_revision,
+              };
+              if (contatoTravadoComEquipe) {
+                escolha.devolver_ao_automatico = devolverAoFechar;
+              }
+              close.mutate({ ...escolha, ...corpoDoMotivo });
+            }}
+          />
         </AlertDialogContent>
       </AlertDialog>
       {/* A confirmação precisa dizer o que ACONTECE, e o que acontece depende
@@ -1240,6 +1427,49 @@ export function ConversationHeader({
             <AlertDialogCancel>{t("Cancelar")}</AlertDialogCancel>
             <AlertDialogAction onClick={() => marcarPessoal.mutate()}>
               {t("Marcar como pessoal")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      {/* A confirmação do bloqueio diz o EFEITO e pede o motivo, que fica no
+          contato (`blocked_reason`). Sem motivo, o botão não
+          confirma: um bloqueio sem porquê é impossível de revisar depois. */}
+      <AlertDialog open={confirmBloquearOpen} onOpenChange={setConfirmBloquearOpen}>
+        <AlertDialogContent data-testid="confirmar-bloqueio">
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("Bloquear este contato?")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t(
+                "Nada mais sai para este contato: sem IA, sem follow-up, sem campanha e sem envio pela equipe. As mensagens dele continuam chegando. Só um administrador desbloqueia, pela ficha do contato.",
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-1.5">
+            <Label htmlFor="motivo-do-bloqueio">{t("Motivo do bloqueio")}</Label>
+            <Textarea
+              id="motivo-do-bloqueio"
+              data-testid="motivo-do-bloqueio"
+              value={motivoDoBloqueio}
+              maxLength={500}
+              rows={3}
+              onChange={(e) => setMotivoDoBloqueio(e.target.value)}
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("Cancelar")}</AlertDialogCancel>
+            <AlertDialogAction
+              data-testid="confirmar-bloqueio-acao"
+              disabled={motivoDoBloqueio.trim().length === 0 || bloquear.pendente}
+              onClick={() => {
+                if (!c?.id) return;
+                void bloquear.executar({
+                  contact_id: c.id,
+                  conversation_id: conversation.id,
+                  motivo: motivoDoBloqueio.trim(),
+                });
+              }}
+            >
+              {t("Bloquear contato")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

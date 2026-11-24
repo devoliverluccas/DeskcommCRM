@@ -15,6 +15,27 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { isAttendantEligible, isWithinSchedule, OPEN_LOAD_STATUSES } from "./eligibility";
 import type { RoutingCandidate } from "./decide";
 import { availabilityScheduleSchema } from "@/lib/schemas/routing";
+import { carregarFeriadosDaOrganizacao } from "@/lib/feriados/carregar";
+import { feriadoDaOrganizacaoNoDia } from "@/lib/feriados/regra";
+
+/**
+ * O predicado de feriado da organização para `isWithinSchedule` (item 3.8).
+ * SÓ os feriados CADASTRADOS: o nacional entra no expediente quando a
+ * organização o importa (cabeçalho da migration 9486). Lido UMA vez por
+ * chamada, e só quando alguma jornada tem horário — sem jornada, feriado não
+ * muda nada e a consulta não é feita.
+ */
+function preguicoso(supabase: SupabaseClient, organizationId: string) {
+  let feriados: Promise<Awaited<ReturnType<typeof carregarFeriadosDaOrganizacao>>> | null = null;
+  return async (): Promise<(dataIso: string) => boolean> => {
+    feriados ??= carregarFeriadosDaOrganizacao(supabase, organizationId);
+    const lista = await feriados;
+    return (dataIso) => feriadoDaOrganizacaoNoDia(lista, dataIso) !== null;
+  };
+}
+
+const temHorario = (schedule: { windows?: readonly unknown[] } | null | undefined): boolean =>
+  (schedule?.windows ?? []).length > 0;
 
 export type RoutingScope =
   | { kind: "conversation_channel"; channelSessionId: string }
@@ -53,7 +74,8 @@ export async function loadSectorWindow(
   const schedule = availabilityScheduleSchema.parse(
     (sector as { schedule?: unknown }).schedule ?? {},
   );
-  return { window: { schedule, open: isWithinSchedule(schedule, now) } };
+  const ehFeriado = temHorario(schedule) ? await preguicoso(supabase, organizationId)() : undefined;
+  return { window: { schedule, open: isWithinSchedule(schedule, now, ehFeriado) } };
 }
 
 
@@ -65,6 +87,7 @@ export async function loadEligibleAttendants(
   scope: RoutingScope,
 ): Promise<RoutingCandidate[]> {
   let allowed: Set<string> | null = null;
+  const feriadoDoDia = preguicoso(supabase, organizationId);
   // A política do NÚMERO vale nos dois escopos que sabem qual é o número.
   const channelSessionId =
     scope.kind === "conversation_channel"
@@ -104,7 +127,8 @@ export async function loadEligibleAttendants(
     );
     // Fila fechada = ninguém elegível AGORA. O worker reenfileira (backoff),
     // então a conversa espera a abertura em vez de ser entregue fora do horário.
-    if (!isWithinSchedule(sectorSchedule, now)) return [];
+    const ehFeriadoDaFila = temHorario(sectorSchedule) ? await feriadoDoDia() : undefined;
+    if (!isWithinSchedule(sectorSchedule, now, ehFeriadoDaFila)) return [];
     const { data: links, error: linksError } = await supabase.from("attendant_sector_members")
       .select("user_id").eq("organization_id", organizationId).eq("sector_id", scope.sectorId);
     if (linksError) throw new Error(linksError.message);
@@ -174,12 +198,16 @@ export async function loadEligibleAttendants(
   }
 
   const candidates: RoutingCandidate[] = [];
-  for (const r of rows) {
+  const jornadas = rows.map((r) => availabilityScheduleSchema.parse(r.schedule ?? {}));
+  // Feriado da organização (item 3.8): só lido quando alguém tem jornada.
+  const ehFeriado = jornadas.some(temHorario) ? await feriadoDoDia() : undefined;
+  for (const [i, r] of rows.entries()) {
     const currentLoad = loadByUser.get(r.user_id) ?? 0;
-    const schedule = availabilityScheduleSchema.parse(r.schedule ?? {});
+    const schedule = jornadas[i]!;
     const eligible = isAttendantEligible(
       { isAvailable: true, capacity: r.capacity, currentLoad, schedule },
       now,
+      ehFeriado,
     );
     if (eligible) {
       candidates.push({

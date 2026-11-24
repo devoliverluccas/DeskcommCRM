@@ -11,6 +11,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { ChipDeEtiqueta } from "@/components/tags/ChipDeEtiqueta";
 import { OwnerBadge } from "@/components/kanban/OwnerBadge";
+import { SeloDeSla } from "@/components/inbox/SeloDeSla";
 import {
   comandoDaConversa,
   esperaDaConversa,
@@ -428,15 +429,23 @@ export function ConversationListItem({
               </Badge>
             )}
           </span>
-          <span
-            className="shrink-0 text-[11px] tabular-nums text-text-muted"
-            // O mesmo lugar da tela mostra duas coisas diferentes conforme a aba:
-            // na Fila é "desde quando o cliente ESPERA" (a mensagem mais antiga sem
-            // resposta — #990), nas outras é "há quanto tempo a conversa mexeu". O
-            // rótulo existe só onde a leitura muda.
-            title={naFila ? t("Desde quando o cliente espera resposta") : undefined}
-          >
-            {time}
+          <span className="flex shrink-0 items-center gap-1.5">
+            {/*
+              O SELO DE SLA (fase 3, 3.3), colado à hora: os dois respondem "há
+              quanto tempo?". Só aparece com meta configurada, a partir de 80% do
+              prazo ou estourado — sem `ProvedorDoSla` acima, não aparece nunca.
+            */}
+            <SeloDeSla conversa={conversation} />
+            <span
+              className="shrink-0 text-[11px] tabular-nums text-text-muted"
+              // O mesmo lugar da tela mostra duas coisas diferentes conforme a aba:
+              // na Fila é "desde quando o cliente ESPERA" (a mensagem mais antiga sem
+              // resposta — #990), nas outras é "há quanto tempo a conversa mexeu". O
+              // rótulo existe só onde a leitura muda.
+              title={naFila ? t("Desde quando o cliente espera resposta") : undefined}
+            >
+              {time}
+            </span>
           </span>
         </div>
 

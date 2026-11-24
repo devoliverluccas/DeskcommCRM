@@ -61,6 +61,8 @@ import type {
 } from "@/lib/escalacao/passagem";
 import type { QuemPodeAssumir } from "@/lib/escalacao/disponibilidade";
 import { logger } from "@/lib/logger";
+import { carregarFeriadosDaOrganizacao } from "@/lib/feriados/carregar";
+import { predicadoDeFeriado } from "@/lib/feriados/regra";
 
 /** Ator do envio — é o automático falando, não uma pessoa. */
 const ATOR_DO_AVISO = "handoff-orchestrator";
@@ -367,10 +369,14 @@ async function quemPodeAssumir(
 ): Promise<QuemPodeAssumir | null> {
   try {
     const agora = new Date();
-    const roster = await carregarRosterDeAtendimento(admin, organizationId, agora);
+    const [roster, feriados] = await Promise.all([
+      carregarRosterDeAtendimento(admin, organizationId, agora),
+      carregarFeriadosDaOrganizacao(admin, organizationId),
+    ]);
+    const ehFeriado = predicadoDeFeriado(feriados);
     return {
       total: roster.length,
-      disponiveis: roster.filter((a) => podeAssumirAgora(a, agora)).length,
+      disponiveis: roster.filter((a) => podeAssumirAgora(a, agora, ehFeriado)).length,
     };
   } catch (err) {
     logger.warn("[handoff-orchestrator] disponibilidade não lida — aviso sem prazo", {

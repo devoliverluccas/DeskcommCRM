@@ -48,6 +48,8 @@ export interface SetorNaFila {
 /** Os filtros auxiliares ligados na barra, que a contagem tem de aplicar junto. */
 export interface FiltrosDaContagem {
   unread?: boolean;
+  /** Só as marcadas como pendentes (item 3.7) — o mesmo filtro da lista. */
+  pendente?: boolean;
   /**
    * A etiqueta, ou VÁRIAS (#1274).
    *
@@ -79,6 +81,7 @@ export function useConversationCounts(
 ) {
   const qs = new URLSearchParams();
   if (filtros.unread) qs.set("unread", "true");
+  if (filtros.pendente) qs.set("pendente", "true");
   for (const marcador of marcadoresEscolhidos(
     typeof filtros.tag === "string" ? [filtros.tag] : (filtros.tag ?? []),
   ))

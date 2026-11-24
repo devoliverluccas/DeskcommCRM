@@ -290,6 +290,12 @@ beforeAll(() => {
           values (v_proposta, v_org, 'RLS invariant item', 1, 1000, 1000);
         end if;
 
+        -- 9480 — link publico da proposta (so o hash do token; leitura org-scoped).
+        if not exists (select 1 from public.crm_proposal_links where proposal_id = v_proposta) then
+          insert into public.crm_proposal_links (organization_id, proposal_id, token_hash, expira_em)
+          values (v_org, v_proposta, encode(extensions.digest(v_org::text, 'sha256'), 'hex'), now() + interval '7 days');
+        end if;
+
         -- 0772 (#3316) — a fila de proposta de campo do card lida num documento:
         -- o trecho e os valores sao o dado que a IA leu sobre a PESSOA, e a
         -- linha existe so ate alguem confirmar em revisao. Os DOIS tenants
@@ -705,6 +711,18 @@ beforeAll(() => {
            limit 1;
         end if;
 
+        -- migration 9482 -- motivo de encerramento (leitura org-scoped; escrita so do servidor).
+        if not exists (select 1 from public.motivos_de_encerramento where organization_id = v_org) then
+          insert into public.motivos_de_encerramento (organization_id, nome, categoria)
+          values (v_org, 'RLS invariant', 'resolvida');
+        end if;
+
+        -- migration 9486 -- feriado da organizacao (leitura org-scoped; escrita so do servidor).
+        if not exists (select 1 from public.feriados where organization_id = v_org) then
+          insert into public.feriados (organization_id, data, nome)
+          values (v_org, date '2026-12-24', 'RLS invariant');
+        end if;
+
         -- migration 9336 (#3118) -- a mensagem agendada da conversa semeada.
         if not exists (select 1 from public.mensagens_agendadas where organization_id = v_org) then
           insert into public.mensagens_agendadas
@@ -730,6 +748,11 @@ beforeAll(() => {
  * cabeçalho do caso de `contact_field_proposals` abaixo.
  */
 export const TABLES = [
+  // migration 9480 (fase 2) — link público da proposta.
+  "crm_proposal_links",
+  // migrations 9482 e 9486 (fase 3) — motivo de encerramento e feriado da organização.
+  "motivos_de_encerramento",
+  "feriados",
   // migration 9336 (#3118, primeira parte) — a mensagem agendada na conversa. A
   // leitura exige a conversa visível pela sessão; a semente usa v_conv, sem dono,
   // que o agent semeado enxerga (visibility_mode padrão).

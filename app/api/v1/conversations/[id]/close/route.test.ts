@@ -5,6 +5,11 @@ import { requireRole } from "@/lib/auth/require-role";
 import { devolverAtendimentoAoAgente } from "@/lib/escalacao/retomada";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 import { logger } from "@/lib/logger";
+import {
+  aplicarMotivoNaDemanda,
+  lerExigenciaDeMotivo,
+  lerMotivosAtivos,
+} from "@/lib/atendimento/motivos-de-encerramento-server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
@@ -16,6 +21,13 @@ vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn() }));
 vi.mock("@/lib/escalacao/retomada", () => ({ devolverAtendimentoAoAgente: vi.fn() }));
 vi.mock("@/lib/audit", () => ({ audit: vi.fn().mockResolvedValue(undefined) }));
+// Motivos de encerramento (fase 3, item 3.2): por padrão a organização não
+// exige e não tem motivo — o fechamento de sempre, que os casos acima medem.
+vi.mock("@/lib/atendimento/motivos-de-encerramento-server", () => ({
+  lerExigenciaDeMotivo: vi.fn(),
+  lerMotivosAtivos: vi.fn(),
+  aplicarMotivoNaDemanda: vi.fn(),
+}));
 vi.mock("@/lib/logger", () => ({
   logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() },
 }));
@@ -106,6 +118,9 @@ beforeEach(() => {
     jaEstavaComOAgente: false,
     continuidade: { houveAtendimentoHumano: false, resumo: "", decisoes: [], notas: [] },
   } as unknown as Awaited<ReturnType<typeof devolverAtendimentoAoAgente>>);
+  vi.mocked(lerExigenciaDeMotivo).mockResolvedValue(false);
+  vi.mocked(lerMotivosAtivos).mockResolvedValue([]);
+  vi.mocked(aplicarMotivoNaDemanda).mockResolvedValue({ ok: false, erro: "sem_demanda" });
 });
 
 describe("close — fechar sem a escolha não devolve nada", () => {
@@ -252,5 +267,123 @@ describe("close — devolver ao fechar segue a regra de dono do botão", () => {
     expect(corpo.data.devolucao).toEqual({ ok: true });
     const [, input] = vi.mocked(devolverAtendimentoAoAgente).mock.calls[0]!;
     expect(input).toEqual({ conversationId: CONVERSA, expectedAssignee: COLEGA });
+  });
+});
+
+/**
+ * O MOTIVO DE ENCERRAMENTO (fase 3, item 3.2).
+ *
+ * SABOTAGEM: tirar a conferência (1b) da rota faz os casos de 422 acusarem (a
+ * RPC de fechar é chamada); tirar o `aplicarMotivoNaDemanda` faz o caso feliz
+ * acusar (o motivo não chega à demanda e o corpo sai sem ele).
+ */
+describe("close — motivo de encerramento", () => {
+  const MOTIVO = "66666666-6666-4666-8666-666666666666";
+  const OUTRO = "77777777-7777-4777-8777-777777777777";
+  const DEMANDA = "55555555-5555-4555-8555-555555555555";
+  const ATIVO = { id: MOTIVO, nome: "Spam", categoria: "nao_procede" as const, ativo: true, ordem: 0 };
+
+  function rpcDoFechamento() {
+    const rpc = vi.fn(async () => ({ data: { ...CONVERSA_FECHADA, current_demanda_id: DEMANDA }, error: null }));
+    vi.mocked(createAdminClient).mockReturnValue({ rpc } as unknown as ReturnType<typeof createAdminClient>);
+    return rpc;
+  }
+
+  it("motivo que não é desta organização (ou inativo): 422 e a conversa NÃO fecha", async () => {
+    const rpc = rpcDoFechamento();
+    vi.mocked(lerMotivosAtivos).mockResolvedValue([ATIVO]);
+
+    const res = await chamar({ expected_revision: 7, motivo_id: OUTRO });
+    const corpo = (await res.json()) as { error: { code: string } };
+
+    expect(res.status).toBe(422);
+    expect(corpo.error.code).toBe("motivo_invalido");
+    expect(rpc, "motivo inválido não pode fechar a conversa").not.toHaveBeenCalled();
+    expect(aplicarMotivoNaDemanda).not.toHaveBeenCalled();
+  });
+
+  it("motivo_id que não é uuid: 422 de validação, sem ler nada", async () => {
+    const rpc = rpcDoFechamento();
+    const res = await chamar({ expected_revision: 7, motivo_id: "spam" });
+    expect(res.status).toBe(422);
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it("organização exige e o pedido não traz motivo: 422 motivo_required com a lista, sem fechar nem devolver", async () => {
+    const rpc = rpcDoFechamento();
+    vi.mocked(lerExigenciaDeMotivo).mockResolvedValue(true);
+    vi.mocked(lerMotivosAtivos).mockResolvedValue([ATIVO]);
+
+    const res = await chamar({ expected_revision: 7, devolver_ao_automatico: true });
+    const corpo = (await res.json()) as { error: { code: string; details: { motivos: Array<{ id: string }> } } };
+
+    expect(res.status).toBe(422);
+    expect(corpo.error.code).toBe("motivo_required");
+    expect(corpo.error.details.motivos.map((m) => m.id)).toEqual([MOTIVO]);
+    expect(rpc).not.toHaveBeenCalled();
+    expect(devolverAtendimentoAoAgente, "a recusa vem antes de qualquer escrita").not.toHaveBeenCalled();
+  });
+
+  it("exige, mas a organização não tem motivo ativo: fecha (a exigência não vira bloqueio total)", async () => {
+    rpcDoFechamento();
+    vi.mocked(lerExigenciaDeMotivo).mockResolvedValue(true);
+    vi.mocked(lerMotivosAtivos).mockResolvedValue([]);
+
+    const res = await chamar({ expected_revision: 7 });
+    expect(res.status).toBe(200);
+  });
+
+  it("a exigência não pôde ser lida: fecha sem motivo e avisa no log", async () => {
+    rpcDoFechamento();
+    vi.mocked(lerExigenciaDeMotivo).mockRejectedValue(new Error("timeout"));
+
+    const res = await chamar({ expected_revision: 7 });
+    expect(res.status).toBe(200);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining("exigência de motivo"),
+      expect.objectContaining({ organization_id: ORG }),
+    );
+  });
+
+  it("motivo válido: fecha, grava na demanda vigente e o corpo conta o que aconteceu", async () => {
+    const rpc = rpcDoFechamento();
+    vi.mocked(lerMotivosAtivos).mockResolvedValue([ATIVO]);
+    vi.mocked(aplicarMotivoNaDemanda).mockResolvedValue({
+      ok: true, demandaId: DEMANDA, desfecho: "nao_procede", protocolo: "20261124-000001",
+    });
+
+    const res = await chamar({ expected_revision: 7, motivo_id: MOTIVO });
+    const corpo = (await res.json()) as { data: { motivo_de_encerramento: Record<string, unknown> } };
+
+    expect(res.status).toBe(200);
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(aplicarMotivoNaDemanda).toHaveBeenCalledWith(expect.anything(), {
+      organizationId: ORG, demandaId: DEMANDA, motivoId: MOTIVO, actorUserId: ATENDENTE,
+    });
+    expect(corpo.data.motivo_de_encerramento).toEqual({
+      id: MOTIVO, nome: "Spam", registrado: true, demanda_id: DEMANDA,
+      desfecho: "nao_procede", protocolo: "20261124-000001",
+    });
+  });
+
+  it("o motivo não chegou à demanda: a conversa fecha mesmo assim, e o corpo diz", async () => {
+    rpcDoFechamento();
+    vi.mocked(lerMotivosAtivos).mockResolvedValue([ATIVO]);
+    vi.mocked(aplicarMotivoNaDemanda).mockResolvedValue({ ok: false, erro: "falha", detalhe: "deadlock" });
+
+    const res = await chamar({ expected_revision: 7, motivo_id: MOTIVO });
+    const corpo = (await res.json()) as { data: { motivo_de_encerramento: Record<string, unknown> } };
+
+    expect(res.status).toBe(200);
+    expect(corpo.data.motivo_de_encerramento).toMatchObject({ registrado: false, erro: "falha" });
+    expect(logger.error).toHaveBeenCalledTimes(1);
+  });
+
+  it("sem motivo e sem exigência: o corpo sai sem a chave, como sempre", async () => {
+    rpcDoFechamento();
+    const res = await chamar({ expected_revision: 7 });
+    const corpo = (await res.json()) as Resposta;
+    expect(Object.keys(corpo.data)).not.toContain("motivo_de_encerramento");
+    expect(aplicarMotivoNaDemanda).not.toHaveBeenCalled();
   });
 });

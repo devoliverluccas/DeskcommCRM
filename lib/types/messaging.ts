@@ -59,6 +59,17 @@ export interface Conversation {
   metadata: Record<string, unknown>;
   snooze_until: string | null;
   /**
+   * Conversa privada (migration 9485): só o responsável e gestor+ a leem — a
+   * RLS corta os demais. Opcional pelo cache gravado antes do deploy.
+   */
+  privada?: boolean;
+  /** Marcada como pendente pela equipe (migration 9485); nulo = não pendente. */
+  pendente_em?: string | null;
+  /** SLA ignorado nesta conversa (gestor+) — nulo = conta no SLA. */
+  sla_ignorado_em?: string | null;
+  /** Protocolo da demanda corrente (fase 3, item 3.1) — nulo sem demanda. */
+  protocolo_do_atendimento?: string | null;
+  /**
    * Até quando o atendimento automático está desligado nesta conversa
    * (`'infinity'` depois de passar para uma pessoa). A tela precisa disto para
    * saber SE existe algo a devolver — sem o campo, o botão de retomar não teria

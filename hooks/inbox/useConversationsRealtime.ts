@@ -110,6 +110,8 @@ export interface ConversationsFilters {
    * a coluna `unread_count_for_assignee` já existe.
    */
   unread?: boolean;
+  /** Só as marcadas como pendentes pela equipe (item 3.7, `pendente_em`). */
+  pendente?: boolean;
   channel_session_id?: string;
   /**
    * A FILA (#3876): só as conversas classificadas neste setor. O `set` da
@@ -196,6 +198,7 @@ export function useConversationsRealtime(
       if (filters.assigned_to) qs.set("assigned_to", filters.assigned_to);
       if (filters.search) qs.set("search", filters.search);
       if (filters.unread) qs.set("unread", "true");
+      if (filters.pendente) qs.set("pendente", "true");
       if (filters.channel_session_id) qs.set("channel_session_id", filters.channel_session_id);
       // A FILA (#3876) — ver o comentário do campo em `ConversationsFilters`.
       if (filters.sector_id) qs.set("sector_id", filters.sector_id);

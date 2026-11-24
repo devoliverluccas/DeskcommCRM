@@ -79,7 +79,7 @@ const ACTIVITY_COLS =
  * ausência dele é o próprio invariante 4, e é o que precisa saltar na tela.
  */
 const DEMANDA_COLS =
-  "id, revision, aberta_em, origem, estado, proximo_passo, proximo_passo_em, prazo_em";
+  "id, revision, aberta_em, origem, estado, proximo_passo, proximo_passo_em, prazo_em, protocolo";
 
 export async function GET(
   _req: NextRequest,
@@ -223,7 +223,7 @@ export async function GET(
       .order("aberta_em", { ascending: true })
       .limit(5),
     supabase.from("lead_notes").select("id, headline, body").eq("contact_id", contactId).eq("organization_id", contactScope.organization_id).order("created_at", { ascending: false }).limit(20),
-    supabase.from("demandas").select("id, desfecho, fechada_em").eq("contact_id", contactId).eq("organization_id", contactScope.organization_id).not("fechada_em", "is", null).order("fechada_em", { ascending: false }).limit(5),
+    supabase.from("demandas").select("id, desfecho, fechada_em, protocolo, motivo:motivos_de_encerramento(nome)").eq("contact_id", contactId).eq("organization_id", contactScope.organization_id).not("fechada_em", "is", null).order("fechada_em", { ascending: false }).limit(5),
   ]);
 
   // A falha SOBE. Engolir aqui devolveria lista vazia ao cliente e recriaria,

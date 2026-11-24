@@ -74,18 +74,36 @@ export function localMoment(now: Date, timezone: string): { dow: number; hhmm: s
   return { dow, hhmm };
 }
 
+/** A data civil (`AAAA-MM-DD`) de `now` no fuso — a que o feriado pergunta. */
+function dataLocal(now: Date, timezone: string): string {
+  return new Intl.DateTimeFormat("sv-SE", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(now);
+}
+
 /**
  * `now` cai dentro de alguma janela do schedule?
  * `windows` vazio (default do DB `{}`) = sem restrição de horário ⇒ true (24/7);
  * janelas existem para RESTRINGIR, não para habilitar.
+ *
+ * FERIADO DA ORGANIZAÇÃO (item 3.8): quem chama pode passar `ehFeriadoLocal`,
+ * que recebe a data civil NO FUSO DA JORNADA. Feriado é fora do expediente — mas
+ * só para quem TEM expediente: jornada vazia continua 24/7 (quem não restringiu
+ * horário nenhum não passa a fechar no feriado sem ter pedido). O predicado
+ * mora fora (`lib/feriados/regra.ts`) para esta função seguir pura e sem banco.
  */
 export function isWithinSchedule(
   schedule: Pick<AvailabilitySchedule, "timezone" | "windows"> | null | undefined,
   now: Date,
+  ehFeriadoLocal?: (dataIso: string) => boolean,
 ): boolean {
   const windows = schedule?.windows ?? [];
   if (windows.length === 0) return true;
   const timezone = schedule?.timezone || "America/Sao_Paulo";
+  if (ehFeriadoLocal && ehFeriadoLocal(dataLocal(now, timezone))) return false;
   const { dow, hhmm } = localMoment(now, timezone);
   return windows.some((w) => w.dow === dow && hhmm >= w.start && hhmm < w.end);
 }
@@ -113,8 +131,9 @@ export function isWithinSchedule(
 export function estaDePlantao(
   input: { isAvailable: boolean; schedule?: Pick<AvailabilitySchedule, "timezone" | "windows"> | null },
   now: Date,
+  ehFeriadoLocal?: (dataIso: string) => boolean,
 ): boolean {
-  return input.isAvailable && isWithinSchedule(input.schedule ?? null, now);
+  return input.isAvailable && isWithinSchedule(input.schedule ?? null, now, ehFeriadoLocal);
 }
 
 export interface AttendantEligibilityInput {
@@ -125,11 +144,18 @@ export interface AttendantEligibilityInput {
   schedule?: Pick<AvailabilitySchedule, "timezone" | "windows"> | null;
 }
 
-/** disponível ∧ com folga (carga < capacidade) ∧ dentro do horário (§5). */
-export function isAttendantEligible(input: AttendantEligibilityInput, now: Date): boolean {
+/**
+ * disponível ∧ com folga (carga < capacidade) ∧ dentro do horário (§5) — e,
+ * com `ehFeriadoLocal`, fora dos feriados da organização (item 3.8).
+ */
+export function isAttendantEligible(
+  input: AttendantEligibilityInput,
+  now: Date,
+  ehFeriadoLocal?: (dataIso: string) => boolean,
+): boolean {
   return (
     input.isAvailable &&
     input.currentLoad < input.capacity &&
-    isWithinSchedule(input.schedule ?? null, now)
+    isWithinSchedule(input.schedule ?? null, now, ehFeriadoLocal)
   );
 }

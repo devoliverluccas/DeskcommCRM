@@ -26,6 +26,7 @@
 import { ROLE_RANK, type Role } from "@/lib/auth/types";
 import { isAttendantEligible, OPEN_LOAD_STATUSES } from "@/lib/routing/eligibility";
 import { availabilityScheduleSchema } from "@/lib/schemas/routing";
+import { predicadoDeFeriado, type FeriadoDaOrganizacao } from "@/lib/feriados/regra";
 
 import type { Queryable } from "../agent-engine/queue/queue";
 
@@ -74,6 +75,23 @@ export async function quemPodeAssumirAgora(
     [tenantId, OPEN_LOAD_STATUSES],
   );
 
+  // Feriado CADASTRADO da organização (item 3.8) tira do expediente quem tem
+  // horário — o mesmo predicado do roteador. Falha de leitura (ou instalação sem
+  // a 9486) = sem feriado, o comportamento de antes: nunca derruba a promessa.
+  let feriados: FeriadoDaOrganizacao[] = [];
+  try {
+    const r = await db.query<FeriadoDaOrganizacao>(
+      `select to_char(data, 'YYYY-MM-DD') as data, nome, recorrente_anual
+         from feriados
+        where organization_id = $1`,
+      [tenantId],
+    );
+    feriados = r.rows;
+  } catch {
+    feriados = [];
+  }
+  const ehFeriado = predicadoDeFeriado(feriados);
+
   // Viewer não é insumo de roteamento — mesmo corte do roster da API.
   const atendentes = rows.filter(
     (r) => ROLE_RANK[r.role as Role] !== undefined && ROLE_RANK[r.role as Role] >= ROLE_RANK.agent,
@@ -93,6 +111,7 @@ export async function quemPodeAssumirAgora(
         schedule: availabilityScheduleSchema.parse(r.schedule ?? {}),
       },
       now,
+      ehFeriado,
     );
   }).length;
 

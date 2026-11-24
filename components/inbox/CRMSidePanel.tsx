@@ -171,6 +171,8 @@ interface DemandaRow {
   proximo_passo: string | null;
   proximo_passo_em: string | null;
   prazo_em: string | null;
+  /** O protocolo do atendimento (migration 9482). Opcional: rota anterior não o manda. */
+  protocolo?: string | null;
 }
 
 interface DesfechoDraft {
@@ -1014,7 +1016,7 @@ export function CRMSidePanel({
   const [activities, setActivities] = useState<ActivityRow[] | null>(null);
   const [demandas, setDemandas] = useState<DemandaRow[] | null>(null);
   const [fatos, setFatos] = useState<Array<{ id: string; headline: string; body: string }>>([]);
-  const [historico, setHistorico] = useState<Array<{ id: string; desfecho: string; fechada_em: string }>>([]);
+  const [historico, setHistorico] = useState<Array<{ id: string; desfecho: string; fechada_em: string; protocolo?: string | null; motivo?: { nome: string } | null }>>([]);
   const [anuncios, setAnuncios] = useState<{ origem: AnuncioDeOrigem | null; recente: AnuncioMaisRecente | null }>({ origem: null, recente: null });
   // A recusa de ofertas, decidida no servidor (`crm-summary`). `undefined` = ainda não
   // lida (ou a leitura falhou): nesse estado o botão NÃO aparece, para não oferecer
@@ -1119,7 +1121,7 @@ export function CRMSidePanel({
             activities: ActivityRow[];
             demandas: DemandaRow[];
             fatos?: Array<{ id: string; headline: string; body: string }>;
-            historico?: Array<{ id: string; desfecho: string; fechada_em: string }>;
+            historico?: Array<{ id: string; desfecho: string; fechada_em: string; protocolo?: string | null; motivo?: { nome: string } | null }>;
             anuncio_de_origem?: AnuncioDeOrigem | null;
             anuncio_mais_recente?: AnuncioMaisRecente | null;
             recusa_de_ofertas?: SituacaoDaRecusaDeOfertas;
@@ -1504,6 +1506,11 @@ export function CRMSidePanel({
                   {/* A SAÍDA. Sem ela esta seção só denunciava: o atendente via o
                       vazamento e tinha de sair da tela para resolver — peça que
                       só recebe é ilha pelo invariante 1. */}
+                  {d.protocolo ? (
+                    <div className="mt-0.5 text-text-muted" data-testid="demanda-protocolo">
+                      {t("Protocolo")} <span className="font-mono tabular-nums text-text">{d.protocolo}</span>
+                    </div>
+                  ) : null}
                   {d.id === conversation.current_demanda_id && <Badge variant="outline">{t("Demanda vigente neste canal")}</Badge>}
                   {!readonly && <EncerrarDemanda
                     draft={desfechoDraft?.conversationId === conversation.id && desfechoDraft.contactId === contactId && desfechoDraft.demandaId === d.id ? desfechoDraft : null}
@@ -1571,7 +1578,7 @@ export function CRMSidePanel({
           <p className="mt-1 text-xs text-muted-foreground">{t("Fatos duráveis registrados nas notas. Pendências pertencem à demanda vigente.")}</p>
           {!sectionsLoading && fatos.map((f) => <details key={f.id} className="mt-2 text-xs"><summary className="wrap-anywhere">{f.headline}</summary><p className="mt-1 whitespace-pre-wrap wrap-anywhere">{f.body}</p></details>)}
           {!sectionsLoading && fatos.length === 0 && <p className="mt-2 text-xs text-muted-foreground">{t("Nenhum fato durável registrado.")}</p>}
-          {!sectionsLoading && historico.length > 0 && <div className="mt-3 text-xs"><h4>{t("Histórico encerrado — sem tarefas pendentes")}</h4>{historico.map((h) => <p key={h.id}>{t(DESFECHO_LEGIVEL[h.desfecho] ?? h.desfecho)}{h.fechada_em ? ` · ${shortDate(h.fechada_em, localeDaData)}` : ""}</p>)}</div>}
+          {!sectionsLoading && historico.length > 0 && <div className="mt-3 text-xs"><h4>{t("Histórico encerrado — sem tarefas pendentes")}</h4>{historico.map((h) => <p key={h.id}>{t(DESFECHO_LEGIVEL[h.desfecho] ?? h.desfecho)}{h.motivo?.nome ? ` · ${h.motivo.nome}` : ""}{h.fechada_em ? ` · ${shortDate(h.fechada_em, localeDaData)}` : ""}{h.protocolo ? <span className="ml-1 font-mono tabular-nums text-text-muted">{h.protocolo}</span> : null}</p>)}</div>}
         </section>
       </>
     ),

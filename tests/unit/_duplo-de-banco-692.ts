@@ -25,6 +25,8 @@ export interface LinhaSatisfacao {
   expira_em?: string;
   respondido_em?: string | null;
   mensagem_da_resposta_id?: string | null;
+  /** A régua do pedido (migration 9484). Ausente = `csat_1_5`, como no banco. */
+  escala?: "csat_1_5" | "nps_0_10";
 }
 
 /** Uma mensagem já gravada na conversa — só as colunas que a pesquisa lê. */
@@ -131,6 +133,7 @@ export function bancoFake(inicial: {
           status: "aguardando",
           perguntado_em: valores.perguntado_em as string,
           expira_em: valores.expira_em as string,
+          escala: (valores.escala as LinhaSatisfacao["escala"]) ?? "csat_1_5",
         };
         estado.pedidos.push(linha);
         return { data: { id: linha.id }, error: null };

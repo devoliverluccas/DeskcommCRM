@@ -37,6 +37,8 @@ import { lerContinuidadeHumana } from "@/lib/escalacao/continuidade";
 import { devolverAtendimentoAoAgente } from "@/lib/escalacao/retomada";
 import type { McpContext, McpToolDefinition } from "../types";
 import { nomesDosAtendentesCom } from "@/lib/users/nome-do-atendente";
+import { carregarFeriadosDaOrganizacao } from "@/lib/feriados/carregar";
+import { predicadoDeFeriado } from "@/lib/feriados/regra";
 
 /** Payload de auditoria a partir do ator do ctx (mesma forma de governance.ts). */
 function actorAudit(ctx: McpContext): {
@@ -74,7 +76,11 @@ export const crmListAvailableAttendants: McpToolDefinition<typeof atendentesInpu
   requiresScope: "mcp:read",
   handler: async (input, ctx) => {
     const agora = new Date();
-    const roster = await carregarRosterDeAtendimento(ctx.supabase, ctx.organizationId, agora);
+    const [roster, feriados] = await Promise.all([
+      carregarRosterDeAtendimento(ctx.supabase, ctx.organizationId, agora),
+      carregarFeriadosDaOrganizacao(ctx.supabase, ctx.organizationId),
+    ]);
+    const ehFeriado = predicadoDeFeriado(feriados);
     // Nome de quem atende (issue #1539): para a IA escrever uma regra de
     // roteamento no prompt ela precisa de GENTE, não de UUID. O helper expõe
     // SÓ `full_name` (mínimo LGPD do `team/assignable`) — nunca e-mail,
@@ -91,7 +97,7 @@ export const crmListAvailableAttendants: McpToolDefinition<typeof atendentesInpu
       is_available: a.disponivel,
       capacity: a.capacidade,
       current_load: a.cargaAtual,
-      can_take_now: podeAssumirAgora(a, agora),
+      can_take_now: podeAssumirAgora(a, agora, ehFeriado),
       // Leitor declarado (issue #996): a IA passa a saber se há alguém de fato
       // na frente da tela. `present: false` NÃO tira ninguém da lista nem
       // impede a passagem — quem decide isso é `can_take_now`. Serve para

@@ -165,6 +165,10 @@ CRONS="
 # do provedor, em segundos, e a hora so pesa na regua, que conta em dias. Minuto
 # 43, longe das outras varreduras horarias. Chave desligada: sai na hora.
 43 * * * *|120|api/v1/cron/cobranca
+# O ENCERRAMENTO POR INATIVIDADE (fase 3, item 3.8). De hora em hora: o prazo é
+# escolhido em HORAS pela organização, e desligado de fábrica (sem a chave, a
+# rodada só lê a lista de organizações e sai). Minuto 53, longe das outras.
+53 * * * *|60|api/v1/cron/encerrar-inativas
 # O canal mudo (doc 11, decisão B): varredura de banco, sem rede, com régua em
 # DIAS. Diária e de madrugada porque o estado que ela lê muda em dias — de 5 em
 # 5 minutos seriam 288 varreduras para nada, e o aviso chegaria na mesma hora.

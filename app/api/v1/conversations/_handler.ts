@@ -78,7 +78,7 @@ const SELECT_COLS = `
   status_changed_at, service_revision, service_closed_at, service_started_at, current_demanda_id, assigned_to_user_id, assigned_to_user_name, assignee_kind, assigned_at, last_inbound_at, awaiting_since,
   last_outbound_at, last_message_at, last_message_preview,
   unread_count_for_assignee, is_group, group_chat_id, tags, metadata,
-  snooze_until, sector_id, created_at, updated_at,
+  snooze_until, sector_id, created_at, updated_at, privada, pendente_em,
   bot_silenced_until, last_handoff_at, last_handoff_reason,
   comando_da_conversa,
   automatico_da_conversa,
@@ -294,6 +294,9 @@ export async function listConversationsHandler(
   // Este handler usa o admin client, que passa por cima da RLS: esse filtro é a Única
   // barreira. Consulta nova só para os não lidos nasceria sem barreira nenhuma.
   if (q.unread) query = query.gt("unread_count_for_assignee", 0);
+  // "Pendentes" (item 3.7, migration 9485): a marca da equipe. No banco, pela
+  // mesma razão dos não lidos — e sobre a MESMA `query` com organização.
+  if (q.pendente) query = query.not("pendente_em", "is", null);
 
   if (q.assigned_to === "me") {
     if (ctx.actor.type !== "user") {

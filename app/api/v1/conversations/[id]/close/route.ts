@@ -41,6 +41,20 @@ import { requireSupportWrite } from "@/lib/impersonate/support";
  * Devolver primeiro não reabre nada: a conversa ainda está viva, então a escrita
  * do release (`claimed → open`) não carimba atendimento nenhum, e o fechamento
  * que vem depois é a ÚNICA transição que conta.
+ *
+ * ## O MOTIVO DE ENCERRAMENTO (fase 3, item 3.2)
+ *
+ * `motivo_id` é opcional e, quando vem, tem de ser um motivo ATIVO desta
+ * organização (422 `motivo_invalido`). Quando a organização liga
+ * `settings.atendimento.motivo_obrigatorio_ao_encerrar` e tem ao menos um
+ * motivo ativo, ele passa a ser obrigatório: 422 `motivo_required` com a lista
+ * em `details.motivos`, para a tela oferecer na hora. As duas recusas saem
+ * ANTES de qualquer escrita — nem devolução, nem fechamento.
+ *
+ * Depois de fechar, o motivo vai para a demanda do atendimento
+ * (`fn_demanda_aplicar_motivo`): grava `motivo_de_encerramento_id` e, se ela
+ * ainda não tinha desfecho, encerra com o desfecho da categoria. Falha aqui não
+ * desfaz o fechamento — viaja no corpo em `motivo_de_encerramento`.
  */
 import { randomUUID } from "node:crypto";
 import { type NextRequest } from "next/server";
@@ -59,6 +73,16 @@ import { traduzir } from "@/lib/i18n/dicionario";
 import { ApiError } from "@/lib/api/types";
 import { exigirControleDaConversa } from "@/lib/inbox/controle-da-conversa";
 import { pedirSatisfacaoAoEncerrar } from "@/lib/atendimento/satisfacao";
+import {
+  decidirMotivo,
+  type DecisaoDoMotivo,
+  type MotivoDeEncerramento,
+} from "@/lib/atendimento/motivos-de-encerramento";
+import {
+  aplicarMotivoNaDemanda,
+  lerExigenciaDeMotivo,
+  lerMotivosAtivos,
+} from "@/lib/atendimento/motivos-de-encerramento-server";
 
 export const dynamic = "force-dynamic";
 
@@ -73,6 +97,15 @@ interface RouteCtx {
  */
 export type DesfechoDaDevolucao = { ok: true } | { ok: false; motivo: string };
 
+/**
+ * O que aconteceu com o motivo escolhido. Ausente = ninguém escolheu motivo.
+ * `registrado: false` = a conversa fechou, mas o motivo não chegou à demanda
+ * (`sem_demanda`: o atendimento não tinha demanda vigente).
+ */
+export type MotivoNoFechamento =
+  | { id: string; nome: string; registrado: true; demanda_id: string; desfecho: string | null; protocolo: string | null }
+  | { id: string; nome: string; registrado: false; erro: string };
+
 export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
   const supportDenied = await requireSupportWrite();
   if (supportDenied) return supportDenied;
@@ -84,6 +117,7 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
   const parsed = z.object({
     expected_revision: z.number().int().positive().optional(),
     devolver_ao_automatico: z.boolean().optional(),
+    motivo_id: z.uuid().optional(),
   }).safeParse(body);
   if (!parsed.success) return fail("validation_failed", "Revisão inválida.", 422, { requestId });
   const { id } = await ctx.params;
@@ -117,6 +151,23 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
   if (revisaoEsperada !== visible.service_revision) {
     return fail("conflict", t("O atendimento mudou. Atualize e tente novamente."), 409, { requestId });
   }
+
+  // (1b) O MOTIVO, TAMBÉM ANTES DE QUALQUER ESCRITA. Motivo de outra
+  // organização ou inativo, ou motivo exigido e ausente: 422 sem tocar em nada.
+  const motivo = await conferirMotivo(supabase, authz.org.orgId, parsed.data.motivo_id, requestId);
+  if (motivo.tipo === "motivo_invalido") {
+    return fail("motivo_invalido", t("Escolha um motivo de encerramento válido."), 422, { requestId });
+  }
+  if (motivo.tipo === "motivo_required") {
+    return fail("motivo_required", t("Escolha o motivo do encerramento."), 422, {
+      requestId,
+      details: { motivos: motivo.motivos },
+    });
+  }
+  if (motivo.tipo === "falha") {
+    return fail("internal_error", motivo.detalhe, 500, { requestId });
+  }
+  const motivoEscolhido: MotivoDeEncerramento | null = motivo.motivo;
 
   // (2) A ESCOLHA VEM ANTES DO FECHAMENTO — a ordem é o conserto do CR (#3323).
   //
@@ -175,7 +226,45 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
     resourceType: "conversation",
     resourceId: convFechada.id,
     requestId,
+    ...(motivoEscolhido ? { metadata: { motivo_id: motivoEscolhido.id } } : {}),
   });
+
+  // (4) O MOTIVO NA DEMANDA, depois do fechamento — que já aconteceu e não é
+  // desfeito por falha aqui. O resultado viaja no corpo.
+  let motivoNoFechamento: MotivoNoFechamento | null = null;
+  if (motivoEscolhido) {
+    const aplicado = await aplicarMotivoNaDemanda(admin, {
+      organizationId: convFechada.organization_id,
+      demandaId: convFechada.current_demanda_id ?? null,
+      motivoId: motivoEscolhido.id,
+      actorUserId: user.id,
+    });
+    if (aplicado.ok) {
+      motivoNoFechamento = {
+        id: motivoEscolhido.id, nome: motivoEscolhido.nome, registrado: true,
+        demanda_id: aplicado.demandaId, desfecho: aplicado.desfecho, protocolo: aplicado.protocolo,
+      };
+      await audit({
+        action: "demanda.motivo_registrado",
+        actorUserId: user.id,
+        organizationId: convFechada.organization_id,
+        resourceType: "demanda",
+        resourceId: aplicado.demandaId,
+        requestId,
+        metadata: { motivo_id: motivoEscolhido.id, categoria: motivoEscolhido.categoria, conversation_id: convFechada.id },
+      });
+    } else {
+      motivoNoFechamento = { id: motivoEscolhido.id, nome: motivoEscolhido.nome, registrado: false, erro: aplicado.erro };
+      if (aplicado.erro === "falha") {
+        logger.error("[conversations.close] motivo não chegou à demanda", {
+          conversation_id: convFechada.id,
+          organization_id: convFechada.organization_id,
+          detalhe: aplicado.detalhe,
+          requestId,
+        });
+      }
+    }
+  }
 
   // ── #4023: A PESQUISA DE SATISFAÇÃO, DEPOIS DO FECHAMENTO ────────────────
   //
@@ -206,7 +295,50 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
     });
   }
 
-  return ok(devolucao === null ? convFechada : { ...convFechada, devolucao }, { requestId });
+  const corpo = {
+    ...convFechada,
+    ...(devolucao === null ? {} : { devolucao }),
+    ...(motivoNoFechamento === null ? {} : { motivo_de_encerramento: motivoNoFechamento }),
+  };
+  return ok(corpo, { requestId });
+}
+
+/**
+ * A conferência do motivo, com uma assimetria deliberada:
+ *
+ *   - `motivo_id` no pedido e a lista não pôde ser lida → 500. Gravar um motivo
+ *     que ninguém conferiu seria pior que não fechar agora.
+ *   - nenhum `motivo_id` e a EXIGÊNCIA não pôde ser lida → fecha (com aviso no
+ *     log). A exigência é política de qualidade do registro, não de segurança:
+ *     uma leitura que falhou não pode impedir a equipe de encerrar o atendimento,
+ *     que é o gesto pedido.
+ */
+async function conferirMotivo(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  organizationId: string,
+  motivoId: string | undefined,
+  requestId: string,
+): Promise<DecisaoDoMotivo | { tipo: "falha"; detalhe: string }> {
+  if (motivoId) {
+    try {
+      const ativos = await lerMotivosAtivos(supabase, organizationId);
+      return decidirMotivo({ motivoId, exigido: false, ativos });
+    } catch (erro) {
+      return { tipo: "falha", detalhe: erro instanceof Error ? erro.message : "motivos_de_encerramento" };
+    }
+  }
+  try {
+    if (!(await lerExigenciaDeMotivo(supabase, organizationId))) return { tipo: "ok", motivo: null };
+    const ativos = await lerMotivosAtivos(supabase, organizationId);
+    return decidirMotivo({ motivoId: undefined, exigido: true, ativos });
+  } catch (erro) {
+    logger.warn("[conversations.close] exigência de motivo não pôde ser lida; fechando sem motivo", {
+      organization_id: organizationId,
+      erro: erro instanceof Error ? erro.message : String(erro),
+      requestId,
+    });
+    return { tipo: "ok", motivo: null };
+  }
 }
 
 /**

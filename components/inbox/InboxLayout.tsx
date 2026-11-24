@@ -10,6 +10,7 @@ import { useSelecaoEmLote } from "@/hooks/inbox/useSelecaoEmLote";
 import { estadoDoCompositor } from "@/lib/inbox/estado-do-compositor";
 import { JanelaFechadaAviso } from "@/components/inbox/JanelaFechadaAviso";
 import { NumeroForaDoAr } from "@/components/inbox/NumeroForaDoAr";
+import { ProvedorDoSla } from "@/components/inbox/SeloDeSla";
 import { useClaimConversation } from "@/hooks/inbox/useClaimConversation";
 import { useCloseConversation } from "@/hooks/inbox/useCloseConversation";
 import { useMarkAsRead } from "@/hooks/inbox/useMarkAsRead";
@@ -481,6 +482,8 @@ export function InboxLayout({
       tag: filterValue.tag,
       tagMode: filterValue.tagMode,
       unread: filterValue.onlyUnread || undefined,
+      // "Pendentes" (item 3.7): a cápsula da barra vira o `pendente` da rota.
+      pendente: filterValue.onlyPendentes || undefined,
       is_group: filterValue.onlyGroups || undefined,
     }),
     [
@@ -493,6 +496,7 @@ export function InboxLayout({
       filterValue.tag,
       filterValue.tagMode,
       filterValue.onlyUnread,
+      filterValue.onlyPendentes,
       filterValue.onlyGroups,
     ],
   );
@@ -905,6 +909,9 @@ export function InboxLayout({
   // piso do composer (370px), em vez dos 2px que a versão de uma faixa só
   // deixava. Margem de 2px não é margem, é sorte.
   return (
+    // As metas de SLA (fase 3, item 3.3): uma leitura para a lista e o
+    // cabeçalho; sem meta configurada o selo não desenha nada.
+    <ProvedorDoSla>
     <OpenConversationProvider conversationId={selectedId}>
     <div className="-mx-4 -mt-4 -mb-6 sm:-mx-6 sm:-mt-6">
     <div
@@ -1172,7 +1179,7 @@ export function InboxLayout({
               conversationId={selectedConversation.id}
               agendamentoLigado={compositor.agendamentoLigado}
               blockedReason={compositor.blockedReason}
-              janelaFechada={compositor.janelaFechada}
+              janelaFechada={motivoDaJanela}
               disabled={compositor.disabled}
               // A CAIXA TRAVADA ATÉ ASSUMIR (#3012) — a opção é da ORGANIZAÇÃO e
               // chega pela mesma preferência que o menu (`interface_settings` em
@@ -1334,5 +1341,6 @@ export function InboxLayout({
     </div>
     </div>
     </OpenConversationProvider>
+    </ProvedorDoSla>
   );
 }

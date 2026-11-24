@@ -143,6 +143,19 @@ describe("painel do inbox — demandas abertas", () => {
     expect(com.length).toBe(1);
   });
 
+  // Fase 3, item 3.1: o protocolo do atendimento aparece na linha da demanda
+  // (é o número que o cliente anota). Sem protocolo (rota antiga), nada.
+  it("mostra o protocolo da demanda quando a rota o traz", async () => {
+    get.mockResolvedValue({
+      data: { ...RESPOSTA, demandas: [{ ...RESPOSTA.demandas[0], protocolo: "20261124-000042" }, RESPOSTA.demandas[1]] },
+    });
+    renderPainel();
+
+    const protocolos = await screen.findAllByTestId("demanda-protocolo");
+    expect(protocolos).toHaveLength(1);
+    expect(protocolos[0]!.textContent).toContain("20261124-000042");
+  });
+
   it("a ausência do próximo passo é dita por ESCRITO, não só por cor", async () => {
     get.mockResolvedValue({ data: RESPOSTA });
     renderPainel();

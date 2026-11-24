@@ -35,6 +35,10 @@ import { TelefoneDeFichaVazia } from "./_telefoneDeFichaVazia";
 import { NomeInformado } from "./_nomeInformado";
 import { DuplicadosPorNome } from "./_duplicadosPorNome";
 import { PesquisaDeSatisfacao } from "./_pesquisaDeSatisfacao";
+import { MetasDoSlaForm } from "./_metasDoSla";
+import { EncerrarInativas } from "./_encerrarInativas";
+import { encerrarInativasAposHoras } from "@/lib/schemas/settings";
+import { metasDoSla } from "@/lib/schemas/settings";
 import {
   fecharPedidosVencidos,
   lerOpcaoDaSatisfacao,
@@ -46,6 +50,25 @@ import { moduloLigado } from "@/lib/instalacao/modulos";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * Os setores para a meta própria de SLA. Com o módulo de setores desligado a
+ * parte por setor some (lista vazia); leitura que falha também — a meta da
+ * organização continua editável.
+ */
+async function setoresDaOrganizacao(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  orgId: string,
+  ligado: boolean,
+): Promise<Array<{ id: string; name: string }>> {
+  if (!ligado) return [];
+  const { data } = await supabase
+    .from("attendant_sectors")
+    .select("id, name")
+    .eq("organization_id", orgId)
+    .order("name");
+  return (data ?? []) as Array<{ id: string; name: string }>;
+}
 
 export default async function AtendimentoSettingsPage() {
   const user = await requireAuth();
@@ -125,6 +148,12 @@ export default async function AtendimentoSettingsPage() {
         setoresLigado={await moduloLigado(admin, "setores")}
       />
       <ChannelRoutingForm initial={channels} />
+      {/* Metas de SLA (fase 3, 3.3): lidas pela MESMA régua do selo da lista. */}
+      <MetasDoSlaForm
+        initial={metasDoSla(data?.settings)}
+        setores={await setoresDaOrganizacao(supabase, activeOrg.orgId, await moduloLigado(admin, "setores"))}
+        idioma={idioma}
+      />
       <AssinaturaForm initial={assinaturaInicial} />
       <NomeInformado ligada={nomeInformadoLigado({ crm: settings.crm })} idioma={idioma} podeMudar={podeAdministrarEmpresa(user, activeOrg)} />
       <TelefoneDeFichaVazia
@@ -146,7 +175,14 @@ export default async function AtendimentoSettingsPage() {
       <PesquisaDeSatisfacao
         ligada={satisfacao.ligado}
         janelaHoras={satisfacao.janela_horas}
+        escala={satisfacao.escala}
         resumo={resumoDaPesquisa}
+        idioma={idioma}
+        podeMudar={podeAdministrarEmpresa(user, activeOrg)}
+      />
+      {/* Encerramento por inatividade (fase 3, 3.8): lido pela MESMA régua do cron. */}
+      <EncerrarInativas
+        horas={encerrarInativasAposHoras(data?.settings)}
         idioma={idioma}
         podeMudar={podeAdministrarEmpresa(user, activeOrg)}
       />

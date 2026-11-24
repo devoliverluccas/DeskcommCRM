@@ -1652,6 +1652,33 @@ export const AUDIT_ACTIONS = [
   // etapa sem os requisitos dela (orçamento, agendamento, tarefa). Metadata leva
   // as duas etapas e os tipos pulados; o `lead.moved` da mesma escrita continua.
   "lead.stage_gate_overridden",
+  // Motivos de encerramento (fase 3, item 3.2). Criar e alterar (renomear,
+  // reordenar, desativar) a lista da organização; ligar/desligar a exigência
+  // ao encerrar; e o motivo gravado na demanda no gesto de fechar a conversa.
+  // Metadata leva nome/categoria do motivo — nunca texto do cliente.
+  "motivo_de_encerramento.criado",
+  "motivo_de_encerramento.alterado",
+  "settings.motivo_obrigatorio_alterado",
+  "demanda.motivo_registrado",
+  // SLA do atendimento (fase 3, item 3.3, migration 9483): um gestor tira UMA
+  // conversa da conta do SLA, ou a devolve; e as metas da organização mudam em
+  // Configurações › Atendimento. Metadata: `ignorar` / as metas novas.
+  "conversation.sla_ignored",
+  "conversation.sla_restored",
+  "settings.sla_alterado",
+  // Conversa privada e pendente (fase 3, item 3.7, migration 9485). Metadata:
+  // `{ privada }` / `{ pendente }` — o estado novo, nada do conteúdo.
+  "conversation.privada_alterada",
+  "conversation.pendente_alterada",
+  // Feriados da organização e encerramento por inatividade (fase 3, item 3.8,
+  // migration 9486). Feriado: data e nome (é calendário, não dado pessoal). O
+  // encerramento sai do cron `encerrar-inativas`, UMA linha por conversa
+  // encerrada, só quando age; metadata leva o prazo em horas.
+  "feriado.criado",
+  "feriado.removido",
+  "feriados.nacionais_importados",
+  "conversation.encerrada_por_inatividade",
+  "settings.encerrar_inativas_alterada",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

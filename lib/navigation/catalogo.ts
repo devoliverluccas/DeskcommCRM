@@ -938,6 +938,17 @@ export const NAV_CATALOG = [
     sidebar: true,
   },
   {
+    // Fase 3, item 3.6: os relatórios por período, em abas (`?aba=`). A aba é
+    // navegação interna da tela — o catálogo recusa href com query string.
+    href: "/app/relatorios",
+    label: "Relatórios",
+    description: "Atendimentos, satisfação, origens e atribuição no período que você escolher.",
+    icon: "ClipboardText",
+    group: "analise",
+    section: "Os números do período",
+    sidebar: true,
+  },
+  {
     // ── A porta do ALVO (#3025, fatia 1) ────────────────────────────────────
     //
     // Mora aqui, ao lado de Desempenho, porque é a metade que faltava da MESMA
@@ -1110,6 +1121,30 @@ export const NAV_CATALOG = [
     description:
       "O vocabulário de etiquetas da empresa: onde cada uma é usada e como renomear, juntar ou excluir.",
     icon: "Tag",
+    group: "organizacao",
+    section: "Sua empresa",
+    minRole: "manager",
+  },
+  {
+    // Fase 3, item 3.2: os motivos que a equipe escolhe ao fechar a conversa
+    // no Inbox, e a exigência de escolher um. `manager`, como as Tags: as rotas
+    // que gravam cobram `manager` pelo papel nesta organização.
+    href: "/app/settings/motivos-de-encerramento",
+    label: "Motivos de encerramento",
+    description: "O porquê de cada atendimento encerrado, e se a equipe precisa escolher um ao fechar.",
+    icon: "ListChecks",
+    group: "organizacao",
+    section: "Sua empresa",
+    minRole: "manager",
+  },
+  {
+    // Fase 3, item 3.8 (migration 9486): os dias em que a empresa não atende.
+    // Feriado daqui fecha o expediente das jornadas e filas com horário.
+    // `manager`, como os motivos: as rotas que gravam cobram `manager`.
+    href: "/app/settings/feriados",
+    label: "Feriados",
+    description: "Os dias em que a empresa não atende: quem tem horário fica fora do expediente.",
+    icon: "CalendarBlank",
     group: "organizacao",
     section: "Sua empresa",
     minRole: "manager",

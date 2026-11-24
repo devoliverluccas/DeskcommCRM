@@ -80833,6 +80833,946 @@ grant execute on function public.fn_categorias_do_catalogo(uuid) to authenticate
 
 notify pgrst, 'reload schema';
 
+-- ---- protocolo por atendimento e motivos de encerramento (migration 9482) ----
+-- ⚠️ ESTE BLOCO ENTRA ACIMA DA VARREDURA anon (cria função) — logo antes da linha
+-- `-- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----`.
+-- Depende de `demandas` (0136), `fn_service_lock` e `fn_demanda_encerrar` (definidos acima).
+-- Idempotente e auto-curativo: o preenchimento do protocolo só age sobre linha nula,
+-- e roda ANTES do `set not null`. Texto idêntico ao da migration 9482.
+-- manifest: **Protocolo por atendimento e motivos de encerramento (itens 3.1 e 3.2 da fase 3).** `demandas.protocolo` (texto, NOT NULL depois do preenchimento, único por organização): o número que o cliente anota, no formato `AAAAMMDD-NNNNNN` — o dia em que a demanda abriu (UTC) e a sequência da organização NAQUELE ANO. Quem gera é o BANCO, no gatilho `trg_demanda_protocolo` (BEFORE INSERT OR UPDATE OF protocolo), sobre o contador `demanda_protocolo_contadores` (organização, ano), que só cresce — no molde de `crm_proposal_counters` (0466): apagar demanda ou dados operacionais nunca libera número. O `insert … on conflict do update … returning` segura a linha do contador, então duas demandas abertas ao mesmo tempo nunca recebem o mesmo número. Toda inserção ignora o protocolo que vier de fora (a sessão tem INSERT em `demandas`), e o protocolo é IMUTÁVEL depois de gravado. Preenchimento auto-curativo das demandas existentes, por ordem de abertura, com o contador travado durante a conta. Tabela nova `motivos_de_encerramento` (nome único por organização sem diferenciar maiúscula, `categoria` no MESMO vocabulário de `demandas.desfecho`, `ativo`, `ordem`): a sessão só LÊ; quem escreve é o servidor, com o papel conferido na rota. `demandas.motivo_de_encerramento_id` (FK, `on delete set null`), com gatilho que recusa motivo de outra organização. `fn_demanda_aplicar_motivo(p_org, p_demanda, p_motivo, p_actor)` (security definer, só `service_role`) grava o motivo e, se a demanda ainda não tem desfecho, encerra pela MESMA `fn_demanda_encerrar` com o desfecho da categoria.
+--
+-- ─── Por que o protocolo nasce no BANCO, e não na rota ──────────────────────
+--
+-- Demanda não nasce em rota nenhuma: nasce em gatilho (`fn_service_stamp_status`,
+-- a entrada de mensagem da 0138, a reabertura da 9315, o grupo da 0764…). Um
+-- protocolo gerado no TypeScript deixaria de fora toda demanda aberta por esses
+-- caminhos — que são quase todas. O gatilho BEFORE INSERT pega todas, inclusive
+-- as que vierem a existir.
+--
+-- ─── Por que contador e não `max()+1` ──────────────────────────────────────
+--
+-- `max(protocolo)+1` sobre as linhas que existem libera o número quando a linha
+-- some (apagar dados operacionais, LGPD) — e o mesmo protocolo passaria a nomear
+-- dois atendimentos diferentes, um deles já anotado pelo cliente. O contador
+-- nunca deriva de linha: só cresce. Mesma lição da D9 das propostas (0466).
+--
+-- ─── Por que o dia é UTC ───────────────────────────────────────────────────
+--
+-- Mesma régua do protocolo da ouvidoria (`lib/ouvidoria/registro.ts`): é
+-- identificador, não data de exibição. O ano do contador é o do mesmo instante
+-- em UTC, então o prefixo e a sequência nunca discordam.
+
+-- ═══ 3.1 — PROTOCOLO ════════════════════════════════════════════════════════
+
+alter table public.demandas add column if not exists protocolo text;
+
+comment on column public.demandas.protocolo is
+  'Protocolo do atendimento (AAAAMMDD-NNNNNN): dia de abertura em UTC + sequência da organização no ano. Gerado pelo gatilho trg_demanda_protocolo; imutável (migration 9482).';
+
+create table if not exists public.demanda_protocolo_contadores (
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  ano int not null,
+  ultimo bigint not null default 0,
+  primary key (organization_id, ano)
+);
+comment on table public.demanda_protocolo_contadores is
+  'Sequência do protocolo de demanda por organização e ano. Só cresce; apagar demanda NUNCA mexe aqui (migration 9482).';
+alter table public.demanda_protocolo_contadores enable row level security;
+-- Só o servidor: nenhuma policy, e nenhum privilégio para a sessão. O contador
+-- decide o número que o cliente anota; abri-lo pelo PostgREST deixaria qualquer
+-- membro adiantar ou recuar a numeração da organização.
+revoke all on public.demanda_protocolo_contadores from anon, authenticated;
+grant all on public.demanda_protocolo_contadores to service_role;
+
+create or replace function public.fn_demanda_protocolo()
+returns trigger language plpgsql security definer set search_path = public, pg_temp as $$
+declare
+  quando timestamptz;
+  v_ano int;
+  n bigint;
+begin
+  -- Gravado, não muda: é o número que o cliente anotou.
+  if tg_op = 'UPDATE' and old.protocolo is not null then
+    new.protocolo := old.protocolo;
+    return new;
+  end if;
+  -- UPDATE de linha ainda sem protocolo, com o valor JÁ calculado: é o
+  -- preenchimento desta migration (que segura o contador). Mantém.
+  if tg_op = 'UPDATE' and new.protocolo is not null then
+    return new;
+  end if;
+  -- INSERT: o valor de fora é ignorado SEMPRE — a sessão tem INSERT em
+  -- `demandas`, e protocolo escolhido pelo cliente não é protocolo.
+  quando := coalesce(new.aberta_em, now());
+  v_ano := extract(year from (quando at time zone 'UTC'))::int;
+  insert into public.demanda_protocolo_contadores (organization_id, ano, ultimo)
+    values (new.organization_id, v_ano, 1)
+  on conflict (organization_id, ano) do update
+    set ultimo = public.demanda_protocolo_contadores.ultimo + 1
+  returning ultimo into n;
+  new.protocolo := to_char(quando at time zone 'UTC', 'YYYYMMDD') || '-'
+    || lpad(n::text, greatest(6, length(n::text)), '0');
+  return new;
+end;
+$$;
+revoke execute on function public.fn_demanda_protocolo() from public, anon, authenticated;
+
+drop trigger if exists trg_demanda_protocolo on public.demandas;
+create trigger trg_demanda_protocolo
+  before insert or update of protocolo on public.demandas
+  for each row execute function public.fn_demanda_protocolo();
+
+-- Preenchimento das demandas existentes, por ordem de abertura, continuando o
+-- contador de cada (organização, ano). Um único comando (DO) para o LOCK valer
+-- a conta inteira: uma demanda aberta durante o preenchimento espera o contador
+-- em vez de pegar um número que o preenchimento também daria. Sem linha nula,
+-- não faz nada — reaplicar é inofensivo.
+do $$
+begin
+  if exists (select 1 from public.demandas where protocolo is null) then
+    lock table public.demanda_protocolo_contadores in share row exclusive mode;
+    with pendentes as (
+      select d.id, d.organization_id,
+             extract(year from (d.aberta_em at time zone 'UTC'))::int as ano,
+             to_char(d.aberta_em at time zone 'UTC', 'YYYYMMDD') as dia,
+             row_number() over (
+               partition by d.organization_id, extract(year from (d.aberta_em at time zone 'UTC'))
+               order by d.aberta_em, d.id
+             ) as posicao
+        from public.demandas d
+       where d.protocolo is null
+    ),
+    numerados as (
+      select p.id, p.organization_id, p.ano, p.dia,
+             coalesce(c.ultimo, 0) + p.posicao as numero
+        from pendentes p
+        left join public.demanda_protocolo_contadores c
+          on c.organization_id = p.organization_id and c.ano = p.ano
+    ),
+    gravados as (
+      update public.demandas d
+         set protocolo = n.dia || '-' || lpad(n.numero::text, greatest(6, length(n.numero::text)), '0')
+        from numerados n
+       where d.id = n.id and d.protocolo is null
+      returning n.organization_id, n.ano, n.numero
+    )
+    insert into public.demanda_protocolo_contadores (organization_id, ano, ultimo)
+    select organization_id, ano, max(numero) from gravados group by organization_id, ano
+    on conflict (organization_id, ano) do update
+      set ultimo = greatest(public.demanda_protocolo_contadores.ultimo, excluded.ultimo);
+  end if;
+end;
+$$;
+
+alter table public.demandas alter column protocolo set not null;
+
+create unique index if not exists demandas_org_protocolo_uniq
+  on public.demandas (organization_id, protocolo);
+
+-- ═══ 3.2 — MOTIVOS DE ENCERRAMENTO ═════════════════════════════════════════
+
+create table if not exists public.motivos_de_encerramento (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  nome text not null,
+  -- O MESMO vocabulário de `demandas.desfecho` (0136): a categoria é o desfecho
+  -- que o motivo dá à demanda que ainda não tinha um.
+  categoria text not null,
+  ativo boolean not null default true,
+  ordem integer not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.motivos_de_encerramento
+  drop constraint if exists motivos_de_encerramento_nome_valido;
+alter table public.motivos_de_encerramento
+  add constraint motivos_de_encerramento_nome_valido
+  check (char_length(btrim(nome)) between 1 and 80);
+alter table public.motivos_de_encerramento
+  drop constraint if exists motivos_de_encerramento_categoria_check;
+alter table public.motivos_de_encerramento
+  add constraint motivos_de_encerramento_categoria_check
+  check (categoria in (
+    'resolvida', 'convertida', 'nao_procede',
+    'encerrada_pelo_cliente', 'perdida', 'expirada_sem_resposta'
+  ));
+
+comment on table public.motivos_de_encerramento is
+  'Motivos que a equipe escolhe ao encerrar uma conversa. A categoria preenche demandas.desfecho quando a demanda ainda não tem um (migration 9482).';
+
+create unique index if not exists motivos_de_encerramento_org_nome_uniq
+  on public.motivos_de_encerramento (organization_id, lower(nome));
+create index if not exists motivos_de_encerramento_org_ordem_idx
+  on public.motivos_de_encerramento (organization_id, ordem);
+
+alter table public.motivos_de_encerramento enable row level security;
+drop policy if exists tenant_isolation_motivos_de_encerramento_all on public.motivos_de_encerramento;
+create policy tenant_isolation_motivos_de_encerramento_all on public.motivos_de_encerramento
+  for all
+  using (organization_id in (select * from public.fn_user_org_ids()))
+  with check (organization_id in (select * from public.fn_user_org_ids()));
+
+-- A sessão LÊ (o seletor do Inbox) e não escreve: criar, renomear e desativar é
+-- de `manager`, e quem confere é a rota, com o service role. Sem o revoke, o
+-- `ALTER DEFAULT PRIVILEGES` do baseline daria CRUD inteiro a qualquer agente.
+revoke all on public.motivos_de_encerramento from anon;
+revoke all on public.motivos_de_encerramento from authenticated;
+grant select on public.motivos_de_encerramento to authenticated;
+grant all on public.motivos_de_encerramento to service_role;
+
+alter table public.demandas
+  add column if not exists motivo_de_encerramento_id uuid
+  references public.motivos_de_encerramento(id) on delete set null;
+
+comment on column public.demandas.motivo_de_encerramento_id is
+  'Motivo escolhido ao encerrar a conversa desta demanda (migration 9482). Nulo = encerrada sem motivo.';
+
+create index if not exists idx_demandas_motivo
+  on public.demandas (organization_id, motivo_de_encerramento_id)
+  where motivo_de_encerramento_id is not null;
+
+-- A FK simples não amarra a organização. Sem esta guarda, uma demanda da A
+-- poderia apontar o motivo da B — e a contagem de motivos da B passaria a
+-- incluir atendimento alheio.
+create or replace function public.fn_demanda_motivo_da_mesma_org()
+returns trigger language plpgsql set search_path = public, pg_temp as $$
+begin
+  if new.motivo_de_encerramento_id is not null and not exists (
+    select 1 from public.motivos_de_encerramento m
+     where m.id = new.motivo_de_encerramento_id
+       and m.organization_id = new.organization_id
+  ) then
+    raise exception 'motivo_de_outra_organizacao' using errcode = '23503';
+  end if;
+  return new;
+end;
+$$;
+revoke execute on function public.fn_demanda_motivo_da_mesma_org() from public, anon, authenticated;
+
+drop trigger if exists trg_demanda_motivo_da_mesma_org on public.demandas;
+create trigger trg_demanda_motivo_da_mesma_org
+  before insert or update of motivo_de_encerramento_id, organization_id on public.demandas
+  for each row execute function public.fn_demanda_motivo_da_mesma_org();
+
+-- Grava o motivo e, se a demanda ainda está aberta, encerra pela MESMA porta do
+-- botão "Encerrar demanda" (`fn_demanda_encerrar`): uma segunda regra de
+-- encerramento seria o defeito. Motivo inativo ou de outra organização: 22023.
+create or replace function public.fn_demanda_aplicar_motivo(
+  p_org uuid, p_demanda uuid, p_motivo uuid, p_actor uuid
+)
+returns public.demandas language plpgsql security definer set search_path = public as $$
+declare d public.demandas; m public.motivos_de_encerramento; pre_contact uuid;
+begin
+  select * into m from public.motivos_de_encerramento
+   where id = p_motivo and organization_id = p_org;
+  if not found or not m.ativo then
+    raise exception 'motivo_invalido' using errcode = '22023';
+  end if;
+  select * into d from public.demandas where id = p_demanda and organization_id = p_org;
+  if not found then raise exception 'demanda_not_found' using errcode = 'P0002'; end if;
+  pre_contact := d.contact_id;
+  perform public.fn_service_lock(p_org, d.contact_id);
+  select * into d from public.demandas
+   where id = p_demanda and organization_id = p_org for no key update;
+  if d.contact_id is distinct from pre_contact then
+    raise exception 'service_contact_changed' using errcode = '40001';
+  end if;
+  update public.demandas
+     set motivo_de_encerramento_id = m.id, updated_at = clock_timestamp()
+   where id = p_demanda and organization_id = p_org
+  returning * into d;
+  if d.fechada_em is null then
+    d := public.fn_demanda_encerrar(p_org, p_demanda, d.revision, m.categoria, p_actor);
+  end if;
+  return d;
+end;
+$$;
+revoke execute on function public.fn_demanda_aplicar_motivo(uuid, uuid, uuid, uuid) from public, anon, authenticated;
+grant execute on function public.fn_demanda_aplicar_motivo(uuid, uuid, uuid, uuid) to service_role;
+
+-- ---- SLA do atendimento: ignorado na conversa e leitura do relatório (migration 9483) ----
+-- Espelho de supabase/migrations/20261124130100_9483_sla_do_atendimento.sql.
+-- Idempotente e auto-curativo: colunas com if not exists, dados corrigidos ANTES das
+-- constraints, funções com create or replace, gatilho com drop if exists.
+-- Cria FUNÇÃO: entra ANTES do bloco da VARREDURA anon.
+
+-- ---- conversations: o SLA ignorado ----
+alter table public.conversations add column if not exists sla_ignorado_em timestamptz;
+alter table public.conversations add column if not exists sla_ignorado_por uuid;
+
+-- Auto-curativo, ANTES das constraints: quem ignorou sem o instante perde o
+-- autor; autor que não existe mais em auth.users vira nulo.
+update public.conversations set sla_ignorado_por = null
+ where sla_ignorado_por is not null and sla_ignorado_em is null;
+update public.conversations c set sla_ignorado_por = null
+ where c.sla_ignorado_por is not null
+   and not exists (select 1 from auth.users u where u.id = c.sla_ignorado_por);
+
+alter table public.conversations drop constraint if exists conversations_sla_ignorado_por_fkey;
+alter table public.conversations add constraint conversations_sla_ignorado_por_fkey
+  foreign key (sla_ignorado_por) references auth.users(id) on delete set null;
+
+alter table public.conversations drop constraint if exists conversations_sla_ignorado_autor_com_instante;
+alter table public.conversations add constraint conversations_sla_ignorado_autor_com_instante
+  check (sla_ignorado_por is null or sla_ignorado_em is not null);
+
+comment on column public.conversations.sla_ignorado_em is
+  'Quando um gestor tirou esta conversa da conta do SLA (rota POST /api/v1/conversations/[id]/sla). Nulo = conta. Reabrir a conversa zera (gatilho trg_conversa_sla_ignorado). Só o servidor grava (migration 9483).';
+comment on column public.conversations.sla_ignorado_por is
+  'Quem tirou a conversa da conta do SLA. Some (set null) se o usuário for apagado; o instante fica (migration 9483).';
+
+-- ---- a guarda: o ignorado é do servidor, e reabrir zera ----
+create or replace function public.fn_conversa_sla_ignorado()
+returns trigger language plpgsql set search_path = public, pg_temp as $$
+begin
+  if tg_op = 'INSERT' then
+    -- Conversa nasce contando. Pela sessão, qualquer valor enviado é descartado.
+    if current_user in ('authenticated', 'anon') then
+      new.sla_ignorado_em := null;
+      new.sla_ignorado_por := null;
+    end if;
+    return new;
+  end if;
+
+  if current_user in ('authenticated', 'anon')
+     and (new.sla_ignorado_em is distinct from old.sla_ignorado_em
+          or new.sla_ignorado_por is distinct from old.sla_ignorado_por) then
+    raise exception 'sla_ignorado_e_do_servidor' using errcode = '42501';
+  end if;
+
+  -- Reabrir é atendimento novo: o que foi ignorado no anterior não vale para ele.
+  -- A lista de encerrados é a de STATUS_ENCERRADOS_LISTA (lib/inbox/comando-da-conversa.ts)
+  -- e a de fn_service_stamp_status.
+  if old.status in ('closed', 'archived', 'resolved')
+     and new.status not in ('closed', 'archived', 'resolved') then
+    new.sla_ignorado_em := null;
+    new.sla_ignorado_por := null;
+  end if;
+  return new;
+end $$;
+
+revoke execute on function public.fn_conversa_sla_ignorado() from public, anon;
+
+drop trigger if exists trg_conversa_sla_ignorado on public.conversations;
+create trigger trg_conversa_sla_ignorado
+  before insert or update on public.conversations
+  for each row execute function public.fn_conversa_sla_ignorado();
+
+-- ---- a leitura do relatório: primeira resposta por atendimento ----
+--
+-- Um atendimento = (conversa, service_revision). Entra o atendimento cuja
+-- PRIMEIRA mensagem do cliente caiu em [p_de, p_ate): a mensagem do cliente
+-- no período sem nenhuma anterior do mesmo atendimento antes de p_de.
+-- `respondida_em` é a primeira resposta enviada (não falhada) depois dela —
+-- a mesma pergunta que `awaiting_since` responde na fila. Grupo fica fora.
+create or replace function public.fn_sla_primeiras_respostas(
+  p_organization_id uuid,
+  p_de timestamptz,
+  p_ate timestamptz
+)
+returns table (
+  conversation_id uuid,
+  service_revision bigint,
+  sector_id uuid,
+  inicio timestamptz,
+  respondida_em timestamptz,
+  ignorado boolean
+)
+language sql
+stable
+security invoker
+set search_path = ''
+as $fn$
+  with entradas as (
+    select m.conversation_id, m.service_revision, min(m.sent_at) as inicio
+      from public.messages m
+     where m.organization_id = p_organization_id
+       and m.direction = 'inbound'
+       and m.sent_at >= p_de
+       and m.sent_at < p_ate
+     group by m.conversation_id, m.service_revision
+  )
+  select e.conversation_id,
+         e.service_revision,
+         c.sector_id,
+         e.inicio,
+         (select min(o.sent_at)
+            from public.messages o
+           where o.conversation_id = e.conversation_id
+             and o.organization_id = p_organization_id
+             and o.direction = 'outbound'
+             and o.service_revision is not distinct from e.service_revision
+             and o.sent_at >= e.inicio
+             and coalesce(o.status, '') <> 'failed') as respondida_em,
+         (c.sla_ignorado_em is not null
+           and c.service_revision is not distinct from e.service_revision) as ignorado
+    from entradas e
+    join public.conversations c
+      on c.id = e.conversation_id
+     and c.organization_id = p_organization_id
+   where not c.is_group
+     and not exists (
+       select 1
+         from public.messages a
+        where a.conversation_id = e.conversation_id
+          and a.organization_id = p_organization_id
+          and a.direction = 'inbound'
+          and a.service_revision is not distinct from e.service_revision
+          and a.sent_at < p_de
+     )
+   order by e.inicio
+   limit 20000;
+$fn$;
+
+comment on function public.fn_sla_primeiras_respostas(uuid, timestamptz, timestamptz) is
+  'Atendimentos (conversa + service_revision) cuja primeira mensagem do cliente caiu no período, com a primeira resposta enviada depois dela e se o atendimento corrente está com o SLA ignorado. security invoker: pela sessão a RLS vale; pelo service role o corte é p_organization_id. A conta do prazo é de lib/inbox/sla-relatorio.ts (migration 9483). Teto de 20000 linhas.';
+
+revoke execute on function public.fn_sla_primeiras_respostas(uuid, timestamptz, timestamptz) from public, anon;
+grant execute on function public.fn_sla_primeiras_respostas(uuid, timestamptz, timestamptz) to authenticated, service_role;
+
+notify pgrst, 'reload schema';
+
+-- ---- pesquisa NPS de 0 a 10 e as leituras dos relatórios (migration 9484) ----
+-- Espelho de supabase/migrations/20261124130200_9484_nps_de_zero_a_dez.sql.
+-- Idempotente e auto-curativo: coluna com if not exists, escala e nota fora da régua
+-- corrigidas ANTES das constraints (drop if exists + add), funções com create or replace
+-- e EXECUTE revogado das duas origens (public, anon). Entra ANTES da VARREDURA anon
+-- porque cria função.
+
+-- ═══ 3.4 — A RÉGUA DO PEDIDO ═══
+--
+-- A escala é do PEDIDO, não da organização: a organização troca de CSAT para
+-- NPS numa terça, e o "4" que chega na quarta para uma pergunta de segunda
+-- ainda é nota de 1 a 5. Ler a régua da configuração na hora da resposta
+-- daria a mesma nota em duas réguas conforme o dia em que se olha.
+alter table public.satisfacao_do_atendimento
+  add column if not exists escala text not null default 'csat_1_5';
+
+-- Auto-curativo ANTES das constraints: escala fora do vocabulário volta ao
+-- padrão (é o que toda linha anterior a esta migration é).
+update public.satisfacao_do_atendimento
+   set escala = 'csat_1_5'
+ where escala is null or escala not in ('csat_1_5', 'nps_0_10');
+
+alter table public.satisfacao_do_atendimento drop constraint if exists satisfacao_escala_check;
+alter table public.satisfacao_do_atendimento
+  add constraint satisfacao_escala_check check (escala in ('csat_1_5', 'nps_0_10'));
+
+-- Nota que não cabe na régua do próprio pedido não é nota: vira `sem_nota`
+-- (silêncio, nunca nota inventada). Com a constraint antiga de pé, nenhuma
+-- linha cai aqui — o update existe para o clone em que ela não existiu.
+update public.satisfacao_do_atendimento
+   set status = 'sem_nota', nota = null, respondido_em = null
+ where nota is not null
+   and not (
+     (escala = 'csat_1_5' and nota between 1 and 5)
+     or (escala = 'nps_0_10' and nota between 0 and 10)
+   );
+
+alter table public.satisfacao_do_atendimento drop constraint if exists satisfacao_nota_check;
+alter table public.satisfacao_do_atendimento
+  add constraint satisfacao_nota_check check (
+    nota is null
+    or (escala = 'csat_1_5' and nota between 1 and 5)
+    or (escala = 'nps_0_10' and nota between 0 and 10)
+  );
+
+comment on column public.satisfacao_do_atendimento.escala is
+  'A régua em que a pergunta foi feita: csat_1_5 (padrão, nota 1-5) ou nps_0_10 (nota 0-10). É do pedido, não da organização: trocar a opção não reinterpreta resposta de pergunta antiga.';
+
+-- ═══ O resumo, por régua ═══
+--
+-- Mesma assinatura (a rota e a tela de Configurações já chamam com estes três
+-- argumentos), saída maior. `media` e `notas` de cima continuam sendo o que a
+-- tela de 1 a 5 lê, agora só com pedidos CSAT; `por_escala` traz as duas
+-- réguas separadas. O NPS (promotores − detratores) é calculado no TypeScript,
+-- a partir das contagens por nota (`calcularNps`, função pura testada).
+create or replace function public.fn_satisfacao_resumo(
+  p_org uuid,
+  p_de timestamptz default null,
+  p_ate timestamptz default null
+) returns jsonb language sql security definer
+set search_path = public, pg_temp as $$
+  with base as (
+    select s.status, s.nota, s.escala
+      from public.satisfacao_do_atendimento s
+     where s.organization_id = p_org
+       and (p_de is null or s.perguntado_em >= p_de)
+       and (p_ate is null or s.perguntado_em < p_ate)
+  ),
+  contagem as (
+    select escala, nota, count(*) as quantidade
+      from base
+     where status = 'respondida' and nota is not null
+     group by escala, nota
+  ),
+  por_escala as (
+    select e.escala,
+           jsonb_build_object(
+             'respostas', coalesce((select sum(c.quantidade) from contagem c where c.escala = e.escala), 0),
+             'media', (select round(avg(b.nota), 2) from base b
+                        where b.escala = e.escala and b.status = 'respondida'),
+             'notas', coalesce((select jsonb_object_agg(c.nota::text, c.quantidade)
+                                  from contagem c where c.escala = e.escala), '{}'::jsonb)
+           ) as resumo
+      from (values ('csat_1_5'), ('nps_0_10')) as e(escala)
+  )
+  select jsonb_build_object(
+    'respostas', (select count(*) from base where status = 'respondida'),
+    'pedidos', (select count(*) from base),
+    'sem_nota', (select count(*) from base where status = 'sem_nota'),
+    'aguardando', (select count(*) from base where status = 'aguardando'),
+    'media', (select round(avg(nota), 2) from base where status = 'respondida' and escala = 'csat_1_5'),
+    'notas', coalesce((select jsonb_object_agg(nota::text, quantidade) from contagem where escala = 'csat_1_5'), '{}'::jsonb),
+    'por_escala', (select jsonb_object_agg(escala, resumo) from por_escala)
+  );
+$$;
+
+revoke execute on function public.fn_satisfacao_resumo(uuid, timestamptz, timestamptz) from public, anon, authenticated, service_role;
+grant execute on function public.fn_satisfacao_resumo(uuid, timestamptz, timestamptz) to service_role;
+
+-- ═══ 3.6 — RELATÓRIO DE ATENDIMENTOS ═══
+--
+-- SECURITY INVOKER de propósito: quem chama é a rota com o client da SESSÃO, e
+-- a RLS de `conversations` (fn_can_view_conversation), `messages` e `demandas`
+-- decide o escopo — o agent vê o que já vê no Inbox, o manager a organização.
+-- O `p_org` filtra junto (a RLS sozinha deixaria um usuário de duas empresas
+-- somar as duas).
+--
+-- O ciclo é o do ATENDIMENTO, não o da conversa: `service_started_at` é o
+-- começo do atendimento corrente (a conversa reaberta recomeça a contar), e
+-- `service_closed_at` o fim. Conversa de grupo fica de fora: a 1ª resposta
+-- num grupo não mede atendimento a um cliente.
+--
+-- 1ª resposta = 1ª mensagem HUMANA (`sent_by_user_id`) depois da 1ª entrada do
+-- ciclo — a mesma régua da "1ª resposta" de Desempenho (`fn_attendant_metrics`).
+-- Resolução = `service_closed_at − início do ciclo`, das encerradas na janela.
+-- Média E mediana: a média sozinha é refém de uma conversa esquecida por dias.
+create or replace function public.fn_relatorio_atendimentos(
+  p_org uuid,
+  p_de timestamptz,
+  p_ate timestamptz,
+  p_fuso text default 'UTC'
+) returns jsonb language sql stable security invoker
+set search_path = public, pg_temp as $$
+  with
+  abertas as (
+    select c.id, c.sector_id, c.assigned_to_user_id,
+           coalesce(c.service_started_at, c.created_at) as inicio
+      from public.conversations c
+     where c.organization_id = p_org
+       and not c.is_group
+       and coalesce(c.service_started_at, c.created_at) >= p_de
+       and coalesce(c.service_started_at, c.created_at) < p_ate
+  ),
+  encerradas as (
+    select c.id, c.sector_id, c.assigned_to_user_id,
+           coalesce(c.service_started_at, c.created_at) as inicio,
+           c.service_closed_at as fim
+      from public.conversations c
+     where c.organization_id = p_org
+       and not c.is_group
+       and c.service_closed_at >= p_de
+       and c.service_closed_at < p_ate
+  ),
+  primeira as (
+    select a.id, a.sector_id, a.assigned_to_user_id,
+           extract(epoch from (s.saida - e.entrada))::numeric as segundos
+      from abertas a
+      cross join lateral (
+        select min(m.sent_at) as entrada
+          from public.messages m
+         where m.organization_id = p_org
+           and m.conversation_id = a.id
+           and m.direction = 'inbound'
+           and m.sent_at >= a.inicio
+      ) e
+      cross join lateral (
+        select min(m.sent_at) as saida
+          from public.messages m
+         where m.organization_id = p_org
+           and m.conversation_id = a.id
+           and m.direction = 'outbound'
+           and m.sent_by_user_id is not null
+           and e.entrada is not null
+           and m.sent_at >= e.entrada
+      ) s
+     where e.entrada is not null and s.saida is not null
+  ),
+  resolucao as (
+    select e.id, e.sector_id, e.assigned_to_user_id,
+           extract(epoch from (e.fim - e.inicio))::numeric as segundos
+      from encerradas e
+     where e.fim >= e.inicio
+  ),
+  dias as (
+    select d::date as dia
+      from generate_series(
+        (p_de at time zone p_fuso)::date::timestamp,
+        ((p_ate - interval '1 microsecond') at time zone p_fuso)::date::timestamp,
+        interval '1 day'
+      ) as d
+  ),
+  serie as (
+    select dias.dia,
+           (select count(*) from abertas a where (a.inicio at time zone p_fuso)::date = dias.dia) as abertos,
+           (select count(*) from encerradas e where (e.fim at time zone p_fuso)::date = dias.dia) as encerrados
+      from dias
+  ),
+  setores as (
+    select k.sector_id,
+           (select s.name from public.attendant_sectors s
+             where s.organization_id = p_org and s.id = k.sector_id) as nome,
+           (select count(*) from abertas a where a.sector_id is not distinct from k.sector_id) as abertos,
+           (select count(*) from encerradas e where e.sector_id is not distinct from k.sector_id) as encerrados,
+           (select round(avg(p.segundos)) from primeira p where p.sector_id is not distinct from k.sector_id) as primeira_resposta_media,
+           (select round(avg(r.segundos)) from resolucao r where r.sector_id is not distinct from k.sector_id) as resolucao_media
+      from (select sector_id from abertas union select sector_id from encerradas) k
+  ),
+  atendentes as (
+    select k.user_id,
+           (select count(*) from abertas a where a.assigned_to_user_id is not distinct from k.user_id) as abertos,
+           (select count(*) from encerradas e where e.assigned_to_user_id is not distinct from k.user_id) as encerrados,
+           (select round(avg(p.segundos)) from primeira p where p.assigned_to_user_id is not distinct from k.user_id) as primeira_resposta_media,
+           (select round(avg(r.segundos)) from resolucao r where r.assigned_to_user_id is not distinct from k.user_id) as resolucao_media
+      from (select assigned_to_user_id as user_id from abertas
+            union select assigned_to_user_id from encerradas) k
+  ),
+  desfechos as (
+    select d.desfecho, count(*) as quantidade
+      from public.demandas d
+     where d.organization_id = p_org
+       and d.fechada_em >= p_de
+       and d.fechada_em < p_ate
+       and d.desfecho is not null
+     group by d.desfecho
+  )
+  select jsonb_build_object(
+    'abertos', (select count(*) from abertas),
+    'encerrados', (select count(*) from encerradas),
+    'primeira_resposta', jsonb_build_object(
+      'media', (select round(avg(segundos)) from primeira),
+      'mediana', (select round(percentile_cont(0.5) within group (order by segundos)::numeric) from primeira),
+      'amostra', (select count(*) from primeira)
+    ),
+    'resolucao', jsonb_build_object(
+      'media', (select round(avg(segundos)) from resolucao),
+      'mediana', (select round(percentile_cont(0.5) within group (order by segundos)::numeric) from resolucao),
+      'amostra', (select count(*) from resolucao)
+    ),
+    'por_dia', coalesce((select jsonb_agg(jsonb_build_object(
+        'dia', to_char(dia, 'YYYY-MM-DD'), 'abertos', abertos, 'encerrados', encerrados) order by dia)
+      from serie), '[]'::jsonb),
+    'por_setor', coalesce((select jsonb_agg(jsonb_build_object(
+        'sector_id', sector_id, 'nome', nome, 'abertos', abertos, 'encerrados', encerrados,
+        'primeira_resposta_media', primeira_resposta_media, 'resolucao_media', resolucao_media)
+        order by abertos desc, encerrados desc)
+      from setores), '[]'::jsonb),
+    'por_atendente', coalesce((select jsonb_agg(jsonb_build_object(
+        'user_id', user_id, 'abertos', abertos, 'encerrados', encerrados,
+        'primeira_resposta_media', primeira_resposta_media, 'resolucao_media', resolucao_media)
+        order by encerrados desc, abertos desc)
+      from atendentes), '[]'::jsonb),
+    'desfechos', coalesce((select jsonb_object_agg(desfecho, quantidade) from desfechos), '{}'::jsonb)
+  );
+$$;
+
+revoke execute on function public.fn_relatorio_atendimentos(uuid, timestamptz, timestamptz, text) from public, anon;
+grant execute on function public.fn_relatorio_atendimentos(uuid, timestamptz, timestamptz, text) to authenticated, service_role;
+
+-- ═══ 3.6 — RELATÓRIO DE ATRIBUIÇÃO ═══
+--
+-- Os cliques dos links rastreáveis (google + meta) NA JANELA, por link: quantos
+-- cliques, quantos viraram contato (o ref casou com a mensagem), quantos
+-- negócios esses contatos têm, quantos ganhos, e quantas conversões a
+-- plataforma de anúncio recebeu (`ad_conversion_dispatches.status = 'sent'`).
+-- Clique sem link (`tracking_link_id` nulo) é a página de captura direta e sai
+-- numa linha própria com `link_id` nulo.
+--
+-- SECURITY DEFINER e só `service_role`, como `fn_metricas_links_rastreaveis`:
+-- as tabelas de clique não têm GRANT para `authenticated`. O `p_org` vem da
+-- sessão, resolvido na rota (piso `manager`).
+create or replace function public.fn_relatorio_atribuicao(
+  p_org uuid,
+  p_de timestamptz,
+  p_ate timestamptz
+) returns jsonb language sql stable security definer
+set search_path = public, pg_temp as $$
+  with cliques as (
+    select g.tracking_link_id, g.contact_id
+      from public.google_ads_click_refs g
+     where g.organization_id = p_org and g.created_at >= p_de and g.created_at < p_ate
+    union all
+    select m.tracking_link_id, m.contact_id
+      from public.meta_ads_click_refs m
+     where m.organization_id = p_org and m.created_at >= p_de and m.created_at < p_ate
+  ),
+  por_link as (
+    select tracking_link_id, count(*) as cliques, count(distinct contact_id) as contatos
+      from cliques
+     group by tracking_link_id
+  ),
+  negocios as (
+    select distinct c.tracking_link_id, l.id, l.status
+      from cliques c
+      join public.crm_leads l on l.organization_id = p_org and l.contact_id = c.contact_id
+     where c.contact_id is not null
+  ),
+  conversoes as (
+    select n.tracking_link_id, count(distinct d.lead_id) as enviadas
+      from negocios n
+      join public.ad_conversion_dispatches d
+        on d.organization_id = p_org and d.lead_id = n.id and d.status = 'sent'
+     group by n.tracking_link_id
+  )
+  select coalesce(jsonb_agg(jsonb_build_object(
+      'link_id', p.tracking_link_id,
+      'nome', l.name,
+      'uso', l.use_case,
+      'cliques', p.cliques,
+      'contatos', p.contatos,
+      'negocios', (select count(*) from negocios n where n.tracking_link_id is not distinct from p.tracking_link_id),
+      'ganhos', (select count(*) from negocios n
+                  where n.tracking_link_id is not distinct from p.tracking_link_id and n.status = 'won'),
+      'conversoes', coalesce((select c.enviadas from conversoes c
+                               where c.tracking_link_id is not distinct from p.tracking_link_id), 0)
+    ) order by p.cliques desc), '[]'::jsonb)
+    from por_link p
+    left join public.ad_tracking_links l
+      on l.organization_id = p_org and l.id = p.tracking_link_id;
+$$;
+
+revoke execute on function public.fn_relatorio_atribuicao(uuid, timestamptz, timestamptz) from public, anon, authenticated, service_role;
+grant execute on function public.fn_relatorio_atribuicao(uuid, timestamptz, timestamptz) to service_role;
+
+notify pgrst, 'reload schema';
+
+-- ---- conversa privada e pendente (migration 9485) ----
+-- ⚠️ ESTE BLOCO ENTRA ACIMA DA VARREDURA anon (cria função) — logo antes da linha
+-- `-- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----`.
+-- Depende de `conversations` (0031), `fn_user_org_ids`/`fn_user_role_in_org` (0734),
+-- `fn_is_platform_admin`, `fn_role_at_least` e da `fn_can_view_conversation(uuid,uuid)`
+-- vigente (bloco da 9090). A policy restritiva NÃO reescreve a `conversations_select`
+-- do fim do arquivo (9214): soma-se a ela por AND, em qualquer ordem. Todas as
+-- funções novas trazem o próprio revoke de `public, anon`. Cabeçalho completo na migration 9485.
+-- manifest: **Conversa privada e conversa pendente (item 3.7 da fase 3).** `conversations.privada boolean not null default false` + `privada_por uuid` (FK `auth.users`, `on delete set null`): conversa privada só é LIDA por quem é responsável por ela (`assigned_to_user_id = auth.uid()`), por gestor/administrador da organização e pela plataforma. A regra entra como policy RESTRITIVA de SELECT `conversations_privada_select` — ela se SOMA (AND) à `conversations_select` permissiva, sem reescrevê-la — e mede a linha contra `fn_conversation_private_scope()`, o conjunto de organizações em que quem consulta é manager+, avaliado UMA vez por consulta (a mesma forma da 0726, #3090: nenhuma função por linha). `messages`, notas, rascunhos e tudo que lê `conversations` pela sessão herdam a regra. `fn_can_view_conversation(org, responsável, privada)` (sobrecarga de 3 argumentos) é a escada por linha com a regra nova, e a de 2 argumentos segue idêntica (privada = falso). Gatilho `trg_conversa_privada_e_pendente` (BEFORE UPDATE, sem HTTP): recusa (42501) quem marca/desmarca privada pela sessão sem ser responsável nem manager+; e zera `pendente_em` quando a conversa ENCERRA (closed/resolved/archived). `conversations.pendente_em timestamptz` (nulo = não pendente) com índice parcial `(organization_id, pendente_em) where pendente_em is not null` para o filtro "Pendentes" do Inbox. Idempotente: `add column if not exists`, `create or replace`, policy e gatilho recriados por nome.
+--
+-- ─── Por que uma policy RESTRITIVA, e não reescrever `conversations_select` ──
+--
+-- A `conversations_select` vigente é a do fim do baseline (9214): seis
+-- disjunções (plataforma, leitura da organização, responsável, fila sem dono,
+-- participante, setor). "Privada" não é mais uma porta de entrada: é um corte
+-- que vale por cima de TODAS elas — o participante convidado, o membro do setor
+-- e o atendente em `visibility_mode = 'all'` deixam de ver. Uma restritiva diz
+-- exatamente isso (`permissivas AND restritivas`), e não obriga a repetir as
+-- seis disjunções aqui, que divergiriam da próxima vez que alguém mexer numa.
+--
+-- ─── Por que um conjunto por consulta, e não `fn_can_view_conversation` por linha ─
+--
+-- `tests/invariants/escopo-da-conversa-avaliado-uma-vez.test.ts` reprova o plano
+-- que chama `fn_can_view_conversation` por linha (era 214 ms em 142 conversas).
+-- `fn_conversation_private_scope()` não depende da linha: vira um `hashed
+-- SubPlan` calculado uma vez. A conversa pública (`not privada`) passa na
+-- primeira disjunção e não paga nada.
+--
+-- ─── O que a sobrecarga de 3 argumentos é ───────────────────────────────────
+--
+-- A fonte por LINHA da regra, para quem compara (o invariante novo) e para quem
+-- vier a precisar perguntar sobre uma conversa só. A de 2 argumentos NÃO muda:
+-- ela é chamada com os campos da linha por notas, rascunhos, casos e comandos de
+-- atribuição — e todos eles também leem `conversations` pela sessão, então já
+-- herdam o corte da restritiva.
+
+-- ═══ colunas ════════════════════════════════════════════════════════════════
+
+alter table public.conversations
+  add column if not exists privada boolean not null default false;
+alter table public.conversations
+  add column if not exists privada_por uuid references auth.users(id) on delete set null;
+alter table public.conversations
+  add column if not exists pendente_em timestamptz;
+
+comment on column public.conversations.privada is
+  'Conversa privada (migration 9485): só o responsável (assigned_to_user_id), gestor/administrador da organização e a plataforma leem. Policy restritiva conversations_privada_select. Quem marca: POST /api/v1/conversations/[id]/privada.';
+comment on column public.conversations.privada_por is
+  'Quem marcou a conversa como privada por último (migration 9485). Nulo quando pública ou quando a pessoa saiu da instalação.';
+comment on column public.conversations.pendente_em is
+  'Marcada como pendente pela equipe neste instante (migration 9485); nulo = não pendente. Zerada pelo gatilho trg_conversa_privada_e_pendente quando a conversa encerra. Filtro "Pendentes" do Inbox.';
+
+create index if not exists idx_conversations_pendentes
+  on public.conversations (organization_id, pendente_em)
+  where pendente_em is not null;
+
+-- ═══ o conjunto por consulta ════════════════════════════════════════════════
+
+-- Organizações em que quem consulta é gestor ou administrador. Mesma fonte de
+-- "quem é membro" e de "qual papel" que `fn_conversation_scope()` usa
+-- (`fn_user_org_ids()` + `fn_user_role_in_org()`), inclusive a sessão de
+-- suporte (que resolve para admin/viewer conforme o modo).
+create or replace function public.fn_conversation_private_scope()
+returns setof uuid
+language sql stable security definer
+set search_path = public
+as $$
+  select o.organization_id
+    from public.fn_user_org_ids() as o(organization_id)
+   where public.fn_user_role_in_org(o.organization_id) in ('manager','admin');
+$$;
+
+revoke all on function public.fn_conversation_private_scope() from public, anon;
+grant execute on function public.fn_conversation_private_scope() to authenticated, service_role;
+
+-- ═══ a escada por linha, com a regra nova ═══════════════════════════════════
+
+create or replace function public.fn_can_view_conversation(
+  p_org uuid,
+  p_assigned_to_user_id uuid,
+  p_privada boolean
+) returns boolean
+language sql stable security definer
+set search_path = public
+as $$
+  select public.fn_can_view_conversation(p_org, p_assigned_to_user_id)
+     and (
+       not coalesce(p_privada, false)
+       or public.fn_is_platform_admin()
+       or p_assigned_to_user_id = auth.uid()
+       or public.fn_user_role_in_org(p_org) in ('manager','admin')
+     );
+$$;
+
+revoke all on function public.fn_can_view_conversation(uuid, uuid, boolean) from public, anon;
+grant execute on function public.fn_can_view_conversation(uuid, uuid, boolean) to authenticated, service_role;
+
+-- ═══ a policy restritiva ════════════════════════════════════════════════════
+
+drop policy if exists conversations_privada_select on public.conversations;
+create policy conversations_privada_select
+  on public.conversations as restrictive for select to authenticated
+  using (
+    not privada
+    or assigned_to_user_id = auth.uid()
+    or (select public.fn_is_platform_admin())
+    or organization_id in (select public.fn_conversation_private_scope())
+  );
+
+-- ═══ o gatilho: quem pode mudar `privada`, e o pendente que some ao encerrar ═
+
+create or replace function public.fn_conversa_privada_e_pendente()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  -- Pela SESSÃO (auth.uid() presente), marcar/desmarcar privada é do
+  -- responsável ou de manager+. O servidor (service_role, sem auth.uid()) já
+  -- conferiu o papel na rota.
+  if new.privada is distinct from old.privada and auth.uid() is not null then
+    if not (
+      old.assigned_to_user_id = auth.uid()
+      or public.fn_role_at_least(new.organization_id, 'manager')
+      or public.fn_is_platform_admin()
+    ) then
+      raise exception 'privada_sem_permissao' using errcode = '42501';
+    end if;
+  end if;
+  if not new.privada then
+    new.privada_por := null;
+  end if;
+  -- Encerrou: o "pendente" era do atendimento que acabou.
+  if new.status in ('closed','resolved','archived')
+     and old.status is distinct from new.status then
+    new.pendente_em := null;
+  end if;
+  return new;
+end;
+$$;
+
+revoke execute on function public.fn_conversa_privada_e_pendente() from public, anon;
+grant execute on function public.fn_conversa_privada_e_pendente() to authenticated, service_role;
+
+drop trigger if exists trg_conversa_privada_e_pendente on public.conversations;
+create trigger trg_conversa_privada_e_pendente
+  before update of privada, privada_por, status, pendente_em on public.conversations
+  for each row execute function public.fn_conversa_privada_e_pendente();
+
+-- Auto-curativo: conversa encerrada com pendente que sobrou (não deveria haver,
+-- a coluna é nova; a segunda passada não acha linha).
+update public.conversations
+   set pendente_em = null
+ where pendente_em is not null
+   and status in ('closed','resolved','archived');
+
+notify pgrst, 'reload schema';
+
+-- ---- feriados e encerramento por inatividade (migration 9486) ----
+-- Não cria função: pode ficar em qualquer ponto do apêndice; sugerido logo depois do
+-- bloco da 9485, acima da VARREDURA anon, junto dos outros da fase 3. Depende só de
+-- `organizations`, `conversations` (colunas `awaiting_since` da 0267 e
+-- `last_outbound_at`) e de `fn_user_org_ids()`. Cabeçalho completo na migration 9486.
+-- manifest: **Feriados da organização e encerramento automático por inatividade (item 3.8 da fase 3).** Tabela nova `feriados` (organização, `data date`, `nome` de 1 a 80 caracteres, `recorrente_anual boolean` — repete no mesmo dia e mês todo ano —, quem criou), única por organização + data. RLS `tenant_isolation_feriados_all` por `fn_user_org_ids()`; a sessão só LÊ (a tela e o roteamento), quem escreve é o servidor com o papel `manager` conferido na rota (`/api/v1/feriados`) — o mesmo molde de `motivos_de_encerramento` (9482). Quem usa: `ehFeriado()` (`lib/feriados/regra.ts`) compõe estes com os nacionais de `lib/lgpd/holidays-br.ts`, e `isWithinSchedule` (`lib/routing/eligibility.ts`) passa a tratar feriado CADASTRADO pela organização como fora do expediente das jornadas e filas com horário. O encerramento por inatividade é a chave `settings.atendimento.encerrar_inativas_apos_horas` (jsonb, sem coluna; nulo = desligado) lida pelo cron horário `encerrar-inativas`; esta migration só lhe dá o índice parcial `idx_conversations_inativas` — conversa viva sem cliente esperando, por última saída — para a varredura não ler a tabela inteira. Idempotente e sem dado a corrigir: tabela nova, `if not exists`, policy recriada por nome.
+--
+-- ─── Por que a data e não dia/mês soltos ────────────────────────────────────
+--
+-- O feriado avulso é uma data (a ponte de 2026, o aniversário da cidade
+-- naquele ano). O recorrente é o mesmo dia e mês todo ano: guardar a data em
+-- que foi cadastrado e casar por mês-dia evita uma segunda coluna e mantém o
+-- `unique (organization_id, data)` como a única regra de duplicidade.
+--
+-- ─── Por que feriado nacional NÃO fecha o expediente sozinho ────────────────
+--
+-- Toda instalação brasileira passaria, no primeiro feriado depois do deploy, a
+-- não distribuir conversa nenhuma — uma mudança de comportamento que ninguém
+-- pediu (há quem atenda no feriado: delivery, plantão, loja de shopping). O
+-- nacional entra no expediente quando a organização o IMPORTA para esta tabela
+-- (botão "Importar feriados nacionais do ano"), e aí é dela.
+
+create table if not exists public.feriados (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  data date not null,
+  nome text not null,
+  recorrente_anual boolean not null default false,
+  created_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+
+alter table public.feriados drop constraint if exists feriados_nome_valido;
+alter table public.feriados
+  add constraint feriados_nome_valido check (char_length(btrim(nome)) between 1 and 80);
+
+create unique index if not exists feriados_org_data_uniq
+  on public.feriados (organization_id, data);
+
+comment on table public.feriados is
+  'Feriados da organização (migration 9486). recorrente_anual = repete no mesmo dia e mês todo ano. Lidos por lib/feriados (ehFeriado) e pelo horário das jornadas/filas (isWithinSchedule). Escrita só pelo servidor (/api/v1/feriados, manager+).';
+
+alter table public.feriados enable row level security;
+drop policy if exists tenant_isolation_feriados_all on public.feriados;
+create policy tenant_isolation_feriados_all on public.feriados
+  for all
+  using (organization_id in (select * from public.fn_user_org_ids()))
+  with check (organization_id in (select * from public.fn_user_org_ids()));
+
+-- A sessão LÊ e não escreve: cadastrar e remover é de `manager`, conferido na
+-- rota, com o service role. Sem o revoke, o `ALTER DEFAULT PRIVILEGES` do
+-- baseline daria CRUD inteiro a qualquer agente.
+revoke all on public.feriados from anon;
+revoke all on public.feriados from authenticated;
+grant select on public.feriados to authenticated;
+grant all on public.feriados to service_role;
+
+-- A varredura do cron `encerrar-inativas`: conversa viva, sem mensagem do
+-- cliente esperando resposta, pela última saída da equipe/IA.
+create index if not exists idx_conversations_inativas
+  on public.conversations (organization_id, last_outbound_at)
+  where status in ('open','pending','claimed','ai_handling')
+    and awaiting_since is null
+    and last_outbound_at is not null;
+
+notify pgrst, 'reload schema';
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ DE PROPÓSITO, NENHUMA FUNÇÃO É CRIADA DEPOIS DESTE BLOCO. Apêndice que cria

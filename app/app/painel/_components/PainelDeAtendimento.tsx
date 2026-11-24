@@ -11,6 +11,8 @@ import { apiClient } from "@/lib/api/client";
 import { rotuloDoContato, type ContatoNomeavel } from "@/lib/contacts/rotulo-do-contato";
 import { automaticoNoComando, consultasDoPainel, haQuantoTempo, montarColunas, type ConversaDoPainel } from "@/lib/inbox/painel-de-atendimento";
 import { Robot, Tray } from "@/lib/ui/icons";
+import { ROLE_RANK } from "@/lib/auth/types";
+import { Monitoramento } from "./Monitoramento";
 
 interface Conversa extends ConversaDoPainel {
   last_message_preview: string | null;
@@ -91,7 +93,7 @@ function Coluna<C extends Conversa>({
 
 export function PainelDeAtendimento() {
   const t = useT();
-  const { activeOrg } = useAuth();
+  const { user, activeOrg } = useAuth();
   const orgId = activeOrg?.orgId ?? null;
   const { data: numeros } = useChannelSessions();
   const [numero, setNumero] = useState<string>("");
@@ -130,6 +132,10 @@ export function PainelDeAtendimento() {
     [abertas.data, fila.data, encerradas.data, fuso],
   );
   const casosAbertos = casos.data?.data?.open_count ?? 0;
+  // Operadores (carga por pessoa) é de quem gerencia — cortesia da tela; a
+  // lista em si é a do roster, que a rota entrega a agent+.
+  const verOperadores =
+    (user.is_platform_admin && !user.support) || (!!activeOrg && ROLE_RANK[activeOrg.role] >= ROLE_RANK.manager);
   const rotulo = (c: Conversa) => rotuloDoContato(c.contacts, t);
   const rotuloIA = t("Automático atendendo");
   const haTempo = (iso: string) => t("há {tempo}").replace("{tempo}", haQuantoTempo(iso));
@@ -173,6 +179,7 @@ export function PainelDeAtendimento() {
           {t("Há mais de 100 conversas em alguma lista. Quem espera sem dono são as 100 com mais tempo de espera; as demais são as 100 com a mensagem mais recente.")}
         </p>
       )}
+      {orgId && <Monitoramento numero={numero} verOperadores={verOperadores} />}
       <div className="grid grid-cols-1 gap-8 md:min-h-0 md:flex-1 md:grid-cols-3 md:grid-rows-[minmax(0,1fr)] md:gap-6">
         <Coluna
           titulo={t("Aguardando atendimento")}

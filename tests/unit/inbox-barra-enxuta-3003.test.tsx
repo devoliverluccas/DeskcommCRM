@@ -158,6 +158,10 @@ const ACOES = [
   { id: "acao-arquivar", rotulo: "Arquivar" },
   { id: "marcar-pessoal", rotulo: "Marcar como pessoal" },
   { id: "desmarcar-pessoal", rotulo: "Desmarcar pessoal" },
+  // Item 3.7 (fase 3): as três marcas novas do ⋯.
+  { id: "acao-pendente", rotulo: "Marcar como pendente" },
+  { id: "acao-privada", rotulo: "Tornar privada" },
+  { id: "acao-bloquear-contato", rotulo: "Bloquear contato" },
 ] as const;
 
 const CONTATO = {
@@ -196,6 +200,9 @@ const FILA: Cenario = {
     "convidar-participante",
     "acao-lembrar",
     "acao-arquivar",
+    "acao-pendente",
+    "acao-privada",
+    "acao-bloquear-contato",
     "marcar-pessoal",
   ],
 };
@@ -223,6 +230,9 @@ const MINHA_TRAVADA: Cenario = {
     "ia-com-o-dono",
     "acao-lembrar",
     "acao-arquivar",
+    "acao-pendente",
+    "acao-privada",
+    "acao-bloquear-contato",
     "marcar-pessoal",
   ],
 };
@@ -238,6 +248,10 @@ const ENCERRADA: Cenario = {
     "btn-videochamada",
     "convidar-participante",
     "acao-arquivar",
+    // Sem "acao-pendente": encerrar limpa a marca, e marcar uma encerrada seria
+    // marcar o nada.
+    "acao-privada",
+    "acao-bloquear-contato",
     "marcar-pessoal",
   ],
 };
@@ -256,6 +270,9 @@ const COM_DONO_AUTO_DE_PE: Cenario = {
     "ia-com-o-dono",
     "acao-lembrar",
     "acao-arquivar",
+    "acao-pendente",
+    "acao-privada",
+    "acao-bloquear-contato",
     "marcar-pessoal",
   ],
 };
@@ -272,6 +289,9 @@ const PESSOAL: Cenario = {
     "convidar-participante",
     "acao-lembrar",
     "acao-arquivar",
+    "acao-pendente",
+    "acao-privada",
+    "acao-bloquear-contato",
     "desmarcar-pessoal",
   ],
 };
@@ -297,6 +317,9 @@ const COM_PROPOSTAS: Cenario = {
     "convidar-participante",
     "acao-lembrar",
     "acao-arquivar",
+    "acao-pendente",
+    "acao-privada",
+    "acao-bloquear-contato",
     "marcar-pessoal",
   ],
 };

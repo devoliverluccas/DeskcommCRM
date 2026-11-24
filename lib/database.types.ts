@@ -6767,6 +6767,9 @@ export type Database = {
           last_outbound_at: string | null;
           metadata: NonNullable<Json>;
           organization_id: string;
+          pendente_em: string | null;
+          privada: boolean;
+          privada_por: string | null;
           provider_conversation_id: string | null;
           rag_review_status: string | null;
           reply_context_revision: number;
@@ -6774,6 +6777,8 @@ export type Database = {
           service_closed_at: string | null;
           service_revision: number;
           service_started_at: string | null;
+          sla_ignorado_em: string | null;
+          sla_ignorado_por: string | null;
           snooze_until: string | null;
           snoozed_at: string | null;
           snoozed_by_user_id: string | null;
@@ -6818,6 +6823,9 @@ export type Database = {
           last_outbound_at?: string | null;
           metadata?: NonNullable<Json>;
           organization_id: string;
+          pendente_em?: string | null;
+          privada?: boolean;
+          privada_por?: string | null;
           provider_conversation_id?: string | null;
           rag_review_status?: string | null;
           reply_context_revision?: number;
@@ -6825,6 +6833,8 @@ export type Database = {
           service_closed_at?: string | null;
           service_revision?: number;
           service_started_at?: string | null;
+          sla_ignorado_em?: string | null;
+          sla_ignorado_por?: string | null;
           snooze_until?: string | null;
           snoozed_at?: string | null;
           snoozed_by_user_id?: string | null;
@@ -6865,6 +6875,9 @@ export type Database = {
           last_outbound_at?: string | null;
           metadata?: NonNullable<Json>;
           organization_id?: string;
+          pendente_em?: string | null;
+          privada?: boolean;
+          privada_por?: string | null;
           provider_conversation_id?: string | null;
           rag_review_status?: string | null;
           reply_context_revision?: number;
@@ -6872,6 +6885,8 @@ export type Database = {
           service_closed_at?: string | null;
           service_revision?: number;
           service_started_at?: string | null;
+          sla_ignorado_em?: string | null;
+          sla_ignorado_por?: string | null;
           snooze_until?: string | null;
           snoozed_at?: string | null;
           snoozed_by_user_id?: string | null;
@@ -8198,6 +8213,33 @@ export type Database = {
           },
         ];
       };
+      demanda_protocolo_contadores: {
+        Row: {
+          ano: number;
+          organization_id: string;
+          ultimo: number;
+        };
+        ComputedFields: never;
+        Insert: {
+          ano: number;
+          organization_id: string;
+          ultimo?: number;
+        };
+        Update: {
+          ano?: number;
+          organization_id?: string;
+          ultimo?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "demanda_protocolo_contadores_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       demandas: {
         Row: {
           aberta_em: string;
@@ -8213,11 +8255,13 @@ export type Database = {
           fechada_em: string | null;
           id: string;
           lead_id: string | null;
+          motivo_de_encerramento_id: string | null;
           organization_id: string;
           origem: string;
           prazo_em: string | null;
           proximo_passo: string | null;
           proximo_passo_em: string | null;
+          protocolo: string;
           revision: number;
           updated_at: string;
         };
@@ -8236,11 +8280,13 @@ export type Database = {
           fechada_em?: string | null;
           id?: string;
           lead_id?: string | null;
+          motivo_de_encerramento_id?: string | null;
           organization_id: string;
           origem?: string;
           prazo_em?: string | null;
           proximo_passo?: string | null;
           proximo_passo_em?: string | null;
+          protocolo?: string;
           revision?: number;
           updated_at?: string;
         };
@@ -8258,11 +8304,13 @@ export type Database = {
           fechada_em?: string | null;
           id?: string;
           lead_id?: string | null;
+          motivo_de_encerramento_id?: string | null;
           organization_id?: string;
           origem?: string;
           prazo_em?: string | null;
           proximo_passo?: string | null;
           proximo_passo_em?: string | null;
+          protocolo?: string;
           revision?: number;
           updated_at?: string;
         };
@@ -8286,6 +8334,13 @@ export type Database = {
             columns: ["lead_id"];
             isOneToOne: false;
             referencedRelation: "crm_leads";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "demandas_motivo_de_encerramento_id_fkey";
+            columns: ["motivo_de_encerramento_id"];
+            isOneToOne: false;
+            referencedRelation: "motivos_de_encerramento";
             referencedColumns: ["id"];
           },
           {
@@ -8956,6 +9011,44 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "external_db_connections_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      feriados: {
+        Row: {
+          created_at: string;
+          created_by: string | null;
+          data: string;
+          id: string;
+          nome: string;
+          organization_id: string;
+          recorrente_anual: boolean;
+        };
+        Insert: {
+          created_at?: string;
+          created_by?: string | null;
+          data: string;
+          id?: string;
+          nome: string;
+          organization_id: string;
+          recorrente_anual?: boolean;
+        };
+        Update: {
+          created_at?: string;
+          created_by?: string | null;
+          data?: string;
+          id?: string;
+          nome?: string;
+          organization_id?: string;
+          recorrente_anual?: boolean;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "feriados_organization_id_fkey";
             columns: ["organization_id"];
             isOneToOne: false;
             referencedRelation: "organizations";
@@ -11788,6 +11881,48 @@ export type Database = {
           reaplicado_em?: string | null;
         };
         Relationships: [];
+      };
+      motivos_de_encerramento: {
+        Row: {
+          ativo: boolean;
+          categoria: string;
+          created_at: string;
+          id: string;
+          nome: string;
+          ordem: number;
+          organization_id: string;
+          updated_at: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          ativo?: boolean;
+          categoria: string;
+          created_at?: string;
+          id?: string;
+          nome: string;
+          ordem?: number;
+          organization_id: string;
+          updated_at?: string;
+        };
+        Update: {
+          ativo?: boolean;
+          categoria?: string;
+          created_at?: string;
+          id?: string;
+          nome?: string;
+          ordem?: number;
+          organization_id?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "motivos_de_encerramento_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       nuvemshop_products: {
         Row: {
@@ -16080,6 +16215,44 @@ export type Database = {
         Returns: number;
       };
       fn_degraus_de_lembrete_validos: { Args: { p_degraus: number[] }; Returns: boolean };
+      fn_demanda_aplicar_motivo: {
+        Args: {
+          p_actor: string | null;
+          p_demanda: string;
+          p_motivo: string;
+          p_org: string;
+        };
+        Returns: {
+          aberta_em: string;
+          agent_case_id: string | null;
+          assunto: string | null;
+          contact_id: string;
+          created_at: string;
+          desfecho: string | null;
+          dono_kind: string;
+          dono_user_id: string | null;
+          encerrada_por: string | null;
+          estado: string;
+          fechada_em: string | null;
+          id: string;
+          lead_id: string | null;
+          motivo_de_encerramento_id: string | null;
+          organization_id: string;
+          origem: string;
+          prazo_em: string | null;
+          proximo_passo: string | null;
+          proximo_passo_em: string | null;
+          protocolo: string;
+          revision: number;
+          updated_at: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "demandas";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
       fn_demanda_encerrar: {
         Args: {
           p_actor: string;
@@ -16102,11 +16275,13 @@ export type Database = {
           fechada_em: string | null;
           id: string;
           lead_id: string | null;
+          motivo_de_encerramento_id: string | null;
           organization_id: string;
           origem: string;
           prazo_em: string | null;
           proximo_passo: string | null;
           proximo_passo_em: string | null;
+          protocolo: string;
           revision: number;
           updated_at: string;
         };
@@ -16626,6 +16801,14 @@ export type Database = {
         Returns: string;
       };
       fn_registrar_jid_do_aviso: { Args: { p_jid: string; p_org: string }; Returns: undefined };
+      fn_relatorio_atendimentos: {
+        Args: { p_ate: string; p_de: string; p_fuso?: string; p_org: string };
+        Returns: Json;
+      };
+      fn_relatorio_atribuicao: {
+        Args: { p_ate: string; p_de: string; p_org: string };
+        Returns: Json;
+      };
       fn_relatorio_financeiro: {
         Args: { p_ate: string; p_de: string; p_org: string };
         Returns: Json;

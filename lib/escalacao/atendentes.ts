@@ -137,7 +137,12 @@ export async function carregarRosterDeAtendimento(
  * `attendant_availability` com `is_available`). Responder true aqui faria o
  * agente prometer um atendente que o roteamento nunca escolheria.
  */
-export function podeAssumirAgora(atendente: AtendenteDoRoster, now: Date): boolean {
+export function podeAssumirAgora(
+  atendente: AtendenteDoRoster,
+  now: Date,
+  /** Feriado cadastrado da organização (item 3.8): `predicadoDeFeriado(...)`. */
+  ehFeriadoLocal?: (dataIso: string) => boolean,
+): boolean {
   if (atendente.capacidade === null) return false;
   return isAttendantEligible(
     {
@@ -147,5 +152,6 @@ export function podeAssumirAgora(atendente: AtendenteDoRoster, now: Date): boole
       schedule: availabilityScheduleSchema.parse(atendente.agenda ?? {}),
     },
     now,
+    ehFeriadoLocal,
   );
 }

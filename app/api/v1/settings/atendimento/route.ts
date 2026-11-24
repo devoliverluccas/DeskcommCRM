@@ -9,6 +9,8 @@ import { traduzir } from "@/lib/i18n/dicionario";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
+  ESCALA_PADRAO,
+  ESCALAS_DA_SATISFACAO,
   JANELA_DA_NOTA_HORAS,
   JANELA_MAXIMA_HORAS,
   lerOpcaoDaSatisfacao,
@@ -36,6 +38,8 @@ const patchSchema = z.object({
   ligado: z.boolean(),
   janela_horas: z.number().int().min(1).max(JANELA_MAXIMA_HORAS).optional(),
   pergunta: z.string().trim().min(10).max(300).optional(),
+  // A régua da pergunta (3.4): 1 a 5 (padrão) ou NPS 0 a 10. Ausente = a que já estava.
+  escala: z.enum(ESCALAS_DA_SATISFACAO).optional(),
 });
 
 export async function GET(): Promise<Response> {
@@ -96,6 +100,7 @@ export async function PATCH(req: NextRequest): Promise<Response> {
     ligado: bloco.ligado,
     janela_horas: bloco.janela_horas ?? blocoAtual.janela_horas ?? JANELA_DA_NOTA_HORAS,
     pergunta: bloco.pergunta ?? blocoAtual.pergunta ?? TEXTO_DA_PERGUNTA_PADRAO,
+    escala: bloco.escala ?? blocoAtual.escala ?? ESCALA_PADRAO,
   };
 
   const { error: erroAoGravar } = await admin
@@ -111,7 +116,7 @@ export async function PATCH(req: NextRequest): Promise<Response> {
     resourceType: "organization",
     resourceId: authz.org.orgId,
     requestId,
-    metadata: { ligado: bloco.ligado },
+    metadata: { ligado: bloco.ligado, escala: proximoBloco.escala },
   });
 
   return ok({ satisfacao: lerOpcaoDaSatisfacao({ satisfacao: proximoBloco }) }, { requestId });

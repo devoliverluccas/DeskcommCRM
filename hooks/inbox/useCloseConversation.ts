@@ -21,6 +21,12 @@ interface CloseArgs {
    * que ninguém fez.
    */
   devolver_ao_automatico?: boolean;
+  /**
+   * O motivo de encerramento escolhido no diálogo (fase 3, item 3.2). AUSENTE =
+   * nenhum motivo — o corpo sai como sempre saiu. Quando a organização exige e
+   * ele falta, a rota responde 422 `motivo_required`.
+   */
+  motivo_id?: string;
 }
 
 /**
@@ -32,7 +38,10 @@ interface CloseArgs {
  * sobre a trava que virou a issue #3313.
  */
 interface RespostaDeFechamento {
-  data: Conversation & { devolucao?: { ok: boolean; motivo?: string } | null };
+  data: Conversation & {
+    devolucao?: { ok: boolean; motivo?: string } | null;
+    motivo_de_encerramento?: { registrado: boolean } | null;
+  };
 }
 
 export function useCloseConversation() {
@@ -41,12 +50,13 @@ export function useCloseConversation() {
 
   return useMutation({
     mutationFn: async (args: CloseArgs) => {
-      const corpo: { expected_revision?: number; devolver_ao_automatico?: boolean } = {
+      const corpo: { expected_revision?: number; devolver_ao_automatico?: boolean; motivo_id?: string } = {
         expected_revision: args.expected_revision,
       };
       if (args.devolver_ao_automatico !== undefined) {
         corpo.devolver_ao_automatico = args.devolver_ao_automatico;
       }
+      if (args.motivo_id) corpo.motivo_id = args.motivo_id;
       return apiClient.post<RespostaDeFechamento>(
         `/api/v1/conversations/${args.conversation_id}/close`,
         corpo,
@@ -60,6 +70,11 @@ export function useCloseConversation() {
     onSuccess: (resposta, args) => {
       qc.invalidateQueries({ queryKey: ["conversations"] });
       qc.invalidateQueries({ queryKey: ["conversation", args.conversation_id] });
+      // O motivo encerrou a demanda (fase 3, item 3.2): o painel do contato e a
+      // faixa do negócio releem a rota `crm-summary`.
+      if (resposta?.data?.motivo_de_encerramento?.registrado) {
+        qc.invalidateQueries({ queryKey: ["crm-summary"] });
+      }
 
       const devolucao = resposta?.data?.devolucao;
       if (!devolucao || devolucao.ok) return;

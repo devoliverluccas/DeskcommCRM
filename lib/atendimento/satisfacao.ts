@@ -5,10 +5,31 @@ import { traduzir } from "@/lib/i18n/dicionario";
 import { idiomaDoTexto } from "@/lib/i18n/idiomas";
 import { OrgNaoOperanteError } from "@/lib/organizacao/operante";
 
+import {
+  ESCALA_PADRAO,
+  ESCALAS_DA_SATISFACAO,
+  escalaValida,
+  type EscalaDaSatisfacao,
+  type ResumoDaEscala,
+  type ResumoDaSatisfacao,
+} from "./satisfacao-nps";
+
+export {
+  calcularNps,
+  ESCALA_PADRAO,
+  ESCALAS_DA_SATISFACAO,
+  escalaValida,
+  type EscalaDaSatisfacao,
+  type ResultadoNps,
+  type ResumoDaEscala,
+  type ResumoDaSatisfacao,
+} from "./satisfacao-nps";
+
 /**
  * A PESQUISA DE SATISFAÇÃO DO ENCERRAMENTO (#4023).
  *
- * O cliente fecha o atendimento e recebe UMA pergunta de 1 a 5; a resposta dele
+ * O cliente fecha o atendimento e recebe UMA pergunta de 1 a 5 (ou de 0 a 10,
+ * no modo NPS — a régua mora no pedido, ver `./satisfacao-nps.ts`); a resposta dele
  * volta pela entrada normal do WhatsApp e vira a nota daquele atendimento. Quem
  * gerencia vê a média e a contagem; quem não gerencia não vê nota nenhuma —
  * nem a da própria conversa.
@@ -65,10 +86,30 @@ export const JANELA_MAXIMA_HORAS = 168;
 export const TEXTO_DA_PERGUNTA_PADRAO =
   "De 1 a 5, como você avalia este atendimento? Responda só com o número.";
 
+/**
+ * A pergunta padrão do modo NPS. A frase é a de recomendação ("indicaria"),
+ * que é o que torna a conta promotores − detratores comparável com qualquer
+ * outro NPS; e termina pedindo o número, como a de 1 a 5.
+ *
+ * TEXTO em todos os canais: nenhum adaptador de `lib/channels` envia lista
+ * interativa hoje (o canal oficial só a RECEBE, em `meta/webhook.ts`). Quando
+ * o envio existir, a decisão "lista ou texto" é de capacidade do canal
+ * (`lib/channels/capabilities.ts`), nunca do nome do provedor — e a resposta
+ * tocada chega como texto com o rótulo ("10"), que este leitor já entende.
+ */
+export const TEXTO_DA_PERGUNTA_NPS =
+  "De 0 a 10, quanto você recomendaria nosso atendimento a um amigo? Responda só com o número.";
+
+/** A pergunta padrão de cada régua. */
+export function perguntaPadraoDaEscala(escala: EscalaDaSatisfacao): string {
+  return escala === "nps_0_10" ? TEXTO_DA_PERGUNTA_NPS : TEXTO_DA_PERGUNTA_PADRAO;
+}
+
 export interface OpcaoDaSatisfacao {
   ligado: boolean;
   janela_horas: number;
   pergunta: string;
+  escala: EscalaDaSatisfacao;
 }
 
 /**
@@ -83,13 +124,19 @@ export function lerOpcaoDaSatisfacao(settings: unknown): OpcaoDaSatisfacao {
   const bloco = (raiz.satisfacao ?? null) as Record<string, unknown> | null;
   const janela = Number(bloco?.janela_horas);
   const pergunta = typeof bloco?.pergunta === "string" ? bloco.pergunta.trim() : "";
+  const escala = escalaValida(bloco?.escala);
+  // A pergunta padrão de UMA régua nunca sai na outra: o PATCH grava a padrão
+  // de 1 a 5 no bloco desde o #4023, e mandá-la com a régua em NPS pediria "de
+  // 1 a 5" e leria "de 0 a 10". Texto escrito pela empresa sai como foi escrito.
+  const ehPadrao = !pergunta || pergunta === TEXTO_DA_PERGUNTA_PADRAO || pergunta === TEXTO_DA_PERGUNTA_NPS;
   return {
     ligado: bloco?.ligado === true,
     janela_horas:
       Number.isFinite(janela) && janela >= 1 && janela <= JANELA_MAXIMA_HORAS
         ? Math.round(janela)
         : JANELA_DA_NOTA_HORAS,
-    pergunta: pergunta || TEXTO_DA_PERGUNTA_PADRAO,
+    pergunta: ehPadrao ? perguntaPadraoDaEscala(escala) : pergunta,
+    escala,
   };
 }
 
@@ -100,16 +147,33 @@ export function lerOpcaoDaSatisfacao(settings: unknown): OpcaoDaSatisfacao {
  * reais`, `quero 4 caixas` e `2024` NÃO são. Um leitor frouxo transformaria
  * pedido de orçamento em avaliação de atendimento, e a média passaria a medir
  * outra coisa.
+ *
+ * A régua decide o que é nota: em `csat_1_5`, de 1 a 5 (`4 de 5`); em
+ * `nps_0_10`, de 0 a 10 (`10!`, `nota 9`, `8/10`, `7 de 10`). Um "8" para uma
+ * pergunta de 1 a 5 não é nota — é conversa.
  */
-export function lerNotaDaResposta(texto: string | null | undefined): number | null {
+export function lerNotaDaResposta(
+  texto: string | null | undefined,
+  escala: EscalaDaSatisfacao = ESCALA_PADRAO,
+): number | null {
   if (typeof texto !== "string") return null;
   const limpo = texto
     .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}\u{2705}\u{274C}]/gu, " ")
     .replace(/^(?:nota|minha nota(?: e| é)?)\s*[:\-]?\s*/iu, "")
+    .replace(/["'”’]/g, "")
     .trim();
-  const casou = /^([1-5])(?:[.,!;:)\]]|\s*(?:de\s*)?5)?$/.exec(limpo.replace(/["'”’]/g, "").trim());
+  const regua =
+    escala === "nps_0_10"
+      ? /^(10|[0-9])(?:[.,!;:)\]]{1,3}|\s*(?:de|\/)\s*10)?$/i
+      : /^([1-5])(?:[.,!;:)\]]|\s*(?:de\s*)?5)?$/;
+  const casou = regua.exec(limpo);
   if (!casou) return null;
   return Number(casou[1]);
+}
+
+/** Parece nota em ALGUMA régua? O filtro barato antes de ler o pedido. */
+function pareceNota(texto: string | null | undefined): boolean {
+  return ESCALAS_DA_SATISFACAO.some((escala) => lerNotaDaResposta(texto, escala) !== null);
 }
 
 /** Uma resposta que chega DEPOIS da janela não vira nota — o pedido já venceu. */
@@ -210,6 +274,9 @@ export async function pedirSatisfacaoAoEncerrar(
         status: "aguardando",
         perguntado_em: agora.toISOString(),
         expira_em: expira.toISOString(),
+        // A régua é do pedido: é ela que a resposta vai ler, mesmo que a
+        // organização troque a opção antes de o cliente responder.
+        escala: opcao.escala,
       })
       .select("id")
       .maybeSingle();
@@ -224,8 +291,8 @@ export async function pedirSatisfacaoAoEncerrar(
     // A pergunta padrão sai no idioma da organização; a escrita pela empresa
     // sai como foi escrita.
     const pergunta =
-      opcao.pergunta === TEXTO_DA_PERGUNTA_PADRAO
-        ? traduzir(TEXTO_DA_PERGUNTA_PADRAO, idiomaDoTexto(locale))
+      opcao.pergunta === TEXTO_DA_PERGUNTA_PADRAO || opcao.pergunta === TEXTO_DA_PERGUNTA_NPS
+        ? traduzir(opcao.pergunta, idiomaDoTexto(locale))
         : opcao.pergunta;
 
     const { sendMessageHandler } = await import("@/app/api/v1/messages/_handler");
@@ -306,19 +373,29 @@ export async function capturarRespostaDeSatisfacao(
   pedidoId?: string;
   motivo?: "sem_pedido" | "nao_e_nota" | "vencida" | "conversa_seguiu";
 }> {
-  const nota = lerNotaDaResposta(entrada.texto);
-  if (nota === null) return { capturada: false, motivo: "nao_e_nota" };
+  // Filtro barato: texto que não é nota em régua NENHUMA nem chega ao banco.
+  if (!pareceNota(entrada.texto)) return { capturada: false, motivo: "nao_e_nota" };
 
   try {
     const { data: pedido } = await admin
       .from("satisfacao_do_atendimento")
-      .select("id, expira_em, perguntado_em")
+      .select("id, expira_em, perguntado_em, escala")
       .eq("organization_id", entrada.organizationId)
       .eq("conversation_id", entrada.conversationId)
       .eq("status", "aguardando")
       .maybeSingle();
-    const linha = pedido as { id?: string; expira_em?: string; perguntado_em?: string } | null;
+    const linha = pedido as {
+      id?: string;
+      expira_em?: string;
+      perguntado_em?: string;
+      escala?: string | null;
+    } | null;
     if (!linha?.id) return { capturada: false, motivo: "sem_pedido" };
+
+    // A nota é lida na régua do PEDIDO. Um "8" para uma pergunta de 1 a 5 não é
+    // nota: o pedido segue aberto e a mensagem segue o caminho normal.
+    const nota = lerNotaDaResposta(entrada.texto, escalaValida(linha.escala));
+    if (nota === null) return { capturada: false, motivo: "nao_e_nota" };
 
     const quando = entrada.enviadaEm ?? new Date();
     if (venceu(linha.expira_em, quando)) {
@@ -388,13 +465,24 @@ export async function fecharPedidosVencidos(
   return Number.isFinite(total) ? total : 0;
 }
 
-export interface ResumoDaSatisfacao {
-  media: number | null;
-  respostas: number;
-  pedidos: number;
-  sem_nota: number;
-  aguardando: number;
-  notas: Record<string, number>;
+function numeroOuZero(valor: unknown): number {
+  const n = Number(valor);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function mediaOuNulo(valor: unknown): number | null {
+  if (valor === null || valor === undefined) return null;
+  const n = Number(valor);
+  return Number.isFinite(n) ? n : null;
+}
+
+function lerResumoDaEscala(bruto: unknown): ResumoDaEscala {
+  const bloco = (bruto ?? {}) as Record<string, unknown>;
+  return {
+    respostas: numeroOuZero(bloco.respostas),
+    media: mediaOuNulo(bloco.media),
+    notas: (bloco.notas ?? {}) as Record<string, number>,
+  };
 }
 
 /**
@@ -413,19 +501,114 @@ export async function resumoDaSatisfacao(
   });
   if (error) throw new Error(error.message);
   const bruto = (data ?? {}) as Record<string, unknown>;
-  const numero = (chave: string): number => {
-    const valor = Number(bruto[chave]);
-    return Number.isFinite(valor) ? valor : 0;
-  };
-  const media = bruto.media === null || bruto.media === undefined ? null : Number(bruto.media);
+  const porEscala = (bruto.por_escala ?? {}) as Record<string, unknown>;
   return {
     // Sem nota, a média é `null` — nunca 0. "Não medido" e "nota zero" são
     // coisas diferentes, e a tela mostra "—" para a primeira.
-    media: media !== null && Number.isFinite(media) ? media : null,
-    respostas: numero("respostas"),
-    pedidos: numero("pedidos"),
-    sem_nota: numero("sem_nota"),
-    aguardando: numero("aguardando"),
+    media: mediaOuNulo(bruto.media),
+    respostas: numeroOuZero(bruto.respostas),
+    pedidos: numeroOuZero(bruto.pedidos),
+    sem_nota: numeroOuZero(bruto.sem_nota),
+    aguardando: numeroOuZero(bruto.aguardando),
     notas: (bruto.notas ?? {}) as Record<string, number>,
+    // Banco anterior à migration 9484 não devolve `por_escala`: tudo o que
+    // existe ali é CSAT, e é isso que a leitura diz.
+    por_escala: {
+      csat_1_5: porEscala.csat_1_5
+        ? lerResumoDaEscala(porEscala.csat_1_5)
+        : {
+            respostas: numeroOuZero(bruto.respostas),
+            media: mediaOuNulo(bruto.media),
+            notas: (bruto.notas ?? {}) as Record<string, number>,
+          },
+      nps_0_10: lerResumoDaEscala(porEscala.nps_0_10),
+    },
   };
+}
+
+/** Uma resposta recente, para a lista de "comentários" do relatório. */
+export interface RespostaRecente {
+  id: string;
+  conversation_id: string;
+  contact_id: string | null;
+  contato: string | null;
+  nota: number;
+  escala: EscalaDaSatisfacao;
+  respondido_em: string;
+  /**
+   * O texto da mensagem que trouxe a nota. A pesquisa não tem campo de
+   * comentário livre (o leitor de nota é estrito de propósito): o que o
+   * cliente escreveu junto com o número, quando escreveu, é isto.
+   */
+  texto: string | null;
+}
+
+/**
+ * As últimas respostas do período, com o nome do contato e o texto que o
+ * cliente mandou. SÓ para quem gerencia — o piso é da rota, e a policy da
+ * tabela diz o mesmo. Organização filtrada à mão em TODAS as leituras: o
+ * client é de serviço.
+ */
+export async function respostasRecentes(
+  admin: SupabaseClient,
+  entrada: { organizationId: string; de?: string | null; ate?: string | null; limite?: number },
+): Promise<RespostaRecente[]> {
+  let consulta = admin
+    .from("satisfacao_do_atendimento")
+    .select("id, conversation_id, contact_id, nota, escala, respondido_em, mensagem_da_resposta_id")
+    .eq("organization_id", entrada.organizationId)
+    .eq("status", "respondida");
+  if (entrada.de) consulta = consulta.gte("perguntado_em", entrada.de);
+  if (entrada.ate) consulta = consulta.lt("perguntado_em", entrada.ate);
+  const { data, error } = await consulta
+    .order("respondido_em", { ascending: false })
+    .limit(Math.min(Math.max(entrada.limite ?? 20, 1), 100));
+  if (error) throw new Error(error.message);
+  const linhas = (data ?? []) as Array<{
+    id: string;
+    conversation_id: string;
+    contact_id: string | null;
+    nota: number;
+    escala: string | null;
+    respondido_em: string;
+    mensagem_da_resposta_id: string | null;
+  }>;
+  if (linhas.length === 0) return [];
+
+  const idsDeContato = [...new Set(linhas.map((l) => l.contact_id).filter((id): id is string => !!id))];
+  const idsDeMensagem = [
+    ...new Set(linhas.map((l) => l.mensagem_da_resposta_id).filter((id): id is string => !!id)),
+  ];
+  const [contatos, mensagens] = await Promise.all([
+    idsDeContato.length
+      ? admin
+          .from("contacts")
+          .select("id, display_name")
+          .eq("organization_id", entrada.organizationId)
+          .in("id", idsDeContato)
+      : Promise.resolve({ data: [] as unknown[] }),
+    idsDeMensagem.length
+      ? admin
+          .from("messages")
+          .select("id, body")
+          .eq("organization_id", entrada.organizationId)
+          .in("id", idsDeMensagem)
+      : Promise.resolve({ data: [] as unknown[] }),
+  ]);
+  const nomePorId = new Map(
+    ((contatos.data ?? []) as Array<{ id: string; display_name: string | null }>).map((c) => [c.id, c.display_name]),
+  );
+  const textoPorId = new Map(
+    ((mensagens.data ?? []) as Array<{ id: string; body: string | null }>).map((m) => [m.id, m.body]),
+  );
+  return linhas.map((l) => ({
+    id: l.id,
+    conversation_id: l.conversation_id,
+    contact_id: l.contact_id,
+    contato: l.contact_id ? (nomePorId.get(l.contact_id) ?? null) : null,
+    nota: Number(l.nota),
+    escala: escalaValida(l.escala),
+    respondido_em: l.respondido_em,
+    texto: l.mensagem_da_resposta_id ? (textoPorId.get(l.mensagem_da_resposta_id) ?? null) : null,
+  }));
 }

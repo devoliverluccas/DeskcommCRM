@@ -550,6 +550,12 @@ export const listConversationsQuerySchema = z.object({
    */
   unread: z.coerce.boolean().optional(),
   /**
+   * Só as marcadas como pendentes pela equipe (item 3.7, `pendente_em`,
+   * migration 9485). `"true"` liga; ausente = sem filtro. A cerca
+   * `rota-le-todo-filtro-do-schema` cobra a leitura na rota.
+   */
+  pendente: z.enum(["true", "false"]).transform((v) => v === "true").optional(),
+  /**
    * O termo de busca. A régua inteira vive em `lib/inbox/termo-de-busca.ts`, e a
    * tela lê a MESMA — repetir aqui faria os dois divergirem, e a divergência
    * apareceria como erro na cara de quem digita (a rota recusa e o hook mostra).
