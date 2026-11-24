@@ -20,10 +20,12 @@ import {
   type TipoDeServico,
   type UnidadeDeCobranca,
 } from "@/lib/catalogo/servicos";
-import { produtoCreateSchema } from "@/lib/schemas/produtos";
+// `produtoBase` e não `produtoCreateSchema`: o de criação tem `superRefine` (a
+// promoção menor que o preço, 9481), e o Zod não deixa `.pick()` em schema refinado.
+import { produtoBase } from "@/lib/schemas/produtos";
 
 /** Código, nome e descrição são os MESMOS do produto — não uma segunda cópia. */
-const baseDoItem = produtoCreateSchema.pick({ codigo: true, nome: true, descricao: true });
+const baseDoItem = produtoBase.pick({ codigo: true, nome: true, descricao: true });
 
 /**
  * Sinal: percentual (1 a 100) do preço, ou valor fixo em centavos. Um dos dois,

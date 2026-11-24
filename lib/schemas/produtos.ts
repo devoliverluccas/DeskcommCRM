@@ -145,7 +145,7 @@ const fotos = z
     });
   });
 
-const produtoBase = z.object({
+export const produtoBase = z.object({
   codigo,
   nome,
   descricao: z.string().trim().max(2000).optional(),
