@@ -24,7 +24,7 @@
  */
 import { readFileSync } from "node:fs";
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { InboxFilters, visibleInboxTabs, type InboxFiltersValue } from "@/components/inbox/InboxFilters";
@@ -55,11 +55,21 @@ vi.mock("@/hooks/inbox/useConversationCounts", () => ({
 
 const VALUE: InboxFiltersValue = { tab: "ai", search: "", onlyUnread: false };
 
-/** O rótulo de cada aba, sem o contador que vem colado no `textContent`. */
+/**
+ * O rótulo de cada visão, sem o contador que vem colado no `textContent`.
+ *
+ * Desde o topo minimalista as sete visões moram no modal de Filtros, como
+ * opções de "Visão" (`radio`) — a ORDEM que esta issue pediu é a mesma lá.
+ */
 function abasRenderizadas(): string[] {
+  abrirFiltros();
   return screen
-    .getAllByRole("tab")
+    .getAllByRole("radio")
     .map((el) => (el.textContent ?? "").replace(/\d+$/, "").trim());
+}
+
+function abrirFiltros() {
+  if (!screen.queryByRole("dialog")) fireEvent.click(screen.getByTestId("botao-filtros"));
 }
 
 beforeEach(() => {
@@ -107,13 +117,14 @@ describe("as sete abas, na ordem pedida pela #2498", () => {
 
   it("cada aba continua com o SEU contador (nada trocou de chave)", () => {
     render(<InboxFilters value={VALUE} onChange={() => {}} />);
-    expect(screen.getByRole("tab", { name: /^Automático/ })).toHaveTextContent("7");
-    expect(screen.getByRole("tab", { name: /^Fila/ })).toHaveTextContent("3");
-    expect(screen.getByRole("tab", { name: /^Minhas/ })).toHaveTextContent("2");
-    expect(screen.getByRole("tab", { name: /^Todas/ })).toHaveTextContent("5");
-    expect(screen.getByRole("tab", { name: /^Fechadas/ })).toHaveTextContent("4");
-    expect(screen.getByRole("tab", { name: /^Arquivadas/ })).toHaveTextContent("1");
-    expect(screen.getByRole("tab", { name: /^Pessoal/ })).toHaveTextContent("6");
+    abrirFiltros();
+    expect(screen.getByRole("radio", { name: /^Automático/ })).toHaveTextContent("7");
+    expect(screen.getByRole("radio", { name: /^Fila/ })).toHaveTextContent("3");
+    expect(screen.getByRole("radio", { name: /^Minhas/ })).toHaveTextContent("2");
+    expect(screen.getByRole("radio", { name: /^Todas/ })).toHaveTextContent("5");
+    expect(screen.getByRole("radio", { name: /^Fechadas/ })).toHaveTextContent("4");
+    expect(screen.getByRole("radio", { name: /^Arquivadas/ })).toHaveTextContent("1");
+    expect(screen.getByRole("radio", { name: /^Pessoal/ })).toHaveTextContent("6");
   });
 });
 
@@ -157,7 +168,8 @@ describe("só a ordem muda — as permissões continuam quem eram", () => {
     // A faixa é navegável por seta (`moveTab` anda pelo array): uma ordem nova
     // que embaralhasse os índices devolveria o operador à vizinha errada.
     render(<InboxFilters value={{ ...VALUE, tab: "closed" }} onChange={() => {}} />);
-    const ativa = screen.getByRole("tab", { selected: true });
+    abrirFiltros();
+    const ativa = screen.getByRole("radio", { checked: true });
     expect(ativa.textContent ?? "").toMatch(/^Fechadas/);
   });
 });

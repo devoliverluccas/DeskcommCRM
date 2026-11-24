@@ -500,6 +500,34 @@ export function comandosDaFila(automaticoDaOrg?: boolean): ComandoDoBanco[] {
 }
 
 /**
+ * A ABA "IMPORTANTES" — "precisa de alguém agora", CALCULADA, sem coluna nova.
+ *
+ * É a UNIÃO de duas réguas que já existem: a da Fila (`comandosDaFila`, quem
+ * espera gente) e a marca de pendente da equipe (`pendente_em is not null`). Uma
+ * régua só para a lista e para o badge: as duas pontas chamam esta função, e um
+ * `or=` escrito à mão em cada uma divergiria na primeira condição nova.
+ *
+ * ESCAPE: a gramática do `or=` do PostgREST não tem escape para `,` `(` `)` fora
+ * de aspas (ver `termoSeguroParaOr`). Aqui nenhum valor vem de pessoa — os
+ * comandos saem de `COMANDOS_DO_BANCO` —, e por isso a função RECUSA qualquer
+ * valor fora dessa lista em vez de tentar escapá-lo: um valor estranho só
+ * chegaria aqui por defeito de código, e lançar é melhor que montar um filtro
+ * que casa outra coisa.
+ *
+ * O pré-filtro do comando (`comPreFiltroDoComando`) NÃO vale aqui: a conversa
+ * pendente pode ter dono, então "sem dono" deixa de ser condição necessária.
+ */
+export function filtroDeImportantes(comandos: readonly string[]): string {
+  if (comandos.length === 0) throw new Error("filtroDeImportantes: lista de comandos vazia");
+  for (const c of comandos) {
+    if (!(COMANDOS_DO_BANCO as readonly string[]).includes(c)) {
+      throw new Error(`filtroDeImportantes: comando fora do vocabulário: ${c}`);
+    }
+  }
+  return `comando_da_conversa.in.(${comandos.join(",")}),pendente_em.not.is.null`;
+}
+
+/**
  * A ORDEM DA FILA, num lugar só — mais tempo esperando primeiro.
  *
  * ─── A régua é a mensagem mais ANTIGA sem resposta, não a última (issue #990) ─

@@ -36,6 +36,19 @@ function consulta(
         ? com((l) => l[c] != null)
         : com((l) => !String(valor).slice(1, -1).split(",").includes(String(l[c]))),
     gt: (c: string, v: number) => com((l) => Number(l[c]) > v),
+    // O `or=` da aba "Importantes": `col.in.(a,b)` e `col.not.is.null`, unidos
+    // por OU — o dublê aplica de verdade, e recusa forma que não conhece.
+    or: (expr: string) => {
+      const termos = expr.match(/[a-z_]+\.(?:in\.\([^)]*\)|not\.is\.null)/g) ?? [];
+      if (termos.join(",") !== expr) throw new Error(`or= não reconhecido pelo dublê: ${expr}`);
+      const preds = termos.map((termo) => {
+        const [coluna, op] = termo.split(".", 2) as [string, string];
+        if (op === "not") return (l: Linha) => l[coluna] != null;
+        const lista = termo.slice(termo.indexOf("(") + 1, -1).split(",");
+        return (l: Linha) => lista.includes(String(l[coluna]));
+      });
+      return com((l) => preds.some((p) => p(l)));
+    },
     order: (coluna: string, o: { ascending: boolean }) =>
       consulta(nome, filtros, { coluna, asc: o.ascending }, limite),
     limit: (n: number) => consulta(nome, filtros, ordem, n),
@@ -170,5 +183,43 @@ describe("a faixa do topo: a espera mais antiga e as filas com nome", () => {
     const corpo = await contagens(`sector_id=${SUPORTE}`);
     expect(corpo.fila).toBe(1);
     expect(corpo.fila_mais_antiga_desde).toBe("2026-11-21T08:00:00.000Z");
+  });
+});
+
+describe("as abas novas do topo: Importantes e Não lidas", () => {
+  it("Importantes = na FILA ou PENDENTE — e nada mais", async () => {
+    tabelas.conversations = [
+      // Na fila: conta.
+      naFila("c1", "2026-11-20T10:00:00.000Z", null),
+      // Com dono, mas marcada pendente: conta.
+      { ...naFila("c2", null, null), assigned_to_user_id: EU, comando_da_conversa: "humano", pendente_em: "2026-11-21T00:00:00.000Z" },
+      // Na fila E pendente: conta UMA vez (é OU, não soma).
+      { ...naFila("c3", null, null), pendente_em: "2026-11-21T00:00:00.000Z" },
+      // Com dono e sem marca: fora.
+      { ...naFila("c4", null, null), assigned_to_user_id: EU, comando_da_conversa: "humano" },
+      // O automático no comando (org com automático no ar): fora.
+      { ...naFila("c5", null, null), comando_da_conversa: "automatico" },
+    ];
+    const corpo = (await contagens()) as Corpo & { importantes: number };
+    expect(corpo.importantes).toBe(3);
+  });
+
+  it("Importantes herda os filtros da tela, como toda contagem (pendente=true)", async () => {
+    tabelas.conversations = [
+      naFila("c1", "2026-11-20T10:00:00.000Z", null),
+      { ...naFila("c2", null, null), pendente_em: "2026-11-21T00:00:00.000Z" },
+    ];
+    const corpo = (await contagens("pendente=true")) as Corpo & { importantes: number };
+    expect(corpo.importantes).toBe(1);
+  });
+
+  it("Não lidas conta as conversas com mensagem não lida", async () => {
+    tabelas.conversations = [
+      { ...naFila("c1", null, null), unread_count_for_assignee: 2 },
+      { ...naFila("c2", null, null), unread_count_for_assignee: 0 },
+      { ...naFila("c3", null, null), assigned_to_user_id: EU, comando_da_conversa: "humano", unread_count_for_assignee: 1 },
+    ];
+    const corpo = (await contagens()) as Corpo & { nao_lidas: number };
+    expect(corpo.nao_lidas).toBe(2);
   });
 });

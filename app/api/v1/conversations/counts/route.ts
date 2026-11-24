@@ -19,7 +19,12 @@ import { orgAtivaDaApi } from "@/lib/auth/require-role";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { CONVERSATION_TERMINAL_STATUSES } from "@/lib/schemas";
 import { orgTemAutomatico } from "@/lib/ai/agents/org-tem-automatico";
-import { comandosDaFila, comPreFiltroDoComando, esperaDaConversa } from "@/lib/inbox/comando-da-conversa";
+import {
+  comandosDaFila,
+  comPreFiltroDoComando,
+  esperaDaConversa,
+  filtroDeImportantes,
+} from "@/lib/inbox/comando-da-conversa";
 import { aplicarMarcadores, modoDeEtiqueta } from "@/lib/inbox/marcador-da-conversa";
 import { createClient } from "@/lib/supabase/server";
 import { idsDeContatosPessoais, idsDeContatosPessoaisVisiveis } from "../_handler";
@@ -325,7 +330,7 @@ export async function GET(req: NextRequest): Promise<Response> {
   // seria um badge contando o pessoal de outra pessoa.
   const pessoaisVisiveis = await idsDeContatosPessoaisVisiveis(supabase, org, user.id);
 
-  const [fila, automatico, mine, all, closed, archived, pessoal] = await Promise.all([
+  const [fila, automatico, mine, all, closed, archived, pessoal, importantes, naoLidas, abertas] = await Promise.all([
     // A FILA DEIXOU DE SER "sem dono + status de espera".
     //
     // Aquele par contava como trabalho humano pendente tudo que o robô estava
@@ -396,6 +401,14 @@ export async function GET(req: NextRequest): Promise<Response> {
     pessoaisVisiveis.length === 0
       ? Promise.resolve({ count: 0, error: null })
       : countExact(auxiliares, pessoaisVisiveis),
+    // A aba "Importantes": na FILA ou pendente. A MESMA régua da lista
+    // (`filtroDeImportantes`), com o MESMO conjunto da Fila (`comandosFila`).
+    countExact().or(filtroDeImportantes(comandosFila)),
+    // A aba "Não lidas": o mesmo predicado do filtro "Não lidos" da lista.
+    countExact().gt("unread_count_for_assignee", 0),
+    // A aba "Abertas" do topo: o fluxo vivo, a MESMA régua do `exclude_finished`
+    // que a lista pede (`CONVERSATION_TERMINAL_STATUSES` fora).
+    countExact().not("status", "in", `(${CONVERSATION_TERMINAL_STATUSES.join(",")})`),
   ]);
 
   // ─── A CONTAGEM POR FILA (#3876) ──────────────────────────────────────────
@@ -442,7 +455,10 @@ export async function GET(req: NextRequest): Promise<Response> {
     all.error ??
     closed.error ??
     archived.error ??
-    pessoal.error;
+    pessoal.error ??
+    importantes.error ??
+    naoLidas.error ??
+    abertas.error;
   if (firstErr) {
     return fail("internal_error", firstErr.message, 500, { requestId });
   }
@@ -493,6 +509,12 @@ export async function GET(req: NextRequest): Promise<Response> {
        * primeiro segundo.
        */
       pessoal: pessoal.count ?? 0,
+      /** A aba "Importantes": na fila OU pendente (`filtroDeImportantes`). */
+      importantes: importantes.count ?? 0,
+      /** A aba "Não lidas": conversas com mensagem não lida. */
+      nao_lidas: naoLidas.count ?? 0,
+      /** A aba "Abertas": as conversas vivas (sem fechadas e arquivadas). */
+      abertas: abertas.count ?? 0,
       /**
        * Quantas conversas ESPERAM gente em cada fila (#3876), por id de setor.
        * Vem vazio quando a organização não tem fila — e é o que o seletor do

@@ -581,6 +581,13 @@ export const listConversationsQuerySchema = z.object({
    */
   pendente: z.enum(["true", "false"]).transform((v) => v === "true").optional(),
   /**
+   * A aba "Importantes" do Inbox: o que precisa de alguém agora — na FILA (a
+   * mesma régua da aba Fila, `comandosDaFila`) OU marcada como pendente
+   * (`pendente_em`). Calculada no handler, sem coluna nova
+   * (`filtroDeImportantes`). `"true"` liga; ausente = sem filtro.
+   */
+  importantes: z.enum(["true", "false"]).transform((v) => v === "true").optional(),
+  /**
    * O termo de busca. A régua inteira vive em `lib/inbox/termo-de-busca.ts`, e a
    * tela lê a MESMA — repetir aqui faria os dois divergirem, e a divergência
    * apareceria como erro na cara de quem digita (a rota recusa e o hook mostra).

@@ -12,7 +12,7 @@
  * inventar marcação para quem não declarou nada (cache gravado antes do deploy).
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 
 import { InboxFilters, type InboxFiltersValue } from "@/components/inbox/InboxFilters";
 import type { ActiveOrg } from "@/lib/auth/types";
@@ -51,11 +51,17 @@ const CONTAGENS = {
 
 function montar(contagens: Record<string, unknown> | undefined) {
   countsRef.current = { org: ORG, contagens };
-  return render(<InboxFilters value={VALUE} onChange={() => {}} />);
+  const r = render(<InboxFilters value={VALUE} onChange={() => {}} />);
+  // As pastas de histórico moram no modal de Filtros (topo minimalista).
+  fireEvent.click(screen.getByTestId("botao-filtros"));
+  return r;
 }
 
-/** O texto do gatilho da aba, como o operador lê. */
-const aba = (nome: RegExp) => screen.getByRole("tab", { name: nome }).textContent ?? "";
+/** O modal de Filtros aberto — é nele que as visões e seus números moram. */
+const dialogo = () => within(screen.getByRole("dialog"));
+
+/** O texto da visão, como o operador lê. */
+const aba = (nome: RegExp) => dialogo().getByRole("radio", { name: nome }).textContent ?? "";
 
 afterEach(cleanup);
 
@@ -63,17 +69,17 @@ describe("#4451 — badge das pastas de histórico", () => {
   it("a aba truncada mostra 99+ e explica o corte", async () => {
     montar(CONTAGENS);
     // `depoisDeMontar` atrasa o badge um render (hidratação); findBy espera.
-    expect(await screen.findByText("99+")).toBeTruthy();
+    expect(await dialogo().findByText("99+")).toBeTruthy();
     expect(aba(/Fechadas/)).toContain("99+");
     // O `title` diz POR QUE o número para: um "+" solto não explica nada.
-    const explicacoes = screen.getAllByTitle(/histórico inteiro/);
+    const explicacoes = dialogo().getAllByTitle(/histórico inteiro/);
     expect(explicacoes).toHaveLength(1);
     expect(explicacoes[0]?.textContent).toBe("99+");
   });
 
   it("a aba que NÃO bateu no teto mostra o número exato, sem `+`", async () => {
     montar(CONTAGENS);
-    expect(await screen.findByText("12")).toBeTruthy();
+    expect(await dialogo().findByText("12")).toBeTruthy();
     expect(aba(/Arquivadas/)).toContain("12");
     expect(aba(/Arquivadas/)).not.toContain("+");
     expect(aba(/Arquivadas/)).not.toContain("aprox.");
@@ -81,7 +87,7 @@ describe("#4451 — badge das pastas de histórico", () => {
 
   it("as abas ACIONÁVEIS não ganham `+` nem aviso: ali o número é trabalho a fazer", async () => {
     montar(CONTAGENS);
-    expect(await screen.findByText("9")).toBeTruthy();
+    expect(await dialogo().findByText("9")).toBeTruthy();
     for (const nome of [/Fila/, /Todas/, /Minhas/, /Automático/]) {
       const texto = aba(nome);
       expect(texto, `${nome} não deveria estar marcada como truncada`).not.toContain("+");
@@ -93,7 +99,7 @@ describe("#4451 — badge das pastas de histórico", () => {
     // A tela lê o cache antes da primeira resposta nova. Sem o campo, ela não
     // sabe que houve corte — e calar é melhor que marcar por adivinhação.
     montar({ fila: 4, unassigned: 4, automatico: 1, mine: 2, all: 9, closed: 71, archived: 29 });
-    expect(await screen.findByText("71")).toBeTruthy();
+    expect(await dialogo().findByText("71")).toBeTruthy();
     expect(aba(/Fechadas/)).toContain("71");
     expect(aba(/Fechadas/)).not.toContain("+");
   });

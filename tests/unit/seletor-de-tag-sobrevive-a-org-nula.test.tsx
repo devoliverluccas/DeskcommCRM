@@ -22,12 +22,23 @@
  * do menu durante a oscilação, e não há como desmarcá-la.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { InboxFilters, type InboxFiltersValue } from "@/components/inbox/InboxFilters";
 import type * as CanaisModule from "@/hooks/channels/useChannelSessions";
 import type { ActiveOrg } from "@/lib/auth/types";
+
+/**
+ * Monta a barra e abre o modal de Filtros: desde o topo minimalista (Não lidas |
+ * Abertas | Importantes), os seletores moram nele. O que o caso mede é o mesmo;
+ * só o lugar do controle mudou.
+ */
+function renderComFiltros(ui: Parameters<typeof render>[0]) {
+  const tela = render(ui);
+  fireEvent.click(screen.getByTestId("botao-filtros"));
+  return tela;
+}
 
 const activeOrgRef: { current: ActiveOrg | null } = { current: null };
 const tagsRef: { current: string[] } = { current: [] };
@@ -77,12 +88,12 @@ afterEach(cleanup);
 
 describe("seletor de etiqueta x vocabulário voltando a undefined (dublês que respeitam orgId)", () => {
   it("com org resolvida, o seletor está na tela", () => {
-    render(<InboxFilters value={base} onChange={() => {}} />);
+    renderComFiltros(<InboxFilters value={base} onChange={() => {}} />);
     expect(gatilho()).not.toBeNull();
   });
 
   it("vocabulário indefinido (org nula no dublê): o seletor permanece", () => {
-    const { rerender } = render(<InboxFilters value={base} onChange={() => {}} />);
+    const { rerender } = renderComFiltros(<InboxFilters value={base} onChange={() => {}} />);
     expect(gatilho()).not.toBeNull();
 
     activeOrgRef.current = null;
@@ -97,7 +108,7 @@ describe("seletor de etiqueta x vocabulário voltando a undefined (dublês que r
     // menu enquanto o vocabulário é "conhecido". Com o vocabulário em
     // `undefined`, quem o mantém conhecido é o `ultimoVocabulario`.
     const comFiltro: InboxFiltersValue = { ...base, tag: "apagada" };
-    const { rerender } = render(<InboxFilters value={comFiltro} onChange={() => {}} />);
+    const { rerender } = renderComFiltros(<InboxFilters value={comFiltro} onChange={() => {}} />);
 
     activeOrgRef.current = null;
     rerender(<InboxFilters value={{ ...comFiltro }} onChange={() => {}} />);

@@ -22,12 +22,23 @@
  * era `false` e o filtro aplicado não tinha como ser desfeito.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { InboxFilters, type InboxFiltersValue } from "@/components/inbox/InboxFilters";
 import type * as CanaisModule from "@/hooks/channels/useChannelSessions";
 import type { ActiveOrg } from "@/lib/auth/types";
+
+/**
+ * Monta a barra e abre o modal de Filtros: desde o topo minimalista (Não lidas |
+ * Abertas | Importantes), os seletores moram nele. O que o caso mede é o mesmo;
+ * só o lugar do controle mudou.
+ */
+function renderComFiltros(ui: Parameters<typeof render>[0]) {
+  const tela = render(ui);
+  fireEvent.click(screen.getByTestId("botao-filtros"));
+  return tela;
+}
 
 const activeOrgRef: { current: ActiveOrg | null } = { current: null };
 /** `undefined` = consulta em voo (ou desabilitada por `enabled: !!orgId`). */
@@ -81,7 +92,7 @@ async function abreOMenu() {
 describe("(a) ainda não sei — org nula / consultas em voo", () => {
   it("com filtro aplicado: o gatilho está na tela, mostra a etiqueta e limpa", async () => {
     const onChange = vi.fn();
-    render(<InboxFilters value={{ ...base, tag: "vip" }} onChange={onChange} />);
+    renderComFiltros(<InboxFilters value={{ ...base, tag: "vip" }} onChange={onChange} />);
 
     // O gatilho existe E diz qual filtro está valendo — não é um botão mudo.
     const botao = gatilho();
@@ -102,7 +113,7 @@ describe("(a) ainda não sei — org nula / consultas em voo", () => {
 
   it('com filtro aplicado: o item "Todas as tags" também desfaz o filtro', async () => {
     const onChange = vi.fn();
-    render(<InboxFilters value={{ ...base, tag: "vip" }} onChange={onChange} />);
+    renderComFiltros(<InboxFilters value={{ ...base, tag: "vip" }} onChange={onChange} />);
     const user = await abreOMenu();
     await user.click(screen.getByRole("menuitem", { name: "Todas as tags" }));
     expect(onChange).toHaveBeenCalledWith(
@@ -111,7 +122,7 @@ describe("(a) ainda não sei — org nula / consultas em voo", () => {
   });
 
   it("sem filtro: a barra não quebra e o gatilho anuncia o carregamento", async () => {
-    render(<InboxFilters value={base} onChange={() => {}} />);
+    renderComFiltros(<InboxFilters value={base} onChange={() => {}} />);
     // A busca do topo continua na tela — a barra inteira não depende do vocabulário.
     expect(screen.getByLabelText("Buscar conversas")).toBeInTheDocument();
     expect(gatilho()).not.toBeNull();
@@ -128,7 +139,7 @@ describe("(a) ainda não sei — org nula / consultas em voo", () => {
       role: "manager",
       visibility_mode: "all",
     };
-    render(<InboxFilters value={{ ...base, tag: "vip" }} onChange={() => {}} />);
+    renderComFiltros(<InboxFilters value={{ ...base, tag: "vip" }} onChange={() => {}} />);
     expect(gatilho()).not.toBeNull();
   });
 });
@@ -143,7 +154,7 @@ describe("(b) sei, e está vazio", () => {
     };
     tagsRef.current = [];
     tagsDoContatoRef.current = [];
-    render(<InboxFilters value={base} onChange={() => {}} />);
+    renderComFiltros(<InboxFilters value={base} onChange={() => {}} />);
     expect(gatilho()).toBeNull();
   });
 
@@ -157,7 +168,7 @@ describe("(b) sei, e está vazio", () => {
     tagsRef.current = [];
     tagsDoContatoRef.current = [];
     const onChange = vi.fn();
-    render(<InboxFilters value={{ ...base, tag: "apagada" }} onChange={onChange} />);
+    renderComFiltros(<InboxFilters value={{ ...base, tag: "apagada" }} onChange={onChange} />);
 
     expect(gatilho()!.textContent).toContain("apagada");
     const user = await abreOMenu();
@@ -178,7 +189,7 @@ describe("(c) sei, e tem itens", () => {
     };
     tagsRef.current = ["retorno"];
     tagsDoContatoRef.current = ["vip"];
-    render(<InboxFilters value={base} onChange={() => {}} />);
+    renderComFiltros(<InboxFilters value={base} onChange={() => {}} />);
 
     expect(gatilho()).not.toBeNull();
     await abreOMenu();
@@ -198,7 +209,7 @@ describe("o menu aberto sobrevive a re-render do pai", () => {
     };
     tagsRef.current = ["vip"];
     tagsDoContatoRef.current = [];
-    const { rerender } = render(<InboxFilters value={base} onChange={() => {}} />);
+    const { rerender } = renderComFiltros(<InboxFilters value={base} onChange={() => {}} />);
     await abreOMenu();
     expect(screen.getByRole("menuitemcheckbox", { name: /vip/ })).toBeInTheDocument();
 
@@ -218,7 +229,7 @@ describe("o menu aberto sobrevive a re-render do pai", () => {
     };
     tagsRef.current = ["vip"];
     tagsDoContatoRef.current = [];
-    const { rerender } = render(<InboxFilters value={base} onChange={() => {}} />);
+    const { rerender } = renderComFiltros(<InboxFilters value={base} onChange={() => {}} />);
     await abreOMenu();
 
     // A organização ficou sem etiqueta nenhuma com o menu aberto (a última foi

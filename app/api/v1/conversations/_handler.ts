@@ -19,7 +19,14 @@ import type {
 } from "@/lib/schemas";
 import type { Conversation } from "@/lib/types/messaging";
 import { normalizarTermoDeBusca, termoSemAcento, termoSeguroParaOr } from "@/lib/inbox/termo-de-busca";
-import { ORDEM_DA_ESPERA, ehAFila, comPreFiltroDoComando } from "@/lib/inbox/comando-da-conversa";
+import {
+  ORDEM_DA_ESPERA,
+  ehAFila,
+  comPreFiltroDoComando,
+  comandosDaFila,
+  filtroDeImportantes,
+} from "@/lib/inbox/comando-da-conversa";
+import { orgTemAutomatico } from "@/lib/ai/agents/org-tem-automatico";
 import { aplicarMarcadores } from "@/lib/inbox/marcador-da-conversa";
 import { exigirControleDaConversa } from "@/lib/inbox/controle-da-conversa";
 import { TETO_DE_PESSOAIS, podeVerPessoal } from "@/lib/inbox/pessoal";
@@ -380,6 +387,14 @@ export async function listConversationsHandler(
   // "Pendentes" (item 3.7, migration 9485): a marca da equipe. No banco, pela
   // mesma razão dos não lidos — e sobre a MESMA `query` com organização.
   if (q.pendente) query = query.not("pendente_em", "is", null);
+  // A aba "Importantes": na FILA ou pendente. O conjunto da Fila depende do fato
+  // org-wide (`comandosDaFila`), resolvido AQUI e não pela tela — a mesma
+  // pergunta que a rota de contagens faz, para badge e lista não divergirem.
+  // O `or=` compõe por AND com os demais (organização, busca, cursor).
+  if (q.importantes) {
+    const comandos = comandosDaFila(await orgTemAutomatico(supabase, ctx.organization_id));
+    query = query.or(filtroDeImportantes(comandos));
+  }
 
   if (q.assigned_to === "me") {
     if (ctx.actor.type !== "user") {

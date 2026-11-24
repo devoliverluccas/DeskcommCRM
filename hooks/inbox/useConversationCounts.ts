@@ -41,6 +41,15 @@ export interface ConversationCounts {
    */
   pessoal?: number;
   /**
+   * A aba "Importantes": na fila OU pendente. Opcional pelo mesmo motivo dos de
+   * cima — cache gravado antes deste deploy não tem o campo.
+   */
+  importantes?: number;
+  /** A aba "Abertas" do topo: as conversas vivas (sem fechadas e arquivadas). */
+  abertas?: number;
+  /** A aba "Não lidas": conversas com mensagem não lida. Opcional pelo cache antigo. */
+  nao_lidas?: number;
+  /**
    * Quantas conversas ESPERAM gente em cada fila (#3876), por id de setor. É o
    * número que o seletor mostra ao lado do nome de cada fila. Opcional pela
    * mesma razão dos de cima, e vazio quando a organização não usa setores.

@@ -1,6 +1,10 @@
 /**
  * CATRACA — as abas da Inbox não podem voltar a ser cortadas na coluna (#2745).
  *
+ * ⚠️ Desde o topo minimalista a faixa tem TRÊS abas e as sete visões moram no
+ * modal de Filtros; o histórico abaixo é o da faixa de sete, e a catraca
+ * (`flex-wrap`) continua valendo para a faixa que ficou.
+ *
  * São SETE desde a #4434: a aba "Pessoal" fecha a faixa. Ela nasce DEPOIS das
  * seis medidas em #2745, e é a sétima que a coluna de 272px precisa acomodar —
  * a `flex-wrap` abaixo é o que impede a ponta direita de ficar atrás da seta.
@@ -40,7 +44,7 @@
  * significado do filtro.
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 
 import {
   InboxFilters,
@@ -67,7 +71,18 @@ vi.mock("@/hooks/contacts/useContactTagVocabulary", () => ({
 // com elas que o corte foi medido.
 vi.mock("@/hooks/inbox/useConversationCounts", () => ({
   useConversationCounts: () => ({
-    data: { fila: 47, automatico: 12, mine: 8, all: 130, closed: 25, archived: 9, pessoal: 3 },
+    data: {
+      fila: 47,
+      automatico: 12,
+      mine: 8,
+      all: 130,
+      abertas: 130,
+      closed: 25,
+      archived: 9,
+      pessoal: 3,
+      nao_lidas: 5,
+      importantes: 51,
+    },
   }),
 }));
 
@@ -81,66 +96,43 @@ function faixa(): HTMLElement {
   return list;
 }
 
+/**
+ * DESDE O TOPO MINIMALISTA a faixa tem TRÊS abas (Não lidas | Abertas |
+ * Importantes) e as sete visões moram no modal de Filtros. A catraca de #2745
+ * continua valendo para o que sobrou na faixa: na coluna mínima (240px), com o
+ * selo de uma visão escolhida ao lado, o que não cabe QUEBRA — nunca rola para
+ * trás de uma seta. E nenhuma visão sumiu: as sete seguem alcançáveis, inteiras
+ * e com o seu contador, só que no modal.
+ */
 describe("faixa da Inbox — quebra em vez de esconder aba (#2745)", () => {
   it("a faixa tem `flex-wrap` — sem ele ela ROLA e a ponta direita fica atrás da seta", () => {
     render(<InboxFilters value={VALUE} onChange={() => {}} />);
-    // A regressão que esta catraca existe para pegar: `flex-wrap` removido
-    // devolve o corte medido — 191px de rolagem na coluna de 272px, com
-    // "Fechadas" cortada e "Arquivadas" escondida.
     expect(
       faixa().className.split(/\s+/),
-      "`flex-wrap` sumiu da faixa: as abas voltam a rolar para fora da coluna em 1280px (#2745)",
+      "`flex-wrap` sumiu da faixa: as abas voltam a rolar para fora da coluna (#2745)",
     ).toContain("flex-wrap");
   });
 
-  it("`gap-x-1` acompanha — é o que deixa 272px em 2 linhas em vez de 3", () => {
+  it("as TRÊS abas do topo estão na faixa, com os rótulos inteiros e os contadores", () => {
     render(<InboxFilters value={VALUE} onChange={() => {}} />);
-    // Sem a folga de 4px, a coluna de 272px (o PADRÃO em 1280) quebra em 3
-    // linhas / 106px; com ela, 2 linhas / 68px. Medido na sonda.
-    expect(
-      faixa().className.split(/\s+/),
-      "`gap-x-1` sumiu: a faixa padrão em 1280px ganha uma terceira linha de abas (#2745)",
-    ).toContain("gap-x-1");
+    expect(screen.getAllByRole("tab").map((a) => a.textContent?.replace(/\s+/g, ""))).toEqual([
+      "Nãolidas5",
+      "Abertas130",
+      "Importantes51",
+    ]);
   });
 
-  it("as SETE abas estão na faixa, com os rótulos inteiros", () => {
-    render(<InboxFilters value={VALUE} onChange={() => {}} />);
-    // Guarda de vacuidade do caso acima e defesa do outro lado do defeito:
-    // a saída fácil para \"não cabe\" é encurtar rótulo ou tirar aba, e aí a
-    // catraca de classe continua verde com a tela errada.
-    const abas = screen.getAllByRole("tab");
-    expect(abas).toHaveLength(7);
-    for (const rotulo of [
-      "Automático",
-      "Fila",
-      "Minhas",
-      "Todas",
-      "Fechadas",
-      "Arquivadas",
-      "Pessoal",
-    ]) {
-      expect(
-        screen.getByRole("tab", { name: new RegExp(rotulo) }),
-        `a aba "${rotulo}" não está na faixa`,
-      ).toBeInTheDocument();
-    }
-  });
-
-  it("quebrar a linha não muda o FILTRO: clicar em Arquivadas manda tab=archived", () => {
+  it("clicar em Abertas manda tab=abertas — só as conversas vivas", () => {
     const onChange = vi.fn();
     render(<InboxFilters value={VALUE} onChange={onChange} />);
-    // A quebra é de layout; o valor continua o MESMO contrato de antes.
     // O Radix `TabsTrigger` aciona no `mousedown`, não no `click`.
-    fireEvent.mouseDown(screen.getByRole("tab", { name: /Arquivadas/ }));
-    expect(onChange).toHaveBeenCalledWith({ ...VALUE, tab: "archived" });
+    fireEvent.mouseDown(screen.getByRole("tab", { name: /Abertas/ }));
+    expect(onChange).toHaveBeenCalledWith({ ...VALUE, tab: "abertas" });
   });
 
-  it("a ordem e os valores das abas não mudaram (#2498)", () => {
-    render(<InboxFilters value={VALUE} onChange={() => {}} />);
-    // `visibleInboxTabs` é a fonte da ORDEM do trabalho; a largura não se paga
-    // reordenando nem renomeando.
-    // #4434 acrescentou "pessoal" no FIM — as seis de trabalho mantêm ordem e
-    // nome, e é isso que a catraca de #2498 continua cobrando.
+  it("as SETE visões seguem no modal de Filtros, na ordem e com os contadores (#2498)", () => {
+    const onChange = vi.fn();
+    render(<InboxFilters value={VALUE} onChange={onChange} />);
     expect(visibleInboxTabs("manager", "all")).toEqual([
       "ai",
       "unassigned",
@@ -150,7 +142,9 @@ describe("faixa da Inbox — quebra em vez de esconder aba (#2745)", () => {
       "archived",
       "pessoal",
     ]);
-    expect(screen.getAllByRole("tab").map((a) => a.textContent?.replace(/\s+/g, ""))).toEqual([
+    fireEvent.click(screen.getByTestId("botao-filtros"));
+    const visoes = within(screen.getByRole("dialog")).getAllByRole("radio");
+    expect(visoes.map((a) => a.textContent?.replace(/\s+/g, ""))).toEqual([
       "Automático12",
       "Fila47",
       "Minhas8",
@@ -159,5 +153,8 @@ describe("faixa da Inbox — quebra em vez de esconder aba (#2745)", () => {
       "Arquivadas9",
       "Pessoal3",
     ]);
+    // A visão continua sendo o MESMO filtro de antes.
+    fireEvent.click(screen.getByRole("radio", { name: /Arquivadas/ }));
+    expect(onChange).toHaveBeenCalledWith({ ...VALUE, tab: "archived" });
   });
 });

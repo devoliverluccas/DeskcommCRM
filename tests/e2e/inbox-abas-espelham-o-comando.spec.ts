@@ -25,12 +25,22 @@
  * exatamente o defeito que passa por todo gate de tipo: a aba pediria filtro
  * nenhum e mostraria a lista inteira, parecendo funcionar.
  */
+import type { Page } from "@playwright/test";
+
 import { expect, test } from "./helpers/test";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 import { agenteAtende } from "../../lib/ai/agents/no-ar";
 import { carregarEnvLocal } from "../../scripts/lib/env-de-teste";
 import { lerCreds, loginComoAdmin } from "./helpers/login-admin";
+
+/** Escolhe uma visão no modal de Filtros e fecha o modal (a cortina cobre a lista). */
+async function escolherVisao(page: Page, nome: RegExp) {
+  await page.getByTestId("botao-filtros").click();
+  await page.getByRole("dialog", { name: "Filtros" }).getByRole("radio", { name: nome }).first().click();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog", { name: "Filtros" })).toHaveCount(0);
+}
 
 const env = carregarEnvLocal();
 const admin: SupabaseClient = createClient(
@@ -155,10 +165,10 @@ test.describe("Inbox: as abas perguntam quem manda", () => {
     const temAutomatico = await orgTemAutomaticoNoAr(orgId);
 
     // ── FILA: quem realmente precisa de gente.
-    // `tab`, não `button`: as abas são `TabsTrigger` do shadcn. E o nome vem por
-    // REGEX porque o contador entra no nome acessível ("Fila 36") — `exact` aqui
-    // nunca casaria. Mesmo idioma da spec irmã `inbox-quem-manda.spec.ts`.
-    await page.getByRole("tab", { name: /Fila/i }).first().click();
+    // A Fila é uma visão do modal de Filtros desde o topo minimalista (Não lidas |
+    // Abertas | Importantes): `radio`, e o nome vem por REGEX porque o contador
+    // entra no nome acessível ("Fila 36") — `exact` aqui nunca casaria.
+    await escolherVisao(page, /Fila/i);
     // A escalada está na Fila nos DOIS casos — é o que não depende do fato.
     await expect(page.getByText(ESPERANDO).first()).toBeVisible({ timeout: 15_000 });
     if (temAutomatico) {
@@ -177,7 +187,7 @@ test.describe("Inbox: as abas perguntam quem manda", () => {
     // ESTA é a asserção que não depende de nada: a aba do automático pede
     // exatamente `comando=automatico` nos dois casos, então a separação aqui vale
     // sempre — e é ela que impede um "conserto" que simplesmente esvazie a Fila.
-    await page.getByRole("tab", { name: /Autom/i }).first().click();
+    await escolherVisao(page, /Autom/i);
     await expect(page.getByText(ROBO).first()).toBeVisible({ timeout: 15_000 });
     await expect(
       page.getByText(ESPERANDO),

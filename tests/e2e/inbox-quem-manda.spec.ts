@@ -414,7 +414,9 @@ test.describe("Inbox — quem manda nesta conversa", () => {
 
     // E o BADGE da aba a conta — badge que não bate com a lista manda o atendente
     // procurar um trabalho que a aba não mostra (ou o contrário, que é este caso).
-    const abaFila = page.getByRole("tab", { name: /Fila/i }).first();
+    // Com `?filter=unassigned`, a Fila aparece no topo como o selo da visão
+    // escolhida (topo minimalista), com o mesmo contador.
+    const abaFila = page.getByTestId("visao-do-filtro");
     await expect(abaFila).toContainText(/[1-9]/, { timeout: 30_000 });
 
     // Abrindo, a tela diz que ninguém está no comando — nem pessoa, nem automático.

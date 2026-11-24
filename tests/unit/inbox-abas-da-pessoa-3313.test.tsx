@@ -2,7 +2,9 @@
  * AS ABAS DA INBOX DE CADA PESSOA, NA TELA (#3313, item 2).
  *
  * A issue pede reordenar e ocultar as abas, por pessoa, sem sumir caminho: a
- * aba oculta continua num menu "Mais". O que este arquivo mede, pela tela:
+ * aba oculta continua alcançável. Desde o topo minimalista, as abas desta
+ * preferência são as VISÕES do modal de Filtros, e as ocultas ficam no grupo
+ * "Abas ocultas" do mesmo modal. O que este arquivo mede, pela tela:
  *
  *   - sem preferência, a faixa é EXATAMENTE a de hoje (quem nunca abriu o
  *     diálogo não vê nada mudar além da porta para organizar);
@@ -17,7 +19,7 @@
  * `lib/inbox/abas-da-inbox.test.ts`; a gravação no metadata da pessoa, em
  * `app/actions/inbox/abasDaInbox.test.ts`.
  */
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -54,16 +56,37 @@ vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn(), warning: v
 
 const VALUE: InboxFiltersValue = { tab: "unassigned", search: "", onlyUnread: false };
 
-/** O rótulo de cada aba da faixa, sem o contador colado no `textContent`. */
-function faixa(): string[] {
-  return screen
-    .getAllByRole("tab")
-    .map((el) => (el.textContent ?? "").replace(/\d+$/, "").trim());
+/**
+ * Desde o topo minimalista (Não lidas | Abertas | Importantes) as visões desta
+ * preferência moram no modal de Filtros: a "faixa" da pessoa é a lista "Visão"
+ * dele, e as ocultas ficam no grupo "Abas ocultas" logo abaixo. A preferência
+ * (#3313) segue valendo do mesmo jeito — só o lugar mudou.
+ */
+function abrirFiltros() {
+  if (!screen.queryByRole("dialog", { name: "Filtros" })) {
+    fireEvent.click(screen.getByTestId("botao-filtros"));
+  }
+  return screen.getByRole("dialog", { name: "Filtros" });
 }
 
-const menu = () => screen.getByTestId("menu-das-abas");
+const semContador = (el: HTMLElement) => (el.textContent ?? "").replace(/\d+$/, "").trim();
 
-/** Fila, Minhas e Automático primeiro; Todas e Arquivadas no menu. */
+/** O rótulo de cada visão visível, na ordem da pessoa, sem o contador. */
+function faixa(): string[] {
+  const filtros = abrirFiltros();
+  return within(within(filtros).getByRole("radiogroup", { name: "Visão" }))
+    .getAllByRole("radio")
+    .map(semContador);
+}
+
+/** As visões ocultas da pessoa (grupo "Abas ocultas"); vazio quando não há. */
+function ocultas(): HTMLElement[] {
+  const filtros = abrirFiltros();
+  const grupo = within(filtros).queryByRole("radiogroup", { name: "Abas ocultas" });
+  return grupo ? within(grupo).getAllByRole("radio") : [];
+}
+
+/** Fila, Minhas e Automático primeiro; Todas e Arquivadas ocultas. */
 const DA_AGENCIA: AbaDaPessoa[] = normalizarAbas([
   { id: "unassigned", visivel: true },
   { id: "mine", visivel: true },
@@ -79,63 +102,53 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
-describe("sem preferência, a faixa é a de hoje", () => {
-  it("as sete abas, na ordem padrão, e o menu só com a porta para organizar", async () => {
-    const user = userEvent.setup({ delay: null });
+describe("sem preferência, as visões são as de hoje", () => {
+  it("as sete visões, na ordem padrão, sem grupo de ocultas e com a porta para organizar", () => {
     render(<InboxFilters value={VALUE} onChange={() => {}} />);
 
     expect(faixa()).toEqual(["Automático", "Fila", "Minhas", "Todas", "Fechadas", "Arquivadas", "Pessoal"]);
-    expect(menu()).toHaveAccessibleName("Personalizar abas");
-
-    await user.click(menu());
     expect(screen.queryByText("Abas ocultas")).toBeNull();
-    expect(screen.queryAllByRole("menuitemradio")).toHaveLength(0);
-    expect(screen.getByRole("menuitem", { name: "Personalizar abas…" })).toBeInTheDocument();
+    expect(ocultas()).toHaveLength(0);
+    expect(screen.getByRole("button", { name: "Personalizar abas…" })).toBeInTheDocument();
   });
 });
 
-describe("com preferência, a faixa é a da pessoa", () => {
-  it("a ordem é a escolhida, e as ocultas saem da faixa", () => {
+describe("com preferência, as visões são as da pessoa", () => {
+  it("a ordem é a escolhida, e as ocultas saem da lista principal", () => {
     render(<InboxFilters value={VALUE} onChange={() => {}} abasIniciais={DA_AGENCIA} />);
 
     expect(faixa()).toEqual(["Fila", "Minhas", "Automático", "Fechadas", "Pessoal"]);
-    expect(menu()).toHaveTextContent("Mais");
-    // No celular a barra de baixo já tem um botão "Mais" (a navegação): este
-    // tem nome próprio, que começa pelo que está escrito nele.
-    expect(menu()).toHaveAccessibleName("Mais abas");
+    expect(ocultas().map(semContador)).toEqual(["Todas", "Arquivadas"]);
   });
 
-  it("as ocultas continuam abrindo pelo menu, com o contador de cada uma", async () => {
-    const user = userEvent.setup({ delay: null });
+  it("as ocultas continuam abrindo, com o contador de cada uma", () => {
     const onChange = vi.fn();
     render(<InboxFilters value={VALUE} onChange={onChange} abasIniciais={DA_AGENCIA} />);
 
-    await user.click(menu());
-    const ocultas = screen.getAllByRole("menuitemradio");
-    expect(ocultas.map((el) => (el.textContent ?? "").replace(/\d+$/, "").trim())).toEqual(["Todas", "Arquivadas"]);
-    expect(ocultas[1]).toHaveTextContent("1");
+    const lista = ocultas();
+    expect(lista[1]).toHaveTextContent("1");
 
-    await user.click(screen.getByRole("menuitemradio", { name: /Arquivadas/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /Arquivadas/ }));
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ tab: "archived" }));
   });
 
-  it("a aba aberta que está oculta aparece no botão, marcada como a ativa", () => {
+  it("a visão aberta que está oculta aparece no selo do topo e marcada no modal", () => {
     render(
       <InboxFilters value={{ ...VALUE, tab: "archived" }} onChange={() => {}} abasIniciais={DA_AGENCIA} />,
     );
 
-    expect(menu()).toHaveTextContent("Arquivadas");
-    expect(menu()).toHaveTextContent("1");
-    expect(menu()).toHaveAttribute("data-state-aba", "active");
-    expect(menu()).toHaveAccessibleName("Arquivadas 1 · Mais abas");
-    // Nenhuma aba da faixa finge estar aberta.
+    // Fora do modal: o selo diz onde a pessoa está, com o contador.
+    expect(screen.getByTestId("visao-do-filtro")).toHaveTextContent("Arquivadas");
+    expect(screen.getByTestId("visao-do-filtro")).toHaveTextContent("1");
+    // Nenhuma das três abas do topo finge estar aberta.
     expect(screen.getAllByRole("tab").filter((el) => el.getAttribute("aria-selected") === "true")).toHaveLength(0);
+    // No modal, a oculta é a marcada.
+    expect(ocultas().find((el) => el.getAttribute("aria-checked") === "true")).toHaveTextContent("Arquivadas");
   });
 });
 
 describe("preferência não é permissão", () => {
-  it("atendente sem 'Todas' não a recebe da preferência, nem na faixa nem no menu", async () => {
-    const user = userEvent.setup({ delay: null });
+  it("atendente sem 'Todas' não a recebe da preferência, nem na lista nem nas ocultas", () => {
     h.activeOrg = { orgId: "org-1", name: "Org", role: "agent", visibility_mode: "own" };
     const pref = normalizarAbas([
       { id: "all", visivel: true },
@@ -146,21 +159,18 @@ describe("preferência não é permissão", () => {
 
     expect(faixa()).not.toContain("Todas");
     expect(faixa()).not.toContain("Pessoal");
-
-    await user.click(menu());
-    const ocultas = screen.getAllByRole("menuitemradio").map((el) => (el.textContent ?? "").replace(/\d+$/, "").trim());
-    expect(ocultas).toEqual(["Fechadas"]);
+    expect(ocultas().map(semContador)).toEqual(["Fechadas"]);
   });
 });
 
 describe("o diálogo organiza e grava", () => {
   async function abrirDialogo(user: ReturnType<typeof userEvent.setup>) {
-    await user.click(menu());
-    await user.click(screen.getByRole("menuitem", { name: "Personalizar abas…" }));
+    abrirFiltros();
+    await user.click(screen.getByRole("button", { name: "Personalizar abas…" }));
     return screen.getByRole("dialog", { name: "Personalizar abas" });
   }
 
-  it("subir uma aba e ocultar outra: grava a lista inteira e a faixa acompanha", async () => {
+  it("subir uma aba e ocultar outra: grava a lista inteira e as visões acompanham", async () => {
     const user = userEvent.setup({ delay: null });
     render(<InboxFilters value={VALUE} onChange={() => {}} />);
 
@@ -175,7 +185,7 @@ describe("o diálogo organiza e grava", () => {
     expect(enviado.find((a) => a.id === "archived")).toEqual({ id: "archived", visivel: false });
 
     expect(faixa()).toEqual(["Fila", "Automático", "Minhas", "Todas", "Fechadas", "Pessoal"]);
-    expect(menu()).toHaveTextContent("Mais");
+    expect(ocultas().map(semContador)).toEqual(["Arquivadas"]);
   });
 
   it("o diálogo do atendente mostra só as abas dele e devolve as outras intactas", async () => {
@@ -210,7 +220,7 @@ describe("o diálogo organiza e grava", () => {
     expect(livre).not.toHaveAccessibleDescription();
   });
 
-  it("Cancelar não grava nem muda a faixa", async () => {
+  it("Cancelar não grava nem muda as visões", async () => {
     const user = userEvent.setup({ delay: null });
     render(<InboxFilters value={VALUE} onChange={() => {}} />);
 
@@ -222,7 +232,7 @@ describe("o diálogo organiza e grava", () => {
     expect(faixa()).toContain("Fila");
   });
 
-  it("recusa do servidor avisa, deixa o diálogo aberto e não muda a faixa", async () => {
+  it("recusa do servidor avisa, deixa o diálogo aberto e não muda as visões", async () => {
     const user = userEvent.setup({ delay: null });
     h.salvar.mockResolvedValue({ ok: false, erro: "falha" });
     render(<InboxFilters value={VALUE} onChange={() => {}} />);

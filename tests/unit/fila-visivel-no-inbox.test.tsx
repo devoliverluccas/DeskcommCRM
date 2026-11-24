@@ -21,7 +21,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const ORG = "00000000-0000-4000-8000-0000000000aa";
@@ -147,6 +147,8 @@ describe("#3876 — o seletor mostra a fila com a cor dela", () => {
         />
       </QueryClientProvider>,
     );
+    // O seletor de fila mora no modal de Filtros (topo minimalista).
+    fireEvent.click(screen.getByTestId("botao-filtros"));
     const gatilho = await screen.findByTestId("filtro-de-fila");
     expect(gatilho.getAttribute("aria-label")).toBe("Filtrar por fila");
     expect(gatilho.textContent).toContain("Todas as filas");

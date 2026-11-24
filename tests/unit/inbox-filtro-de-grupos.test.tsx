@@ -60,6 +60,8 @@ function montar() {
 }
 
 async function clicarEmGrupos() {
+  // "Grupos" mora no modal de Filtros desde o topo minimalista.
+  fireEvent.click(await screen.findByTestId("botao-filtros"));
   const botao = await screen.findByRole("button", { name: "Grupos" });
   fireEvent.click(botao);
 }

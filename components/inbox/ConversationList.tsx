@@ -69,7 +69,7 @@ function VazioDaCaixa({ aba }: { aba?: InboxTab }) {
   const detalhe =
     aba === "ai"
       ? t("Quando o agente estiver atendendo alguém, a conversa aparece aqui.")
-      : aba === "unassigned"
+      : aba === "unassigned" || aba === "importantes"
         ? t("Ninguém esperando.")
         : aba === "mine"
           ? t("Nenhuma conversa com você agora. As que você assumir aparecem aqui.")

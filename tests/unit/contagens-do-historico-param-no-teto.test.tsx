@@ -28,7 +28,7 @@
  */
 import type { NextRequest } from "next/server";
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { GET } from "@/app/api/v1/conversations/counts/route";
@@ -210,13 +210,22 @@ const consultaDoStatus = (status: string) =>
 
 const VALUE: InboxFiltersValue = { tab: "all", search: "", onlyUnread: false };
 
-/** O texto do gatilho da aba, como o operador lê. */
-const aba = (nome: RegExp) => screen.getByRole("tab", { name: nome }).textContent ?? "";
+/** O modal de Filtros aberto — é nele que as visões e seus números moram. */
+const dialogo = () => within(screen.getByRole("dialog"));
 
-/** Monta a barra de abas com um corpo de resposta REAL (o que a rota devolveu). */
+/**
+ * O texto da visão, como o operador lê. Fechadas e Arquivadas moram no modal de
+ * Filtros desde o topo minimalista (Não lidas | Abertas | Importantes): são
+ * opções de "Visão" (`radio`), não abas da faixa.
+ */
+const aba = (nome: RegExp) => dialogo().getByRole("radio", { name: nome }).textContent ?? "";
+
+/** Monta a barra com um corpo de resposta REAL (o que a rota devolveu) e abre os Filtros. */
 function montarCom(contagens: Record<string, unknown>) {
   contagensDaTela = contagens;
-  return render(<InboxFilters value={VALUE} onChange={() => {}} />);
+  const r = render(<InboxFilters value={VALUE} onChange={() => {}} />);
+  fireEvent.click(screen.getByTestId("botao-filtros"));
+  return r;
 }
 
 beforeEach(() => {
@@ -244,7 +253,7 @@ describe("#4451 — a rota conta LINHAS, não estima", () => {
     // fica VERMELHO — é a sabotagem que o PR registra.
     const corpo = await contar();
     montarCom(corpo);
-    await screen.findByRole("tab", { name: /Fechadas/ });
+    await dialogo().findByRole("radio", { name: /Fechadas/ });
     const fechadas = aba(/Fechadas/);
     expect(fechadas).toContain("Fechadas");
     expect(fechadas, `a pasta vazia desenhou número: "${fechadas}"`).not.toMatch(/\d/);
@@ -260,7 +269,7 @@ describe("#4451 — a rota conta LINHAS, não estima", () => {
     expect(corpo.closed).toBe(99);
     expect(corpo.truncadas).toEqual(["closed"]);
     montarCom(corpo);
-    expect(await screen.findByText("99+")).toBeTruthy();
+    expect(await dialogo().findByText("99+")).toBeTruthy();
     expect(aba(/Fechadas/)).toContain("99+");
   });
 
@@ -270,7 +279,7 @@ describe("#4451 — a rota conta LINHAS, não estima", () => {
     expect(corpo.closed).toBe(99);
     expect(corpo.truncadas).toEqual([]);
     montarCom(corpo);
-    expect(await screen.findByText("99")).toBeTruthy();
+    expect(await dialogo().findByText("99")).toBeTruthy();
     expect(aba(/Fechadas/)).not.toContain("+");
   });
 
@@ -282,15 +291,15 @@ describe("#4451 — a rota conta LINHAS, não estima", () => {
     expect(corpo.archived).toBe(0);
     expect(corpo.truncadas).toEqual([]);
     montarCom(corpo);
-    expect(await screen.findByText("3")).toBeTruthy();
+    expect(await dialogo().findByText("3")).toBeTruthy();
     expect(aba(/Arquivadas/)).not.toMatch(/\d/);
   });
 
   it("no teto, o badge EXPLICA o corte — não é um `+` solto", async () => {
     h.linhas.archived = 250;
     montarCom(await contar());
-    expect(await screen.findByText("99+")).toBeTruthy();
-    const explicacoes = screen.getAllByTitle(/histórico inteiro/);
+    expect(await dialogo().findByText("99+")).toBeTruthy();
+    const explicacoes = dialogo().getAllByTitle(/histórico inteiro/);
     expect(explicacoes).toHaveLength(1);
     expect(explicacoes[0]?.textContent).toBe("99+");
   });
@@ -311,13 +320,15 @@ describe("#4451 — nenhuma consulta das pastas pede `count`", () => {
     }
   });
 
-  it("MEDIÇÃO: quatro contagens exatas nas abas acionáveis, nenhuma estimativa", async () => {
+  it("MEDIÇÃO: sete contagens exatas nas abas acionáveis, nenhuma estimativa", async () => {
+    // Eram quatro (Fila, Automático, Minhas, Todas); o topo minimalista somou
+    // Importantes, Não lidas e Abertas — abas em que alguém AGE, logo exatas.
     await contar();
     const modos = contagensDasAbas().map((c) => c.count);
-    expect(modos.filter((m) => m === "exact")).toHaveLength(4);
+    expect(modos.filter((m) => m === "exact")).toHaveLength(7);
     // Nenhuma chamada deste arquivo pede `planned` — era ele que mentia "1".
     expect(modos.filter((m) => m === "planned")).toHaveLength(0);
-    expect(modos).toHaveLength(4);
+    expect(modos).toHaveLength(7);
   });
 
   it("a aba Pessoal e a contagem por FILA continuam exatas", async () => {

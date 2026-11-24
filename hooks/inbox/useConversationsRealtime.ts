@@ -114,6 +114,8 @@ export interface ConversationsFilters {
   unread?: boolean;
   /** Só as marcadas como pendentes pela equipe (item 3.7, `pendente_em`). */
   pendente?: boolean;
+  /** A aba "Importantes": na fila OU pendente — a régua mora no servidor. */
+  importantes?: boolean;
   channel_session_id?: string;
   /**
    * A FILA (#3876): só as conversas classificadas neste setor. O `set` da
@@ -208,6 +210,7 @@ export function useConversationsRealtime(
       if (filters.search) qs.set("search", filters.search);
       if (filters.unread) qs.set("unread", "true");
       if (filters.pendente) qs.set("pendente", "true");
+      if (filters.importantes) qs.set("importantes", "true");
       if (filters.channel_session_id) qs.set("channel_session_id", filters.channel_session_id);
       // A FILA (#3876) — ver o comentário do campo em `ConversationsFilters`.
       if (filters.sector_id) qs.set("sector_id", filters.sector_id);

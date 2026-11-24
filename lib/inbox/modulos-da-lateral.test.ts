@@ -254,6 +254,8 @@ describe("abas do painel — todo módulo mora numa aba", () => {
     const porAba = (aba: (typeof ABAS_DA_LATERAL)[number]) => ids(modulosDaAba(modulosPadrao(), aba));
     expect(porAba("perfil")).toEqual([
       "contato",
+      // As notas da equipe sobre o cliente (main): junto do contato.
+      "anotacoes",
       "tags-do-contato",
       "carteira",
       "anuncio",

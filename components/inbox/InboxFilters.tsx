@@ -1,9 +1,11 @@
 "use client";
 import { useT } from "@/hooks/i18n/useT";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { CaretDown, CaretLeft, CaretRight, DotsThree, MagnifyingGlass } from "@/lib/ui/icons";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Funnel, MagnifyingGlass, X } from "@/lib/ui/icons";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import {
   Select,
@@ -50,7 +52,26 @@ export type InboxTab =
    * A aba "Pessoal" (#4434): o fora-da-operação que continua alcançável para
    * quem marcou o contato. Não é trabalho, e por isso fecha a faixa.
    */
-  | "pessoal";
+  | "pessoal"
+  /**
+   * As duas abas novas do topo minimalista. "Não lidas" é a régua do filtro
+   * "Não lidos" (`unread`) sobre todas as conversas; "Importantes" é o que
+   * precisa de alguém agora — na Fila OU pendente —, calculado no servidor
+   * (`filtroDeImportantes`). Nenhuma das duas mora em `INBOX_TABS`: elas são
+   * ABAS da faixa, e não visões do menu de filtros.
+   */
+  | "nao_lidas"
+  | "abertas"
+  | "importantes";
+
+/**
+ * As TRÊS abas do topo, na ordem pedida: Não lidas | Abertas | Importantes.
+ * "Abertas" é `abertas`: só as conversas vivas (sem fechadas e arquivadas) —
+ * a visão "Todas" (`all`, inclui o histórico) continua no modal.
+ * Todo o resto (as visões de `INBOX_TABS`, os filtros, a ordem) mora no modal
+ * de Filtros.
+ */
+export const ABAS_DO_TOPO = ["nao_lidas", "abertas", "importantes"] as const satisfies readonly InboxTab[];
 
 /**
  * A faixa na ORDEM DO TRABALHO (#2498): primeiro o que o robô conduz, depois o
@@ -59,8 +80,10 @@ export type InboxTab =
  *
  * Só a ordem mudou: mesmos `value`, mesmos rótulos, mesmas permissões
  * (`visibleInboxTabs` filtra sem reordenar) e mesmas contagens (`countFor` lê
- * por chave, e a chave não acompanha a posição). `moveTab` anda pelo MESMO
- * array, então as setas continuam vizinha a vizinha.
+ * por chave, e a chave não acompanha a posição).
+ *
+ * Desde o topo minimalista estas são as VISÕES do modal de Filtros, na mesma
+ * ordem; o topo da lista mostra só `ABAS_DO_TOPO`.
  */
 const INBOX_TABS: { value: InboxTab; label: string }[] = [
   // "Automático", não "IA": a palavra deste ator já é contrato em quatro arquivos
@@ -190,7 +213,8 @@ export function comAba(value: InboxFiltersValue, tab: InboxTab): InboxFiltersVal
 type EstadoDoVocabularioDeTag = "carregando" | "vazio" | "com-itens";
 
 /**
- * A CÁPSULA DE FILTRO — um desenho só para os filtros da faixa do Inbox.
+ * A CÁPSULA DE FILTRO — um desenho só para os interruptores do modal de Filtros
+ * (Não lidos, Pendentes, Grupos, a ordem da Fila).
  * `h-11` abaixo de `lg` (alvo de toque); 28px com cursor.
  */
 const CAPSULA =
@@ -198,8 +222,14 @@ const CAPSULA =
 const CAPSULA_DESLIGADA =
   "border-border bg-transparent text-text-muted hover:bg-hover hover:text-text";
 const CAPSULA_LIGADA = "border-accent bg-accent-soft text-accent";
-/** O gatilho de `Select` traz `w-full` e `min-h-11` próprios: aqui vira cápsula. */
-const CAPSULA_DE_ESCOLHA = "w-auto flex-none min-h-0 max-w-[11rem] font-normal";
+/**
+ * O CAMPO DE ESCOLHA DO MODAL de Filtros (número, etiqueta, atendente, fila):
+ * largura inteira, 44px abaixo de `lg`. Ligado, ganha a borda de seleção — o
+ * mesmo sinal da cápsula, sem pintar o campo inteiro.
+ */
+const CAMPO =
+  "inline-flex h-11 min-h-0 w-full items-center justify-between gap-2 rounded-md border border-border bg-transparent px-3 text-sm font-normal text-text shadow-none transition-colors hover:bg-hover lg:h-8 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring";
+const CAMPO_LIGADO = "border-accent";
 
 interface Props {
   value: InboxFiltersValue;
@@ -215,60 +245,43 @@ interface Props {
    */
   filas?: Pick<Sector, "id" | "name" | "color">[];
   /**
-   * As abas DESTA PESSOA (#3313): a ordem da faixa e quais ficam no menu "Mais".
+   * As abas DESTA PESSOA (#3313): a ordem das visões no modal de Filtros e quais
+   * ficam no grupo "Abas ocultas".
    *
    * Vêm do SERVIDOR (`app/app/inbox/page.tsx` -> `carregarAbasDaInbox`), pela
    * mesma razão da lateral (#3008): a preferência mora no metadata da pessoa, e
-   * a faixa não pode nascer na ordem padrão e "pular" para a dela depois da
+   * a lista não pode nascer na ordem padrão e "pular" para a dela depois da
    * hidratação. Ausente (os testes que montam a barra, ou quem nunca escolheu)
-   * = o padrão, que é a faixa de hoje.
+   * = o padrão.
    */
   abasIniciais?: AbaDaPessoa[];
   /** Ação compacta ao lado da busca (o "Iniciar conversa" do Inbox). */
   acao?: ReactNode;
+  /**
+   * A ordem da Fila (#5118), por aparelho. O estado mora no `InboxLayout` (é
+   * ele quem monta o pedido da lista); o controle mora no modal de Filtros e só
+   * aparece com a visão Fila aberta — nas outras a ordem é sempre a recente.
+   */
+  ordemDaFila?: OrdemDaFila;
+  onOrdemDaFila?: (ordem: OrdemDaFila) => void;
 }
 
-export function InboxFilters({ value, onChange, filas: filasDaOrganizacao, abasIniciais, acao }: Props) {
+export type OrdemDaFila = "recentes" | "espera";
+
+export function InboxFilters({
+  value,
+  onChange,
+  filas: filasDaOrganizacao,
+  abasIniciais,
+  acao,
+  ordemDaFila,
+  onOrdemDaFila,
+}: Props) {
   const t = useT();
   const [abasDaPessoa, setAbasDaPessoa] = useState<AbaDaPessoa[]>(() => abasIniciais ?? abasPadrao());
   const [organizandoAbas, setOrganizandoAbas] = useState(false);
+  const [filtrosAbertos, setFiltrosAbertos] = useState(false);
   const [searchInput, setSearchInput] = useState(value.search);
-  const tabsListRef = useRef<HTMLDivElement>(null);
-  const [moreTabs, setMoreTabs] = useState({ left: false, right: false });
-  const updateMoreTabs = useCallback(() => {
-    const list = tabsListRef.current;
-    if (!list) return;
-    const maxScroll = Math.max(0, list.scrollWidth - list.clientWidth);
-    const next = { left: list.scrollLeft > 1, right: list.scrollLeft < maxScroll - 1 };
-    setMoreTabs((previous) =>
-      previous.left === next.left && previous.right === next.right ? previous : next,
-    );
-  }, []);
-  useEffect(() => {
-    const list = tabsListRef.current;
-    if (!list) return;
-    const centerSelectedTab = () => {
-      // Deixar a aba só na borda esconde as vizinhas. Centralizar mostra o
-      // contexto dos dois lados, salvo nas extremidades naturais da faixa.
-      const selected = list.querySelector<HTMLElement>('[role="tab"][data-state="active"]');
-      if (selected) {
-        const selectedCenter =
-          selected.getBoundingClientRect().left -
-          list.getBoundingClientRect().left +
-          list.scrollLeft +
-          selected.offsetWidth / 2;
-        const maxScroll = Math.max(0, list.scrollWidth - list.clientWidth);
-        list.scrollLeft = Math.max(0, Math.min(maxScroll, selectedCenter - list.clientWidth / 2));
-      }
-      updateMoreTabs();
-    };
-    centerSelectedTab();
-    if (typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(centerSelectedTab);
-    observer.observe(list);
-    list.querySelectorAll<HTMLElement>('[role="tab"]').forEach((tab) => observer.observe(tab));
-    return () => observer.disconnect();
-  }, [value.tab, updateMoreTabs]);
   /**
    * O campo escuta o valor de FORA — e só ele.
    *
@@ -377,15 +390,17 @@ export function InboxFilters({ value, onChange, filas: filasDaOrganizacao, abasI
     ? visibleInboxTabs(activeOrg.role, activeOrg.visibility_mode)
     : INBOX_TABS.map((t) => t.value);
   const { faixa: tabs, ocultas } = faixaDaPessoa(permitidas, abasDaPessoa);
-  const rotuloDaAba = (tab: InboxTab) => t(INBOX_TABS.find((x) => x.value === tab)!.label);
-  // A aba aberta pode ser uma das ocultas (o padrão "Fila", um `?filter=` de
-  // link, ou a escolhida no menu). Ela aparece no botão do menu, marcada como a
-  // aba ativa: a pessoa sempre vê onde está.
-  const ativaOculta = ocultas.includes(value.tab);
-  const moveTab = (direction: -1 | 1) => {
-    const next = tabs[tabs.indexOf(value.tab) + direction];
-    if (next) onChange(comAba(value, next));
+  const rotuloDaAba = (tab: InboxTab): string => {
+    if (tab === "nao_lidas") return t("Não lidas");
+    if (tab === "importantes") return t("Importantes");
+    if (tab === "abertas") return t("Abertas");
+    const meta = INBOX_TABS.find((x) => x.value === tab);
+    return meta ? t(meta.label) : tab;
   };
+  // A visão aberta é uma das TRÊS abas do topo, ou uma visão escolhida no
+  // modal (Fila, Minhas, Fechadas…). No segundo caso nenhuma das três fica
+  // marcada, e a visão aparece ao lado delas como um selo removível.
+  const ehAbaDoTopo = (ABAS_DO_TOPO as readonly InboxTab[]).includes(value.tab);
   /**
    * As abas cujo número PAROU no teto de cem linhas (#4451).
    *
@@ -414,28 +429,11 @@ export function InboxFilters({ value, onChange, filas: filasDaOrganizacao, abasI
     // DESTE usuário. Opcional na resposta por causa de cache antigo (ver
     // `ConversationCounts`), então `undefined` some, não vira zero.
     pessoal: counts?.pessoal,
+    // As duas abas novas do topo. Opcionais na resposta pelo cache antigo.
+    nao_lidas: counts?.nao_lidas,
+    abertas: counts?.abertas,
+    importantes: counts?.importantes,
   };
-  // O NOME do botão do menu das abas, para o leitor de tela. Sem ocultas, é a
-  // porta do diálogo; com ocultas, "Mais abas" — no celular a barra de baixo já
-  // tem um "Mais" (a navegação), e dois controles com o mesmo nome na mesma tela
-  // é defeito. Com a aba aberta oculta, o nome dela, o contador e o "Mais abas":
-  // explícito, porque o nome calculado do conteúdo cola o rótulo no contador
-  // ("Arquivadas1"). O contador segue a mesma regra do visível (só depois de
-  // montar), para servidor e cliente não divergirem na hidratação.
-  const contadorDaAtiva = countFor[value.tab];
-  const nomeDoMenuDasAbas =
-    ocultas.length === 0
-      ? t("Personalizar abas")
-      : ativaOculta
-        ? [
-            rotuloDaAba(value.tab),
-            depoisDeMontar && typeof contadorDaAtiva === "number" && contadorDaAtiva > 0
-              ? String(contadorDaAtiva)
-              : null,
-          ]
-            .filter(Boolean)
-            .join(" ") + ` · ${t("Mais abas")}`
-        : t("Mais abas");
   // Filtrar por um número que saiu da lista (o operador acabou de excluir o
   // canal) deixa o inbox mostrando um subconjunto — às vezes vazio — sem nada na
   // tela dizendo que há filtro. O número some do dropdown junto com o canal, e o
@@ -601,110 +599,294 @@ export function InboxFilters({ value, onChange, filas: filasDaOrganizacao, abasI
     return () => clearTimeout(t);
   }, [searchInput]);
 
+  /**
+   * QUANTOS FILTROS ESTÃO VALENDO — o número do botão "Filtros".
+   *
+   * Conta o que o modal liga e a tela de fora não mostra: a visão escolhida lá
+   * (quando não é uma das três abas do topo) e cada filtro auxiliar. O
+   * atendente só conta onde ele vale (fora de Minhas). A busca e a ordem da
+   * Fila não entram: a busca está à vista, e a ordem não esconde conversa.
+   */
+  const filtrosAtivos =
+    (ehAbaDoTopo ? 0 : 1) +
+    (value.onlyUnread ? 1 : 0) +
+    (value.onlyPendentes ? 1 : 0) +
+    (value.onlyGroups ? 1 : 0) +
+    (value.channel_session_id != null ? 1 : 0) +
+    (etiquetas.length > 0 ? 1 : 0) +
+    (value.assigned_to != null && mostrarSeletorDeAtendente ? 1 : 0) +
+    (value.sector_id != null ? 1 : 0);
+  const nomeDoBotaoDeFiltros =
+    filtrosAtivos > 0 ? `${t("Filtros")} · ${filtrosAtivos}` : t("Filtros");
+  // Limpa o que o modal liga — e só isso. A busca fica (está à vista, com o
+  // próprio campo), e a aba do topo também: limpar não tira a pessoa do lugar.
+  // A visão escolhida no modal é filtro, e volta para "Abertas".
+  const limparFiltros = () =>
+    onChange({
+      ...comAba(value, ehAbaDoTopo ? value.tab : "abertas"),
+      onlyUnread: false,
+      onlyPendentes: false,
+      onlyGroups: false,
+      channel_session_id: undefined,
+      tag: undefined,
+      tagMode: undefined,
+      assigned_to: undefined,
+      sector_id: undefined,
+    });
+  /** O contador só existe depois de montar (#3736) e nunca como zero. */
+  const contagemDe = (tab: InboxTab): number | null => {
+    const n = countFor[tab];
+    return depoisDeMontar && typeof n === "number" && n > 0 ? n : null;
+  };
+  const contagemDaVisao = (tab: InboxTab) => {
+    const n = contagemDe(tab);
+    if (n === null) return null;
+    const truncada = (tab === "closed" || tab === "archived") && contagensTruncadas.includes(tab);
+    return (
+      <span
+        className="text-[11px] tabular-nums text-text-subtle"
+        title={truncada ? t("Mais de 99: esta aba conta o histórico inteiro") : undefined}
+      >
+        {/* `99+` e não `100`: no teto o total não foi contado (#4451). */}
+        {truncada ? `${n}+` : n}
+      </span>
+    );
+  };
+  const opcaoDeVisao = (tab: InboxTab) => {
+    const marcada = value.tab === tab;
+    return (
+      <button
+        key={tab}
+        type="button"
+        role="radio"
+        aria-checked={marcada}
+        data-visao={tab}
+        onClick={() => onChange(comAba(value, tab))}
+        className={cn(
+          "flex h-11 w-full items-center gap-2 rounded-md px-2 text-left text-sm transition-colors lg:h-8",
+          "focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+          marcada ? "bg-pressed font-medium text-text" : "text-text-muted hover:bg-hover hover:text-text",
+        )}
+      >
+        <span
+          aria-hidden
+          className={cn("size-1.5 shrink-0 rounded-full", marcada ? "bg-accent" : "bg-transparent")}
+        />
+        <span className="min-w-0 flex-1 truncate">{rotuloDaAba(tab)}</span>
+        {contagemDaVisao(tab)}
+      </button>
+    );
+  };
+  const TITULO = "text-xs font-medium text-text-subtle";
+
   return (
     <div className="border-b border-border bg-background">
-      <div className="space-y-2 px-3 pt-3 pb-2">
-        {/* LINHA 1 — a busca e, ao lado, a ação da lista (o "Iniciar conversa"
-            compacto). Antes a ação era uma barra larga acima de tudo, e os
-            filtros ocupavam mais duas linhas. */}
-        <div className="flex items-center gap-1.5">
-          <div className="relative min-w-0 flex-1">
-            <MagnifyingGlass
-              size={15}
-              weight="regular"
-              className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-text-subtle"
-              aria-hidden
-            />
-            {/* "última mensagem", e não "mensagem": a busca alcança apenas
-                `conversations.last_message_preview` — a ÚLTIMA mensagem, truncada em 200
-                caracteres já na ingestão (`grep -rn 'slice(0, 200)' lib/channels/` mostra onde).
-                Medido numa conversa real de 32 mensagens: buscar o que o cliente pediu na
-                3ª devolve ZERO. Alcançar o histórico é projeto próprio (índice trigram +
-                retenção + LGPD); até lá, a tela não promete o que o backend não faz. */}
-            <Input
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              placeholder={t("Buscar por nome, telefone ou última mensagem…")}
-              className="h-8 rounded-md border-transparent bg-surface-elevated pl-9 shadow-none focus-visible:border-border focus-visible:bg-background"
-              aria-label={t("Buscar conversas")}
-            />
-          </div>
-          {acao}
+      {/* LINHA 1 — busca, Filtros e a ação da lista (o "Iniciar conversa"). */}
+      <div className="flex items-center gap-1.5 px-3 pt-3 pb-1">
+        <div className="relative min-w-0 flex-1">
+          <MagnifyingGlass
+            size={15}
+            weight="regular"
+            className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-text-subtle"
+            aria-hidden
+          />
+          {/* "última mensagem", e não "mensagem": a busca alcança apenas
+              `conversations.last_message_preview` — a ÚLTIMA mensagem, truncada em 200
+              caracteres já na ingestão. Alcançar o histórico é projeto próprio; até
+              lá, a tela não promete o que o backend não faz. */}
+          <Input
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            placeholder={t("Buscar por nome, telefone ou última mensagem…")}
+            className="h-11 rounded-md border-transparent bg-surface-elevated pl-9 shadow-none focus-visible:border-border focus-visible:bg-background lg:h-8"
+            aria-label={t("Buscar conversas")}
+          />
         </div>
-
-        {/* LINHA 2 — TODOS os filtros numa faixa só, que rola de lado quando
-            não cabe (coluna de 240 a 520px). Antes eram até três linhas:
-            busca + Não lidos + Grupos, número + etiqueta + atendente, e a fila.
-            Cada filtro é uma cápsula do mesmo desenho; ligado, ganha a borda e
-            o fundo de seleção. `ring-inset` porque o anel de foco por fora seria
-            cortado pela rolagem da faixa. */}
-        <div className="-mx-3 flex [scrollbar-width:none] items-center gap-1.5 overflow-x-auto px-3">
-          {/* Botão pressionável em vez de Switch: o Switch com rótulo pedia uma
-              linha inteira só para si numa coluna de 280px. */}
-          <button
-            type="button"
-            aria-pressed={value.onlyUnread}
-            onClick={() => onChange({ ...value, onlyUnread: !value.onlyUnread })}
-            className={cn(CAPSULA, value.onlyUnread ? CAPSULA_LIGADA : CAPSULA_DESLIGADA)}
-          >
-            {t("Não lidos")}
-          </button>
-          {/* "Pendentes" (item 3.7): a marca que a equipe põe pelo ⋯ da conversa.
-              Mesmo desenho do "Não lidos"; ligado, manda `pendente=true`. */}
-          <button
-            type="button"
-            aria-pressed={value.onlyPendentes ?? false}
-            data-testid="filtro-pendentes"
-            onClick={() => onChange({ ...value, onlyPendentes: !value.onlyPendentes })}
-            className={cn(CAPSULA, value.onlyPendentes ? CAPSULA_LIGADA : CAPSULA_DESLIGADA)}
-          >
-            {t("Pendentes")}
-          </button>
-          {/* MESMO PADRÃO do botão acima. "Grupos" manda `is_group=true` na
-              listagem — sem ele a aba mostra tudo, individual e grupo
-              misturados. */}
-          <button
-            type="button"
-            aria-pressed={value.onlyGroups ?? false}
-            onClick={() => onChange({ ...value, onlyGroups: !value.onlyGroups })}
-            className={cn(CAPSULA, value.onlyGroups ? CAPSULA_LIGADA : CAPSULA_DESLIGADA)}
-          >
-            {t("Grupos")}
-          </button>
-
-          {showChannelSwitch && (
-            <Select
-              value={value.channel_session_id ?? "all"}
-              onValueChange={(v) =>
-                onChange({ ...value, channel_session_id: v === "all" ? undefined : v })
-              }
-            >
-              <SelectTrigger
-                className={cn(
-                  CAPSULA,
-                  CAPSULA_DE_ESCOLHA,
-                  value.channel_session_id != null ? CAPSULA_LIGADA : CAPSULA_DESLIGADA,
-                )}
-                aria-label={t("Filtrar por número de WhatsApp")}
-              >
-                <SelectValue placeholder={t("Todos os números")} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{t("Todos os números")}</SelectItem>
-                {filtroForaDaLista && value.channel_session_id != null && (
-                  <SelectItem value={value.channel_session_id}>{t("Número removido")}</SelectItem>
-                )}
-                {channels?.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {channelLabel(c)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+        {/* FILTROS — um botão só abre tudo o que não é uma das três abas. O
+            número é quantos filtros estão valendo: é o que impede a lista
+            filtrada de parecer a caixa inteira com o modal fechado. */}
+        <button
+          type="button"
+          data-testid="botao-filtros"
+          aria-label={nomeDoBotaoDeFiltros}
+          title={t("Filtros")}
+          aria-haspopup="dialog"
+          aria-expanded={filtrosAbertos}
+          onClick={() => setFiltrosAbertos(true)}
+          className={cn(
+            "relative inline-flex size-11 shrink-0 items-center justify-center rounded-md transition-colors lg:size-8",
+            "focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring",
+            filtrosAtivos > 0 ? "bg-pressed text-text" : "text-text-muted hover:bg-hover hover:text-text",
           )}
+        >
+          <Funnel size={16} weight={filtrosAtivos > 0 ? "fill" : "regular"} aria-hidden />
+          {filtrosAtivos > 0 && (
+            <span
+              aria-hidden
+              className="absolute top-1.5 right-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] leading-none font-medium text-accent-foreground lg:-top-1 lg:-right-1"
+            >
+              {filtrosAtivos}
+            </span>
+          )}
+        </button>
+        {acao}
+      </div>
 
-          {mostrarSeletorDeTag && (
-            <DropdownMenu
+      {/* LINHA 2 — SÓ as três abas: Não lidas | Abertas | Importantes. Uma
+          visão escolhida no modal (Fila, Minhas, Fechadas…) desmarca as três e
+          aparece à direita como um selo, com o × que volta para "Abertas": a
+          pessoa sempre vê onde está, sem a faixa crescer de novo. */}
+      <Tabs
+        value={ehAbaDoTopo ? value.tab : ""}
+        onValueChange={(v) => onChange(comAba(value, v as InboxTab))}
+        className="px-3"
+      >
+        {/* `flex-wrap` nas duas camadas (#2745): na coluna mínima (240px) com o
+            selo de uma visão, o que não cabe QUEBRA de linha em vez de rolar para
+            trás de uma seta — o defeito que a faixa de sete abas já teve. */}
+        <div className="flex min-w-0 flex-wrap items-end gap-x-2">
+          <TabsList
+            aria-label={t("Conversas")}
+            className="h-auto min-w-0 flex-wrap justify-start gap-x-3 rounded-none bg-transparent p-0"
+          >
+            {ABAS_DO_TOPO.map((tab) => (
+              <TabsTrigger
+                key={tab}
+                value={tab}
+                className="min-h-11 shrink-0 gap-1 rounded-none border-b-2 border-transparent px-0 pt-1 pb-2 text-xs font-medium text-text-muted hover:text-text data-[state=active]:border-accent data-[state=active]:bg-transparent data-[state=active]:text-text data-[state=active]:shadow-none lg:min-h-0"
+              >
+                {rotuloDaAba(tab)}
+                {contagemDaVisao(tab)}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+          {!ehAbaDoTopo && (
+            <span
+              data-testid="visao-do-filtro"
+              className="mb-1.5 ml-auto inline-flex h-11 min-w-0 items-center gap-1 rounded-md bg-pressed pl-2 text-xs font-medium text-text lg:h-6"
+            >
+              <span className="truncate">{rotuloDaAba(value.tab)}</span>
+              {contagemDaVisao(value.tab)}
+              <button
+                type="button"
+                aria-label={`${t("Remover filtro")} · ${rotuloDaAba(value.tab)}`}
+                onClick={() => onChange(comAba(value, "abertas"))}
+                className="inline-flex size-11 shrink-0 items-center justify-center rounded-md text-text-muted hover:text-text focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring lg:size-6"
+              >
+                <X size={12} aria-hidden />
+              </button>
+            </span>
+          )}
+        </div>
+      </Tabs>
+
+      {/* O MODAL DE FILTROS — tudo que saiu do topo, no mesmo lugar. Nenhum
+          filtro sumiu: as visões (na ordem e com as ocultas da pessoa, #3313),
+          Não lidos/Pendentes/Grupos, número, etiqueta, atendente, fila e a
+          ordem da Fila. Cada controle mantém o nome acessível de antes. */}
+      <Dialog open={filtrosAbertos} onOpenChange={setFiltrosAbertos}>
+        <DialogContent className="max-w-sm gap-0 p-0" aria-describedby={undefined}>
+          <DialogHeader className="px-5 pt-5 pb-3">
+            <DialogTitle>{t("Filtros")}</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-5 px-5 pb-5">
+            <section className="grid gap-1">
+              <h3 id="filtros-visao" className={TITULO}>
+                {t("Visão")}
+              </h3>
+              <div role="radiogroup" aria-labelledby="filtros-visao" className="grid">
+                {tabs.map(opcaoDeVisao)}
+              </div>
+              {ocultas.length > 0 && (
+                <>
+                  <h4 id="filtros-ocultas" className={cn(TITULO, "mt-2")}>
+                    {t("Abas ocultas")}
+                  </h4>
+                  <div role="radiogroup" aria-labelledby="filtros-ocultas" className="grid">
+                    {ocultas.map(opcaoDeVisao)}
+                  </div>
+                </>
+              )}
+              <button
+                type="button"
+                data-testid="personalizar-abas"
+                onClick={() => {
+                  setFiltrosAbertos(false);
+                  setOrganizandoAbas(true);
+                }}
+                className="inline-flex h-11 items-center self-start rounded-md px-2 text-xs text-text-muted hover:bg-hover hover:text-text focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring lg:h-7"
+              >
+                {t("Personalizar abas…")}
+              </button>
+            </section>
+
+            <section className="grid gap-1.5">
+              <h3 className={TITULO}>{t("Mostrar")}</h3>
+              <div className="flex flex-wrap gap-1.5">
+                <button
+                  type="button"
+                  aria-pressed={value.onlyUnread}
+                  onClick={() => onChange({ ...value, onlyUnread: !value.onlyUnread })}
+                  className={cn(CAPSULA, value.onlyUnread ? CAPSULA_LIGADA : CAPSULA_DESLIGADA)}
+                >
+                  {t("Não lidos")}
+                </button>
+                {/* "Pendentes" (item 3.7): a marca que a equipe põe pelo ⋯ da conversa. */}
+                <button
+                  type="button"
+                  aria-pressed={value.onlyPendentes ?? false}
+                  data-testid="filtro-pendentes"
+                  onClick={() => onChange({ ...value, onlyPendentes: !value.onlyPendentes })}
+                  className={cn(CAPSULA, value.onlyPendentes ? CAPSULA_LIGADA : CAPSULA_DESLIGADA)}
+                >
+                  {t("Pendentes")}
+                </button>
+                {/* "Grupos" manda `is_group=true` na listagem. */}
+                <button
+                  type="button"
+                  aria-pressed={value.onlyGroups ?? false}
+                  onClick={() => onChange({ ...value, onlyGroups: !value.onlyGroups })}
+                  className={cn(CAPSULA, value.onlyGroups ? CAPSULA_LIGADA : CAPSULA_DESLIGADA)}
+                >
+                  {t("Grupos")}
+                </button>
+              </div>
+            </section>
+
+            {showChannelSwitch && (
+              <section className="grid gap-1.5">
+                <h3 className={TITULO}>{t("Número")}</h3>
+                <Select
+                  value={value.channel_session_id ?? "all"}
+                  onValueChange={(v) =>
+                    onChange({ ...value, channel_session_id: v === "all" ? undefined : v })
+                  }
+                >
+                  <SelectTrigger
+                    className={cn(CAMPO, value.channel_session_id != null && CAMPO_LIGADO)}
+                    aria-label={t("Filtrar por número de WhatsApp")}
+                  >
+                    <SelectValue placeholder={t("Todos os números")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{t("Todos os números")}</SelectItem>
+                    {filtroForaDaLista && value.channel_session_id != null && (
+                      <SelectItem value={value.channel_session_id}>{t("Número removido")}</SelectItem>
+                    )}
+                    {channels?.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {channelLabel(c)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </section>
+            )}
+
+            {mostrarSeletorDeTag && (
+              <section className="grid gap-1.5">
+                <h3 className={TITULO}>{t("Etiquetas")}</h3>
+                <DropdownMenu
               onOpenChange={(aberto) => {
                 // `menuDeEtiquetaAberto` é o que impede a condição de
                 // desmontar o popover com ele aberto — ver o comentário de
@@ -731,11 +913,7 @@ export function InboxFilters({ value, onChange, filas: filasDaOrganizacao, abasI
               <DropdownMenuTrigger asChild>
                 <button
                   type="button"
-                  className={cn(
-                    CAPSULA,
-                    "max-w-[11rem] truncate text-left font-normal",
-                    etiquetas.length > 0 ? CAPSULA_LIGADA : CAPSULA_DESLIGADA,
-                  )}
+                  className={cn(CAMPO, "truncate text-left", etiquetas.length > 0 && CAMPO_LIGADO)}
                   aria-label={t("Filtrar por tag")}
                 >
                   {etiquetas.length > 0 ? (
@@ -755,7 +933,7 @@ export function InboxFilters({ value, onChange, filas: filasDaOrganizacao, abasI
                   )}
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-64">
+              <DropdownMenuContent align="start" className="w-(--radix-dropdown-menu-trigger-width) min-w-64">
                 <DropdownMenuLabel>{t("Todas as tags")}</DropdownMenuLabel>
                 {/* ESTADO (a): enquanto o vocabulário não chegou, o menu diz
                       que está carregando em vez de parecer uma lista vazia.
@@ -854,223 +1032,99 @@ export function InboxFilters({ value, onChange, filas: filasDaOrganizacao, abasI
                 )}
               </DropdownMenuContent>
             </DropdownMenu>
-          )}
+              </section>
+            )}
 
-          {mostrarSeletorDeAtendente && (
-            <SeletorDeAtendente
-              value={value.assigned_to}
-              onChange={(atendente) => onChange({ ...value, assigned_to: atendente })}
-              className={cn(
-                CAPSULA,
-                CAPSULA_DE_ESCOLHA,
-                value.assigned_to != null ? CAPSULA_LIGADA : CAPSULA_DESLIGADA,
-              )}
-            />
-          )}
+            {mostrarSeletorDeAtendente && (
+              <section className="grid gap-1.5">
+                <h3 className={TITULO}>{t("Atendente")}</h3>
+                <SeletorDeAtendente
+                  value={value.assigned_to}
+                  onChange={(atendente) => onChange({ ...value, assigned_to: atendente })}
+                  className={cn(CAMPO, value.assigned_to != null && CAMPO_LIGADO)}
+                />
+              </section>
+            )}
 
-          {/* A FILA (#3876): mesma cápsula, na mesma faixa. Antes tinha linha
-            própria para o nome não truncar; na faixa que rola cada cápsula tem
-            a largura do próprio rótulo (até `max-w`), então o nome segue legível.
-            A cor (migration 9084) aparece no item e no gatilho, porque o
-            `SelectValue` desenha os filhos do item escolhido. */}
-          {mostrarSeletorDeFila && (
-            <Select
-              value={value.sector_id ?? "todas"}
-              onValueChange={(v) =>
-                onChange({ ...value, sector_id: v === "todas" ? undefined : v })
-              }
-            >
-              <SelectTrigger
-                data-testid="filtro-de-fila"
-                className={cn(
-                  CAPSULA,
-                  CAPSULA_DE_ESCOLHA,
-                  value.sector_id != null ? CAPSULA_LIGADA : CAPSULA_DESLIGADA,
-                )}
-                aria-label={t("Filtrar por fila")}
-              >
-                <SelectValue placeholder={t("Todas as filas")} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todas">{t("Todas as filas")}</SelectItem>
-                {/* Fila apagada com o filtro ainda ligado: sem esta linha o
-                    gatilho mostraria um resumo de filtro que não está mais na
-                    lista, e não haveria como desligá-lo. A mesma válvula do
-                    seletor de número (`Número removido`). */}
-                {filaForaDaLista && value.sector_id != null && (
-                  <SelectItem value={value.sector_id}>{t("Fila removida")}</SelectItem>
-                )}
-                {filas.map((fila) => (
-                  <SelectItem key={fila.id} value={fila.id}>
-                    <OpcaoDaFila fila={fila} esperando={counts?.por_fila?.[fila.id]} />
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-        </div>
-      </div>
-
-      {/* As setas aparecem só quando há abas fora da área visível; a faixa e o
-          sublinhado continuam com a altura compacta do Inbox.
-
-          `flex-wrap` + `gap-x-1` (#2745) — A FAIXA QUEBRA EM VEZ DE ESCONDER.
-          Medido em browser real, com o CSS do produto compilado e a fonte
-          verdadeira (`tests/sonda-abas-inbox-1280.test.tsx`), as seis abas
-          somam 358px de rótulo+contagem e 378px com o gap de 4px; a coluna da
-          lista vale de 240 (mínimo do arraste, `LIMITES_LISTA`) a 520px, e o
-          padrão da faixa `xl` — a janela de 1280px da issue — é 272px. Sem
-          quebra, o `overflow-x-auto` rolava 191px na coluna de 272 e 13px na
-          de 450: "Fechadas" cortada e "Arquivadas" escondida atrás da seta,
-          que era exatamente o corte medido. Agora, na mesma medição: 2 linhas
-          (68px) em 272, 1 linha (30px) em 450, e as seis dentro da coluna em
-          toda a faixa — rolagem zero.
-
-          `shrink-0` + `whitespace-nowrap` seguem valendo: rótulo não encolhe
-          nem parte no meio. O `gap-x-1` só aperta onde não há folga (com
-          `justify-between` a sobra continua distribuída, então a faixa larga
-          não muda de figura) — e é o que leva 272px de 3 linhas para 2. A
-          seta de rolagem fica sendo o que sempre foi: reserva para o caso em
-          que UMA aba sozinha não cabe (zoom alto, coluna arrastada no mínimo).
-
-          Só o LAYOUT mudou: `value.tab`, `onChange`, `visibleInboxTabs` e
-          `countFor` estão byte a byte como estavam — a aba continua o mesmo
-          filtro com o mesmo rótulo, e "Automático" continua "Automático". */}
-      <Tabs
-        value={value.tab}
-        onValueChange={(v) => onChange(comAba(value, v as InboxTab))}
-        className="px-3"
-      >
-        <div className="flex items-center gap-1">
-          {moreTabs.left ? (
-            <button
-              type="button"
-              onClick={() => moveTab(-1)}
-              aria-label={t("Aba anterior")}
-              className="flex w-4 shrink-0 items-center justify-center text-text-muted hover:text-text focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden"
-            >
-              <CaretLeft size={13} aria-hidden />
-            </button>
-          ) : (
-            <span className="w-4 shrink-0" aria-hidden />
-          )}
-          <TabsList
-            ref={tabsListRef}
-            onScroll={updateMoreTabs}
-            className="h-auto min-w-0 flex-1 [scrollbar-width:none] flex-wrap justify-between gap-x-1 gap-y-2 rounded-none bg-transparent p-0"
-          >
-            {tabs.map((tab) => {
-              const meta = INBOX_TABS.find((t) => t.value === tab)!;
-              const count = countFor[tab];
-              const truncada =
-                (tab === "closed" || tab === "archived") && contagensTruncadas.includes(tab);
-              return (
-                <TabsTrigger
-                  key={tab}
-                  value={tab}
-                  className="shrink-0 gap-1 rounded-none border-b-2 border-transparent px-0 pt-1 pb-2 text-xs font-medium text-text-muted data-[state=active]:border-accent data-[state=active]:bg-transparent data-[state=active]:text-text data-[state=active]:shadow-none"
+            {/* A FILA (#3876): a cor (migration 9084) aparece no item e no
+                gatilho, porque o `SelectValue` desenha os filhos do escolhido. */}
+            {mostrarSeletorDeFila && (
+              <section className="grid gap-1.5">
+                <h3 className={TITULO}>{t("Fila")}</h3>
+                <Select
+                  value={value.sector_id ?? "todas"}
+                  onValueChange={(v) => onChange({ ...value, sector_id: v === "todas" ? undefined : v })}
                 >
-                  {t(meta.label)}
-                  {depoisDeMontar && typeof count === "number" && count > 0 && (
-                    <span
-                      className="text-[11px] tabular-nums text-text-subtle"
-                      title={
-                        truncada
-                          ? t("Mais de 99: esta aba conta o histórico inteiro")
-                          : undefined
-                      }
-                    >
-                      {/* `99+` e não `100`: no teto o total não foi contado, e um
-                          número com cara de exato seria a mesma mentira do
-                          `count: planned` por outra porta (#4451). */}
-                      {truncada ? `${count}+` : count}
-                    </span>
-                  )}
-                </TabsTrigger>
-              );
-            })}
-          </TabsList>
-          {moreTabs.right ? (
-            <button
-              type="button"
-              onClick={() => moveTab(1)}
-              aria-label={t("Próxima aba")}
-              className="flex w-4 shrink-0 items-center justify-center text-text-muted hover:text-text focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden"
-            >
-              <CaretRight size={13} aria-hidden />
-            </button>
-          ) : (
-            <span className="w-4 shrink-0" aria-hidden />
-          )}
-          {/* O MENU DAS ABAS (#3313): as ocultas e a porta para organizar.
-              Fica FORA do `TabsList` — dentro dele seria um item a mais num
-              `tablist`, que o leitor de tela anunciaria como aba.
-
-              Três caras, um botão só:
-                - a aba aberta está oculta → o nome dela, marcado como ativa;
-                - há ocultas → "Mais";
-                - nenhuma oculta → só os três pontos (a porta para organizar). */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                data-testid="menu-das-abas"
-                aria-label={nomeDoMenuDasAbas}
-                title={ocultas.length === 0 ? t("Personalizar abas") : undefined}
-                data-state-aba={ativaOculta ? "active" : undefined}
-                className={cn(
-                  "flex shrink-0 items-center gap-1 self-start rounded-none border-b-2 border-transparent pb-2 pt-1 text-xs font-medium text-text-muted hover:text-text focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring",
-                  ativaOculta && "border-accent text-text",
-                )}
-              >
-                {ativaOculta ? (
-                  <>
-                    {rotuloDaAba(value.tab)}
-                    {depoisDeMontar && typeof contadorDaAtiva === "number" && contadorDaAtiva > 0 && (
-                      <span className="text-[11px] tabular-nums text-text-subtle">{contadorDaAtiva}</span>
-                    )}
-                    <CaretDown size={11} aria-hidden />
-                  </>
-                ) : ocultas.length > 0 ? (
-                  <>
-                    {t("Mais")}
-                    <CaretDown size={11} aria-hidden />
-                  </>
-                ) : (
-                  <DotsThree size={14} weight="bold" aria-hidden />
-                )}
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-52">
-              {ocultas.length > 0 && (
-                <>
-                  <DropdownMenuLabel className="text-xs">{t("Abas ocultas")}</DropdownMenuLabel>
-                  <DropdownMenuRadioGroup
-                    value={ativaOculta ? value.tab : ""}
-                    onValueChange={(v) => onChange(comAba(value, v as InboxTab))}
+                  <SelectTrigger
+                    data-testid="filtro-de-fila"
+                    className={cn(CAMPO, value.sector_id != null && CAMPO_LIGADO)}
+                    aria-label={t("Filtrar por fila")}
                   >
-                    {ocultas.map((tab) => {
-                      const count = countFor[tab];
-                      return (
-                        <DropdownMenuRadioItem key={tab} value={tab} className="text-xs">
-                          <span className="flex-1">{rotuloDaAba(tab)}</span>
-                          {depoisDeMontar && typeof count === "number" && count > 0 && (
-                            <span className="text-[11px] tabular-nums text-text-subtle">{count}</span>
-                          )}
-                        </DropdownMenuRadioItem>
-                      );
-                    })}
-                  </DropdownMenuRadioGroup>
-                  <DropdownMenuSeparator />
-                </>
-              )}
-              <DropdownMenuItem className="text-xs" onSelect={() => setOrganizandoAbas(true)}>
-                {t("Personalizar abas…")}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </Tabs>
+                    <SelectValue placeholder={t("Todas as filas")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todas">{t("Todas as filas")}</SelectItem>
+                    {/* Fila apagada com o filtro ainda ligado: a válvula para desligá-lo. */}
+                    {filaForaDaLista && value.sector_id != null && (
+                      <SelectItem value={value.sector_id}>{t("Fila removida")}</SelectItem>
+                    )}
+                    {filas.map((fila) => (
+                      <SelectItem key={fila.id} value={fila.id}>
+                        <OpcaoDaFila fila={fila} esperando={counts?.por_fila?.[fila.id]} />
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </section>
+            )}
+
+            {/* A ORDEM DA FILA (#5118): só vale na visão Fila — nas outras a
+                lista é sempre pela última mensagem, e um controle sem efeito
+                seria ruído. */}
+            {value.tab === "unassigned" && onOrdemDaFila && (
+              <section
+                role="group"
+                aria-label={t("Ordem da fila")}
+                data-testid="ordem-da-fila"
+                className="grid gap-1.5"
+              >
+                <h3 className={TITULO}>{t("Ordem")}</h3>
+                <div className="flex flex-wrap gap-1.5">
+                  {(
+                    [
+                      ["recentes", t("Mais recentes")],
+                      ["espera", t("Esperando há mais tempo")],
+                    ] as const
+                  ).map(([valor, rotulo]) => (
+                    <button
+                      key={valor}
+                      type="button"
+                      aria-pressed={(ordemDaFila ?? "espera") === valor}
+                      data-testid={`ordem-da-fila-${valor}`}
+                      onClick={() => onOrdemDaFila(valor)}
+                      className={cn(
+                        CAPSULA,
+                        (ordemDaFila ?? "espera") === valor ? CAPSULA_LIGADA : CAPSULA_DESLIGADA,
+                      )}
+                    >
+                      {rotulo}
+                    </button>
+                  ))}
+                </div>
+              </section>
+            )}
+          </div>
+          <DialogFooter className="flex-row items-center justify-between gap-2 border-t border-border px-5 py-3 sm:justify-between sm:space-x-0">
+            <Button type="button" variant="ghost" onClick={limparFiltros} disabled={filtrosAtivos === 0}>
+              {t("Limpar filtros")}
+            </Button>
+            <Button type="button" onClick={() => setFiltrosAbertos(false)}>
+              {t("Pronto")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <DialogoDasAbas
         aberto={organizandoAbas}
         onAbertoChange={setOrganizandoAbas}

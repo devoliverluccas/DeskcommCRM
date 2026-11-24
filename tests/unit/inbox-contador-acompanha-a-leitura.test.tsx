@@ -70,7 +70,7 @@ vi.mock("@/lib/api/client", () => ({
       servidor.consultas.push(url);
       const n = url.includes("unread=true") ? servidor.naoLidas : servidor.naVisao;
       return Promise.resolve({
-        data: { fila: n, automatico: 0, unassigned: n, mine: n, all: n, closed: 0 },
+        data: { fila: n, automatico: 0, unassigned: n, mine: n, all: n, abertas: n, closed: 0 },
       });
     },
     post: (url: string) => {
@@ -95,8 +95,8 @@ function Tela({
   return <InboxFilters value={barra} onChange={() => {}} />;
 }
 
-const BARRA_SO_NAO_LIDAS: InboxFiltersValue = { tab: "all", search: "", onlyUnread: true };
-const BARRA_SEM_FILTRO: InboxFiltersValue = { tab: "all", search: "", onlyUnread: false };
+const BARRA_SO_NAO_LIDAS: InboxFiltersValue = { tab: "abertas", search: "", onlyUnread: true };
+const BARRA_SEM_FILTRO: InboxFiltersValue = { tab: "abertas", search: "", onlyUnread: false };
 
 function montar(barra: InboxFiltersValue) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -107,9 +107,12 @@ function montar(barra: InboxFiltersValue) {
   );
 }
 
-/** O número que o operador vê na aba "Todas" — o badge é o `<span>` da aba. */
+/**
+ * O número que o operador vê na aba "Abertas" — a visão `all`, que era "Todas"
+ * antes do topo minimalista. O badge é o `<span>` da aba.
+ */
 function contadorDaAbaTodas(): string | null {
-  const aba = screen.getByRole("tab", { name: /Todas/ });
+  const aba = screen.getByRole("tab", { name: /Abertas/ });
   return aba.querySelector("span")?.textContent ?? null;
 }
 

@@ -25,7 +25,7 @@ import { useParticipantesDaConversa } from "@/hooks/inbox/useParticipantesDaConv
 import { useParticipacoesRealtime } from "@/hooks/inbox/useParticipacoesRealtime";
 import { ConversationList } from "./ConversationList";
 import { BarraDeAcoesEmLote } from "./BarraDeAcoesEmLote";
-import { InboxFilters, type InboxFiltersValue, type InboxTab } from "./InboxFilters";
+import { InboxFilters, type InboxFiltersValue, type InboxTab, type OrdemDaFila } from "./InboxFilters";
 import { ChatThread } from "./ChatThread";
 import { Composer, type ComposerHandle } from "./Composer";
 import { ConversationHeader } from "./ConversationHeader";
@@ -233,6 +233,19 @@ export function tabToFilter(
       // filtrar por status deixaria a aba vazia justamente para quem acabou de
       // marcar alguém.
       return { pessoais: true };
+    case "nao_lidas":
+      // A aba "Não lidas" do topo: a MESMA régua do filtro "Não lidos" (a
+      // coluna `unread_count_for_assignee`), sobre todas as conversas.
+      return { unread: true };
+    case "abertas":
+      // "Abertas" do topo: o fluxo vivo — a mesma régua do `exclude_finished`
+      // de Minhas (`CONVERSATION_TERMINAL_STATUSES` fora).
+      return { exclude_finished: true };
+    case "importantes":
+      // A aba "Importantes": na Fila OU pendente. O conjunto da Fila depende do
+      // fato org-wide, e quem o resolve é o SERVIDOR (`filtroDeImportantes`) —
+      // a mesma régua do badge, sem a tela repetir `comandosDaFila`.
+      return { importantes: true };
     case "all":
     default:
       return {};
@@ -247,14 +260,20 @@ const FILTER_TABS: InboxTab[] = [
   "archived",
   "ai",
   "pessoal",
+  "nao_lidas",
+  "abertas",
+  "importantes",
 ];
 
 /**
  * Lê ?filter= (G4-02, deep-link). ?filter=all é HONRADO mesmo para agent — a
- * lista volta RLS-scoped (a tab só some cosmeticamente); default: fila.
+ * lista volta RLS-scoped (a tab só some cosmeticamente). Links antigos
+ * (`?filter=fila`… `unassigned`, `mine`, `closed`) seguem abrindo a visão deles.
+ * Sem parâmetro (ou com valor desconhecido), a aba padrão é "Abertas" (`all`) —
+ * o topo minimalista pedido pelo dono; antes era a Fila.
  */
-function parseFilterParam(v: string | null): InboxTab {
-  return v && FILTER_TABS.includes(v as InboxTab) ? (v as InboxTab) : "unassigned";
+export function parseFilterParam(v: string | null): InboxTab {
+  return v && FILTER_TABS.includes(v as InboxTab) ? (v as InboxTab) : "abertas";
 }
 
 /**
@@ -397,8 +416,16 @@ export function InboxLayout({
 
   // Desliga só os AUXILIARES e mantém a aba: a aba é onde a pessoa está, e
   // limpá-la junto a tiraria do lugar sem ela ter pedido.
+  //
+  // A exceção é "Não lidas": ali o "Não lidos" É a aba, e manter a aba deixaria o
+  // botão "Limpar filtros" do vazio sem efeito nenhum. Ela volta para "Abertas".
   const limparFiltrosAuxiliares = useCallback(() => {
-    setFilterValue({ tab, search: "", onlyUnread: false, onlyGroups: false });
+    setFilterValue({
+      tab: tab === "nao_lidas" ? "abertas" : tab,
+      search: "",
+      onlyUnread: false,
+      onlyGroups: false,
+    });
   }, [tab, setFilterValue]);
 
   const [selectedId, setSelectedId] = useState<string | null>(initialSelectedId ?? idNaUrl);
@@ -507,7 +534,7 @@ export function InboxLayout({
   // contato novo para depois da primeira página e o atendente não o via. Lida
   // num efeito (nunca no `useState`), para o primeiro paint do servidor e do
   // navegador baterem.
-  const [ordemDaFila, setOrdemDaFila] = useState<"recentes" | "espera">("espera");
+  const [ordemDaFila, setOrdemDaFila] = useState<OrdemDaFila>("espera");
   useEffect(() => {
     try {
       if (window.localStorage.getItem(CHAVE_DA_ORDEM_DA_FILA) === "recentes") setOrdemDaFila("recentes");
@@ -515,7 +542,7 @@ export function InboxLayout({
       // armazenamento bloqueado: fica o padrão
     }
   }, []);
-  const escolherOrdemDaFila = useCallback((ordem: "recentes" | "espera") => {
+  const escolherOrdemDaFila = useCallback((ordem: OrdemDaFila) => {
     setOrdemDaFila(ordem);
     try {
       window.localStorage.setItem(CHAVE_DA_ORDEM_DA_FILA, ordem);
@@ -545,7 +572,9 @@ export function InboxLayout({
       sector_id: filterValue.sector_id,
       tag: filterValue.tag,
       tagMode: filterValue.tagMode,
-      unread: filterValue.onlyUnread || undefined,
+      // A aba "Não lidas" já traz `unread`; o filtro "Não lidos" do modal soma
+      // por cima (OU), e nenhum dos dois apaga o outro.
+      unread: tabToFilter(filterValue.tab, automaticoDaOrg).unread || filterValue.onlyUnread || undefined,
       // "Pendentes" (item 3.7): a cápsula da barra vira o `pendente` da rota.
       pendente: filterValue.onlyPendentes || undefined,
       is_group: filterValue.onlyGroups || undefined,
@@ -1042,6 +1071,8 @@ export function InboxLayout({
           filas={filasDaOrganizacao?.data ?? []}
           acao={<BotaoIniciarConversa />}
           abasIniciais={abasDaInbox}
+          ordemDaFila={ordemDaFila}
+          onOrdemDaFila={escolherOrdemDaFila}
         />
         {podeAgirEmLote && (
           <BarraDeAcoesEmLote
@@ -1056,41 +1087,8 @@ export function InboxLayout({
             onLimpar={selecao.limpar}
           />
         )}
-        {filterValue.tab === "unassigned" && (
-          <div
-            className="flex flex-wrap items-center gap-1 border-b border-border px-3 py-1.5 text-xs"
-            role="group"
-            aria-label={t("Ordem da fila")}
-            data-testid="ordem-da-fila"
-          >
-            <span className="mr-1 text-text-muted">{t("Ordem:")}</span>
-            {(
-              [
-                ["recentes", t("Mais recentes")],
-                ["espera", t("Esperando há mais tempo")],
-              ] as const
-            ).map(([valor, rotulo]) => (
-              <button
-                key={valor}
-                type="button"
-                aria-pressed={ordemDaFila === valor}
-                data-testid={`ordem-da-fila-${valor}`}
-                onClick={() => escolherOrdemDaFila(valor)}
-                className={cn(
-                  // Mesma altura de toque dos chips "Não lidos"/"Grupos" (32 px);
-                  // o rótulo não quebra — quem quebra é a faixa, entre os botões.
-                  "h-8 shrink-0 whitespace-nowrap rounded-full px-3 transition-colors",
-                  "focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                  ordemDaFila === valor
-                    ? "bg-accent-soft font-medium text-accent"
-                    : "text-text-muted hover:bg-surface-elevated hover:text-text",
-                )}
-              >
-                {rotulo}
-              </button>
-            ))}
-          </div>
-        )}
+        {/* A ORDEM DA FILA mudou para o modal de Filtros (topo minimalista):
+            ela só vale na visão Fila e aparece lá quando a Fila está aberta. */}
         <div className="min-h-0 flex-1 overflow-hidden">
           <ConversationList
             listQuery={listQ}

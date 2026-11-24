@@ -104,7 +104,7 @@ const TRES_PONTOS = [
     // contagem da Fila, então o mesmo pré-filtro — é ele que casa com o índice
     // parcial `idx_conversations_fila_espera`. Sem ele, a consulta que roda a cada
     // 30 s avaliaria a função em todas as conversas da organização (#4325).
-    pedido: /comPreFiltroDoComando\(\s*countExact\(auxiliares, true\)\.in\("comando_da_conversa", comandosFila\),\s*comandosFila,?\s*\)/,
+    pedido: /comPreFiltroDoComando\(\s*consultaCom\([^)]*\)\.in\("comando_da_conversa", comandosFila\),\s*comandosFila,?\s*\)/,
   },
   {
     arquivo: "app/api/v1/conversations/counts/route.ts",

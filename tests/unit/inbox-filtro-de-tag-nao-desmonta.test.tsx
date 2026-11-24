@@ -20,13 +20,24 @@
  * sua válvula.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { InboxFilters, type InboxFiltersValue } from "@/components/inbox/InboxFilters";
 import type * as CanaisModule from "@/hooks/channels/useChannelSessions";
 import type { ChannelSession } from "@/hooks/channels/useChannelSessions";
 import type { ActiveOrg } from "@/lib/auth/types";
+
+/**
+ * Monta a barra e abre o modal de Filtros: desde o topo minimalista (Não lidas |
+ * Abertas | Importantes), os seletores moram nele. O que o caso mede é o mesmo;
+ * só o lugar do controle mudou.
+ */
+function renderComFiltros(ui: Parameters<typeof render>[0]) {
+  const tela = render(ui);
+  fireEvent.click(screen.getByTestId("botao-filtros"));
+  return tela;
+}
 
 const activeOrgRef: { current: ActiveOrg | null } = { current: null };
 vi.mock("@/hooks/auth/AuthProvider", () => ({
@@ -89,7 +100,7 @@ async function abreOMenu() {
   // os 15 s do vitest — o arquivo passa sozinho e cai no conjunto, que é o
   // vermelho que não ensina nada.
   const user = userEvent.setup({ delay: null });
-  const tela = render(<InboxFilters value={VALUE} onChange={() => {}} />);
+  const tela = renderComFiltros(<InboxFilters value={VALUE} onChange={() => {}} />);
   await user.click(screen.getByRole("button", { name: GATILHO }));
   expect(screen.getByRole("menuitemcheckbox", { name: /vip/ })).toBeInTheDocument();
   expect(screen.getByRole("menuitemcheckbox", { name: /retorno/ })).toBeInTheDocument();
@@ -136,7 +147,7 @@ describe("não-regressão: o que a condicional protegia", () => {
   it("organização que nunca teve etiqueta não ganha um seletor morto", () => {
     tagsRef.current = [];
     tagsDoContatoRef.current = [];
-    render(<InboxFilters value={VALUE} onChange={() => {}} />);
+    renderComFiltros(<InboxFilters value={VALUE} onChange={() => {}} />);
     expect(gatilho()).not.toBeInTheDocument();
   });
 
@@ -148,14 +159,14 @@ describe("não-regressão: o que a condicional protegia", () => {
     // proibido é inventar opção — ver `inbox-filtro-de-tag-tres-estados`.
     tagsRef.current = undefined;
     tagsDoContatoRef.current = undefined;
-    render(<InboxFilters value={VALUE} onChange={() => {}} />);
+    renderComFiltros(<InboxFilters value={VALUE} onChange={() => {}} />);
     expect(gatilho()).toBeInTheDocument();
   });
 
   it("filtro órfão mantém a válvula: o seletor aparece com a etiqueta que sumiu do vocabulário", () => {
     tagsRef.current = ["retorno"];
     tagsDoContatoRef.current = [];
-    render(<InboxFilters value={{ ...VALUE, tag: "apagada" }} onChange={() => {}} />);
+    renderComFiltros(<InboxFilters value={{ ...VALUE, tag: "apagada" }} onChange={() => {}} />);
     expect(gatilho()).toBeInTheDocument();
   });
 
@@ -166,8 +177,7 @@ describe("não-regressão: o que a condicional protegia", () => {
     // forma de ser desfeita — o pior dos dois: filtro ativo sem como tirá-lo.
     tagsRef.current = ["retorno"];
     tagsDoContatoRef.current = [];
-    render(
-      <InboxFilters value={{ ...VALUE, tag: ["retorno", "apagada"] }} onChange={() => {}} />,
+    renderComFiltros(<InboxFilters value={{ ...VALUE, tag: ["retorno", "apagada"] }} onChange={() => {}} />,
     );
     expect(gatilho()).toBeInTheDocument();
   });
@@ -179,8 +189,7 @@ describe("o modo E/OU marca só o modo ativo (#1274)", () => {
   // `aria-checked`, que é o que este caso mede.
   async function abreComDuas(tagMode?: "ou") {
     const user = userEvent.setup({ delay: null });
-    render(
-      <InboxFilters value={{ ...VALUE, tag: ["vip", "retorno"], tagMode }} onChange={() => {}} />,
+    renderComFiltros(<InboxFilters value={{ ...VALUE, tag: ["vip", "retorno"], tagMode }} onChange={() => {}} />,
     );
     await user.click(screen.getByRole("button", { name: GATILHO }));
     return {

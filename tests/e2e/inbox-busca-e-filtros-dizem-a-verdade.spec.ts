@@ -27,12 +27,30 @@
  * O caminho feliz é o que teste manual já cobre. O que paga é provocar a falha:
  * uma letra só, espaço duplo, termo inexistente, filtro que zera a lista.
  */
+import type { Page } from "@playwright/test";
+
 import { expect, test } from "./helpers/test";
 
 import { esperarCacheCurtoVencer, esperarEscritaDeFora } from "./helpers/cache-curto";
 import { lerCreds, loginComoAdmin } from "./helpers/login-admin";
 
 const CAMPO_DE_BUSCA = "Buscar conversas";
+
+/**
+ * O modal de Filtros (topo minimalista): número, "Não lidos", as visões
+ * (Fechadas…) e os demais filtros moram nele. Abrir é idempotente; fechar
+ * espera o modal sair, porque a cortina dele cobre o resto da tela.
+ */
+async function abrirFiltros(page: Page) {
+  const dialogo = page.getByRole("dialog", { name: "Filtros" });
+  if (!(await dialogo.isVisible())) await page.getByTestId("botao-filtros").click();
+  await expect(dialogo).toBeVisible();
+}
+async function fecharFiltros(page: Page) {
+  const dialogo = page.getByRole("dialog", { name: "Filtros" });
+  if (await dialogo.isVisible()) await page.keyboard.press("Escape");
+  await expect(dialogo).toHaveCount(0);
+}
 
 /**
  * ⏱️ 60s, e o número saiu de MEDIÇÃO — não de chute.
@@ -128,6 +146,7 @@ test('"Não lidos" VAI ao servidor — o defeito era filtrar a página carregada
     if (r.url().includes("unread=true")) comUnread.push(r.url());
   });
 
+  await abrirFiltros(page);
   await page.getByRole("button", { name: /Não lidos/i }).click();
 
   await expect
@@ -138,11 +157,13 @@ test('"Não lidos" VAI ao servidor — o defeito era filtrar a página carregada
 test("trocar de aba logo após digitar NÃO volta à aba anterior", async ({ page }) => {
   // O timer do debounce é de 250 ms; a troca acontece dentro da janela.
   await page.getByLabel(CAMPO_DE_BUSCA).fill("teste");
-  await page.getByRole("tab", { name: /Todas/i }).click();
+  // "Todas" virou "Abertas" no topo minimalista (a mesma visão `all`); a
+  // página nasce em Abertas, então a troca é para "Importantes".
+  await page.getByRole("tab", { name: /Importantes/i }).click();
   await page.waitForTimeout(600);
 
   await expect(
-    page.getByRole("tab", { name: /Todas/i }),
+    page.getByRole("tab", { name: /Importantes/i }),
     "o debounce desfez a troca de aba",
   ).toHaveAttribute("aria-selected", "true");
 });
@@ -174,7 +195,9 @@ test('a aba "Fechadas" mostra número', async ({ page }) => {
   expect(fechada.ok(), await fechada.text()).toBe(true);
 
   await page.reload();
-  await expect(page.getByRole("tab", { name: /Fechadas/i })).toHaveText(/\d/);
+  // "Fechadas" é uma visão do modal de Filtros desde o topo minimalista.
+  await abrirFiltros(page);
+  await expect(page.getByRole("radio", { name: /Fechadas/i })).toHaveText(/\d/);
 });
 
 test("número e Não lidos sobrevivem à recarga e permanecem na sua organização", async ({ page }) => {
@@ -240,40 +263,59 @@ test("número e Não lidos sobrevivem à recarga e permanecem na sua organizaç�
       // Durante a animação o item ainda existe e pode ser escolhido pelo locator.
       await expect(page.getByTestId(`tenant-switcher-item-${canais[1]!.org}`)).toHaveCount(0);
     });
+    // O número e o "Não lidos" moram no modal de Filtros (topo minimalista):
+    // abre para ler/escolher, fecha antes de trocar de organização — a cortina
+    // do modal cobre o seletor de organização.
     await trocar(canais[0]!.org);
+    await abrirFiltros(page);
     await numero.click();
     await page.getByRole("option", { name: canais[0]!.nome, exact: true }).click();
     await naoLidos.click();
     await expect(naoLidos).toHaveAttribute("aria-pressed", "true");
     await page.reload();
+    await abrirFiltros(page);
     await expect(numero).toHaveText(canais[0]!.nome);
     await expect(naoLidos).toHaveAttribute("aria-pressed", "true");
+    await fecharFiltros(page);
 
     await trocar(canais[1]!.org);
+    await abrirFiltros(page);
     await expect(numero).toHaveText("Todos os números");
     await expect(naoLidos).toHaveAttribute("aria-pressed", "false");
     await numero.click();
     await page.getByRole("option", { name: canais[1]!.nome, exact: true }).click();
+    await fecharFiltros(page);
     await trocar(canais[0]!.org);
+    await abrirFiltros(page);
     await expect(numero).toHaveText(canais[0]!.nome);
     await expect(naoLidos).toHaveAttribute("aria-pressed", "true");
+    await fecharFiltros(page);
     await trocar(canais[1]!.org);
+    await abrirFiltros(page);
     await expect(numero).toHaveText(canais[1]!.nome);
     await expect(naoLidos).toHaveAttribute("aria-pressed", "false");
+    await fecharFiltros(page);
 
     const removido = await db.from("channel_sessions").delete().eq("organization_id", canais[1]!.org).eq("id", canais[1]!.id);
     expect(removido.error).toBeNull();
     await page.reload();
+    await abrirFiltros(page);
     await expect(numero).toHaveText("Número removido");
     mkdirSync("evidence/antigos-core-3402", { recursive: true });
     await page.screenshot({ path: "evidence/antigos-core-3402/numero-removido.png" });
-    await page.getByRole("button", { name: "Limpar filtros", exact: true }).click();
+    // O "Limpar filtros" do próprio modal desfaz o número removido.
+    await page.getByRole("dialog", { name: "Filtros" }).getByRole("button", { name: "Limpar filtros", exact: true }).click();
+    await fecharFiltros(page);
     await page.reload();
+    await abrirFiltros(page);
     await expect(numero).toHaveText("Todos os números");
+    await fecharFiltros(page);
     await trocar(canais[0]!.org);
+    await abrirFiltros(page);
     await expect(numero).toHaveText(canais[0]!.nome);
     await expect(naoLidos).toHaveAttribute("aria-pressed", "true");
     await page.screenshot({ path: "evidence/antigos-core-3402/filtros-restaurados.png" });
+    await fecharFiltros(page);
 
     // Restrição do navegador declarada: bloqueia só o armazenamento, sem
     // substituir a rota, a UI ou os filtros que a pessoa escolhe nesta visita.
@@ -281,6 +323,7 @@ test("número e Não lidos sobrevivem à recarga e permanecem na sua organizaç�
       Object.defineProperty(window, "localStorage", { configurable: true, get() { throw new DOMException("Bloqueado", "SecurityError"); } });
     });
     await page.reload();
+    await abrirFiltros(page);
     await expect(naoLidos).toHaveAttribute("aria-pressed", "false");
     await naoLidos.click();
     await expect(naoLidos).toHaveAttribute("aria-pressed", "true");

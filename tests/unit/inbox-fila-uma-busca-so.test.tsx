@@ -189,6 +189,9 @@ afterEach(() => cleanup());
 
 describe("a lista do inbox consulta UMA vez quando o filtro efetivo muda (#2365)", () => {
   it("⭐ org SEM automático: a Fila espera o fato da org e busca uma vez só", async () => {
+    // A Fila deixou de ser a aba padrão (topo minimalista: o padrão é Abertas);
+    // o link antigo `?filter=unassigned` continua abrindo a Fila.
+    window.history.replaceState(null, "", "/app/inbox?filter=unassigned");
     montar();
 
     // A pergunta org-wide sai primeiro — e é ELA que decide o filtro da Fila.
@@ -213,6 +216,12 @@ describe("a lista do inbox consulta UMA vez quando o filtro efetivo muda (#2365)
     expect(listas(), "segundo GET em série depois da resposta do automático").toHaveLength(1);
   });
 
+  it("sem ?filter, a aba padrão é Abertas: consulta na hora, sem filtro de comando", async () => {
+    montar();
+    await waitFor(() => expect(listas()).toHaveLength(1));
+    expect(comando(unicaLista().url)).toBeNull();
+  });
+
   it("aba que NÃO depende do fato (Todas) segue consultando na hora — o gate é da Fila", async () => {
     window.history.replaceState(null, "", "/app/inbox?filter=all");
     montar();
@@ -227,6 +236,7 @@ describe("a lista do inbox consulta UMA vez quando o filtro efetivo muda (#2365)
   });
 
   it("org COM automático: a Fila pede `aguardando` e `ninguem` — uma busca, filtro igual", async () => {
+    window.history.replaceState(null, "", "/app/inbox?filter=unassigned");
     montar();
     await waitFor(() => expect(chamadas.some((c) => c.url === AUTOMATICO)).toBe(true));
 

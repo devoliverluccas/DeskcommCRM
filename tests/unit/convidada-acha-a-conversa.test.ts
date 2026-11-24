@@ -45,6 +45,13 @@ function consulta(nome: string, filtros: Array<(l: Linha) => boolean> = []) {
     // A gramática que a rota manda: `a.eq.X,b.in.(y,z)`. Se um dia a rota
     // mandar outra, o throw abaixo é o teste dizendo que não acompanhou.
     or: (expr: string) => {
+      // A aba "Importantes" (`filtroDeImportantes`): `comando.in.(…),pendente.not.is.null`.
+      // Não é o que este arquivo mede; o dublê só a aplica, por OU, como o banco.
+      const imp = expr.match(/^([a-z_]+)\.in\.\(([^)]*)\),([a-z_]+)\.not\.is\.null$/);
+      if (imp) {
+        const [, ci, li, cn] = imp;
+        return com((l) => li!.split(",").includes(String(l[ci as string])) || l[cn as string] != null);
+      }
       const m = expr.match(/^([a-z_]+)\.eq\.([^,]+),([a-z_]+)\.in\.\(([^)]*)\)$/);
       if (!m) throw new Error(`padrao de .or() nao reconhecido pelo mock: ${expr}`);
       const [, c1, v1, c2, lista] = m;

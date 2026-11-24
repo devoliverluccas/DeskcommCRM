@@ -24,7 +24,7 @@
  * seletor mostra, e uma busca que filtrasse só uma delas esconderia marcador
  * legítimo.
  */
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -32,6 +32,17 @@ import { InboxFilters, type InboxFiltersValue } from "@/components/inbox/InboxFi
 import type * as CanaisModule from "@/hooks/channels/useChannelSessions";
 import type { ChannelSession } from "@/hooks/channels/useChannelSessions";
 import type { ActiveOrg } from "@/lib/auth/types";
+
+/**
+ * Monta a barra e abre o modal de Filtros: desde o topo minimalista (Não lidas |
+ * Abertas | Importantes), os seletores moram nele. O que o caso mede é o mesmo;
+ * só o lugar do controle mudou.
+ */
+function renderComFiltros(ui: Parameters<typeof render>[0]) {
+  const tela = render(ui);
+  fireEvent.click(screen.getByTestId("botao-filtros"));
+  return tela;
+}
 
 const h = vi.hoisted(() => ({
   /**
@@ -73,7 +84,7 @@ const VALUE: InboxFiltersValue = { tab: "unassigned", search: "", onlyUnread: fa
 function abrirMenu(value: InboxFiltersValue = VALUE) {
   const onChange = vi.fn();
   const user = userEvent.setup({ delay: null });
-  render(<InboxFilters value={value} onChange={onChange} />);
+  renderComFiltros(<InboxFilters value={value} onChange={onChange} />);
   return { user, onChange };
 }
 
