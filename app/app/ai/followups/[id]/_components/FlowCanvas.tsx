@@ -64,6 +64,7 @@ import { InternalTaskNode } from "./nodes/InternalTaskNode";
 import { MoveLeadNode } from "./nodes/MoveLeadNode";
 import { EditLeadTagNode } from "./nodes/EditLeadTagNode";
 import { SkillNode } from "./nodes/SkillNode";
+import { ButtonsNode, HandoffAiNode, ListNode, TransferNode, WebhookNode } from "./nodes/MessageFlowNodes";
 
 const EMPTY_GRAPH: FlowGraph = { nodes: [], edges: [] };
 const DND_MIME = "application/x-followup-node-type";
@@ -91,6 +92,12 @@ const nodeTypes: NodeTypes = {
   end: EndNode,
   collect: CollectNode,
   skill: SkillNode,
+  // 4.3 — sem estas linhas, o mesmo fallback cinza do #1540.
+  buttons: ButtonsNode,
+  list: ListNode,
+  webhook: WebhookNode,
+  transfer: TransferNode,
+  handoff_ai: HandoffAiNode,
 };
 
 interface Props {

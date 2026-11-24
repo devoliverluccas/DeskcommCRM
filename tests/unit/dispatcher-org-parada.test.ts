@@ -46,6 +46,7 @@ import { followupGatilhoRetornoHandler } from "@/lib/followup/gatilho-retorno.ha
 import { followupReactivityHandler } from "@/lib/followup/reactivity.handler";
 import { followupSaidaDaEtapaHandler } from "@/lib/followup/saida-da-etapa.handler";
 import { avisoDeEtapaHandler } from "@/lib/leads/aviso-de-etapa.handler";
+import { pontuacaoPorRegraHandler } from "@/lib/leads/pontuacao-por-regra.handler";
 import { avisoAoDonoDaCarteira } from "@/lib/carteira/aviso-ao-dono";
 import { comandaDoGanhoHandler } from "@/lib/financeiro/comanda-do-ganho.handler";
 import { webPushInboundHandler } from "@/lib/notifications/push.handler";
@@ -76,6 +77,9 @@ const RODA: EventHandler[] = [
   // e o lado SEGURO de uma organização parada (toque armado voltaria em rajada
   // na reativação, fora de contexto).
   followupSaidaDaEtapaHandler,
+  // Fase 4, 4.5 — pontos por regra: escrita interna no extrato, sem rede. Um
+  // fato pulado na organização parada nunca voltaria ao extrato.
+  pontuacaoPorRegraHandler,
 ];
 
 const PULA: EventHandler[] = [

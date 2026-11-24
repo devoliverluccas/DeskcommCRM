@@ -71,6 +71,14 @@ import { renderizarTextoDeFollowup } from "@/lib/automation/texto-do-followup";
 import type { EventRow } from "@/lib/event-log/dispatcher";
 import { quandoDoRetornoVivo, reavaliarDepoisDoRetorno } from "./retorno-segura-o-fluxo";
 import { triggerConfigSchema } from "./api-schemas";
+import { textoNumerado, type MensagemInterativa } from "@/lib/channels/interativo";
+import {
+  chamarWebhookDoFluxo,
+  idDaEntregaDoFluxo,
+  segredoDoWebhookDoFluxo,
+  type ContextoDoWebhookDoFluxo,
+} from "./webhook-do-fluxo";
+import { devolverConversaAIADoFluxo, transferirConversaDoFluxo, type DesfechoDaTroca } from "./transferir-do-fluxo";
 
 // O teto de ticks do relógio. O número mora em `custo-no-motor.ts` porque a
 // publicação também precisa dele (#2965): contar o caminho linear pelos mesmos
@@ -129,6 +137,13 @@ export interface FollowupJobRequest {
      * campanhas (`sendMessageHandler`), nos dois caminhos que mandam o texto fixo.
      */
     fixed_media_url?: string;
+    /**
+     * `buttons`/`list` (4.3) — o desenho das opções. O `fixed_body` que vai junto
+     * é o TEXTO NUMERADO: é ele que sai no canal sem botão e fica no histórico.
+     * Quem decide se o desenho sai é a capability do canal
+     * (`interativoParaOCanal`, `lib/channels/interativo.ts`).
+     */
+    fixed_interativo?: MensagemInterativa;
     /**
      * action (mode 'template') — id em `message_templates` (texto pronto) OU em
      * `meta_templates` (modelo aprovado do canal, o único que sai com a janela de 24 h
@@ -263,6 +278,23 @@ export interface AdminClient {
    * `no-show-recuperacao-esgotada.ts`.
    */
   abrirAvisoRecuperacaoEsgotada?(item: AvisoRecuperacaoEsgotada): Promise<void>;
+  /**
+   * 4.3 — nó `webhook`: monta o contexto do contato/conversa, assina e chama.
+   * Opcional como os demais efeitos: ausente, o nó sai por "Erro" (nunca por
+   * "Sucesso" sem um 2xx de verdade). NUNCA lança — ver `webhook-do-fluxo.ts`.
+   */
+  executarWebhookDoFluxo?(item: {
+    enrollment: EnrollmentRow;
+    node_id: string;
+    config: Extract<FlowNode, { type: "webhook" }>["config"];
+  }): Promise<{ resultado: "ok" | "erro"; detalhe: string }>;
+  /** 4.3 — nó `transfer`: a mesma troca do botão Transferir / da fila do setor. */
+  transferirConversaDoFluxo?(item: {
+    enrollment: EnrollmentRow;
+    config: Extract<FlowNode, { type: "transfer" }>["config"];
+  }): Promise<DesfechoDaTroca>;
+  /** 4.3 — nó `handoff_ai`: devolve o comando da conversa ao agente de IA. */
+  devolverConversaAIA?(item: { enrollment: EnrollmentRow }): Promise<DesfechoDaTroca>;
   persistirRespostaFollowup(input: {
     organization_id: string;
     contact_id: string;
@@ -478,6 +510,24 @@ function turnPayloadExtras(
       ...(volta ? { volta_index: volta.index, volta_total: volta.total } : {}),
     };
   }
+  if (node.type === "buttons" || node.type === "list") {
+    // 4.3 — o texto numerado é o `fixed_body` (sai em todo canal e fica no
+    // histórico); o desenho vai ao lado e só o canal com a capability o usa.
+    // As variáveis do contato valem no corpo E nos rótulos.
+    const corpo = interpolarVolta(node.config.body, events, contexto);
+    const opcoes = node.config.options.map((o) => ({
+      id: o.id,
+      rotulo: interpolarVolta(o.label, events, contexto),
+      ...(node.type === "list" && "description" in o && o.description
+        ? { descricao: interpolarVolta(o.description, events, contexto) }
+        : {}),
+    }));
+    const interativo: MensagemInterativa =
+      node.type === "buttons"
+        ? { tipo: "botoes", corpo, opcoes }
+        : { tipo: "lista", corpo, botao: node.config.button_label, opcoes };
+    return { fixed_body: textoNumerado(interativo), fixed_interativo: interativo };
+  }
   if (node.type === "ai_classify") {
     return { classes: node.config.classes, ...(node.config.hint !== undefined ? { hint: node.config.hint } : {}) };
   }
@@ -663,6 +713,47 @@ function tallyOutcome(result: NodeResult, summary: TickSummary): void {
   }
 }
 
+/**
+ * Executa um efeito de troca de comando (4.3) e grava a RECUSA na trilha. Nunca
+ * lança: o avanço já está decidido e gravado, e um efeito que falha não pode
+ * reverter nem repetir o passo (a trava é o evento).
+ */
+async function registrarEfeitoDeTroca(
+  db: AdminClient,
+  enrollment: EnrollmentRow,
+  nodeId: string,
+  idemKey: string,
+  tipoDaFalha: "transfer_failed" | "handoff_ai_failed",
+  efeito: () => Promise<DesfechoDaTroca> | undefined,
+): Promise<void> {
+  let motivo: string | null = null;
+  try {
+    const r = await efeito();
+    if (r && !r.ok) motivo = r.motivo;
+  } catch (err) {
+    motivo = (err instanceof Error ? err.message : String(err)).slice(0, 160);
+  }
+  if (motivo === null) return;
+  logger.warn(`followup_${tipoDaFalha}`, {
+    organization_id: enrollment.organization_id,
+    enrollment_id: enrollment.id,
+    node_id: nodeId,
+    motivo,
+  });
+  try {
+    await db.insertEnrollmentEvent({
+      organization_id: enrollment.organization_id,
+      enrollment_id: enrollment.id,
+      node_id: nodeId,
+      event_type: tipoDaFalha,
+      payload: { motivo },
+      idempotency_key: `${idemKey}:falha`,
+    });
+  } catch {
+    // O warn acima é o rastro que sobra; a trilha não pode derrubar o tick.
+  }
+}
+
 async function applyResult(
   deps: TickDeps,
   enrollment: EnrollmentRow,
@@ -795,6 +886,23 @@ async function applyResult(
     }
   }
 
+  // 4.3 — "Transferir": a troca nasce DEPOIS do evento do passo, com a mesma
+  // trava do `move_lead`. A recusa vira linha na trilha (`transfer_failed`) e
+  // o fluxo segue — transferência que falha não prende o contato no nó.
+  if (result.kind === "advance" && !isReplay && node.type === "transfer") {
+    await registrarEfeitoDeTroca(db, enrollment, node.id, idemKey, "transfer_failed", () =>
+      db.transferirConversaDoFluxo?.({ enrollment, config: node.config }),
+    );
+  }
+  // 4.3 — "Passar para a IA": o fluxo terminou (`complete`) e a conversa volta
+  // ao agente. Mesma trava e mesmo registro de recusa (contato "só humano",
+  // conversa encerrada) — o encerramento do fluxo não depende dela.
+  if (result.kind === "complete" && !isReplay && node.type === "handoff_ai") {
+    await registrarEfeitoDeTroca(db, enrollment, node.id, idemKey, "handoff_ai_failed", () =>
+      db.devolverConversaAIA?.({ enrollment }),
+    );
+  }
+
   // Corrida clássica: completeTurn grava `action_sent` com a chave N:steps e
   // avança; um tick/inbound paralelo tenta `action_recheck` com a MESMA chave,
   // perde o insert (replay) e AINDA assim reescrevia current_node_id pro action.
@@ -856,7 +964,10 @@ async function applyResult(
       // node.type narrado (union discriminada de FlowNode) — sem cast: dentro
       // do `if`, node.config já é o config do ai_classify de verdade.
       const graceMs =
-        node.type === "ai_classify" || node.type === "match_reply"
+        node.type === "ai_classify" ||
+        node.type === "match_reply" ||
+        node.type === "buttons" ||
+        node.type === "list"
           ? node.config.grace_timeout_ms
           : ACTION_RECHECK_MS;
       patch.next_eval_at = new Date(clock().getTime() + graceMs).toISOString();
@@ -1079,7 +1190,9 @@ async function processEnrollment(
 
   const node = graph.nodes.find((n) => n.id === enrollment.current_node_id);
   if (!node) throw new Error("node_not_found");
-  if (inboundBodyOverride !== undefined && node.type !== "match_reply" && node.type !== "wait") {
+  // Os nós de OPÇÕES (4.3) leem a resposta como o `match_reply`.
+  const esperaOpcao = node.type === "buttons" || node.type === "list";
+  if (inboundBodyOverride !== undefined && node.type !== "match_reply" && node.type !== "wait" && !esperaOpcao) {
     return;
   }
 
@@ -1146,6 +1259,10 @@ async function processEnrollment(
     node.type === "wait" ||
     node.type === "ai_classify" ||
     node.type === "match_reply" ||
+    esperaOpcao ||
+    // O desfecho da chamada do webhook mora num evento próprio do passo (a
+    // trava contra chamar de novo no replay do tick).
+    node.type === "webhook" ||
     node.type === "action" ||
     node.type === "repeat" ||
     // O `condition` só entra aqui por causa de `last_outcome`: o desfecho do
@@ -1166,7 +1283,13 @@ async function processEnrollment(
     planRecheckCount = events.filter((e) => e.node_id === node.id).length;
   }
 
-  if (node.type === "wait" || node.type === "ai_classify" || node.type === "match_reply" || node.type === "action") {
+  if (
+    node.type === "wait" ||
+    node.type === "ai_classify" ||
+    node.type === "match_reply" ||
+    esperaOpcao ||
+    node.type === "action"
+  ) {
     waitElapsed = resolveWaitPhase(events, node.id, enrollment.steps_taken);
     // match_reply de captação: a confirmação já enfileirou um evento neste nó.
     // O claim seguinte às vezes chega com steps_taken desalinhado da chave
@@ -1177,7 +1300,7 @@ async function processEnrollment(
     if (node.type === "match_reply") {
       matchReplyOcupado = occupancyEventCount(events, node.id) > 0;
     }
-    if (node.type === "ai_classify" || node.type === "match_reply" || node.type === "wait") {
+    if (node.type === "ai_classify" || node.type === "match_reply" || node.type === "wait" || esperaOpcao) {
       const wakeKey = `${node.id}:${enrollment.steps_taken}:wake`;
       wokeEarly = events.some((e) => e.node_id === node.id && e.idempotency_key === wakeKey);
     }
@@ -1192,7 +1315,7 @@ async function processEnrollment(
     }
   }
   const textoInbound = inboundBodyOverride?.trim() ?? "";
-  if (textoInbound && (node.type === "match_reply" || node.type === "wait")) {
+  if (textoInbound && (node.type === "match_reply" || node.type === "wait" || esperaOpcao)) {
     wokeEarly = true;
   }
 
@@ -1202,8 +1325,16 @@ async function processEnrollment(
   }
 
   let lastInboundBody: string | undefined;
-  if (textoInbound && node.type === "match_reply") {
+  if (textoInbound && (node.type === "match_reply" || esperaOpcao)) {
     lastInboundBody = textoInbound;
+  } else if (esperaOpcao && (wokeEarly || waitElapsed)) {
+    // Carência vencida (ou acordado sem texto): a resposta que chegou DEPOIS da
+    // pergunta ainda vale. O piso é o instante em que o nó estacionou — o
+    // `updated_at` do enfileiramento —, e a resposta anterior não casa aqui.
+    lastInboundBody =
+      (await db.loadLastInboundBody(enrollment.organization_id, enrollment.contact_id, null, enrollment.updated_at)) ??
+      "";
+    if (lastInboundBody.trim()) wokeEarly = true;
   } else if (
     (node.type === "match_reply" && (wokeEarly || waitElapsed || matchReplyOcupado)) ||
     (node.type === "repeat" && repeatTotal == null)
@@ -1221,6 +1352,34 @@ async function processEnrollment(
       )) ?? "";
     if (node.type === "match_reply" && lastInboundBody.trim()) {
       wokeEarly = true;
+    }
+  }
+
+  // 4.3 — o webhook é chamado AQUI, antes da decisão pura, e UMA vez por
+  // passo: o desfecho vai para um evento próprio (`webhook_called`, chave
+  // `${nó}:${passo}:webhook`), e o replay do tick lê o desfecho em vez de
+  // chamar de novo. Quem recebe deduplica pelo id da entrega, que é o mesmo.
+  let webhookResultado: "ok" | "erro" | undefined;
+  if (node.type === "webhook") {
+    const chave = `${node.id}:${enrollment.steps_taken}:webhook`;
+    const anterior = events.find((e) => e.idempotency_key === chave);
+    const lido = anterior?.payload?.resultado;
+    if (lido === "ok" || lido === "erro") {
+      webhookResultado = lido;
+    } else {
+      const desfecho = (await db.executarWebhookDoFluxo?.({ enrollment, node_id: node.id, config: node.config })) ?? {
+        resultado: "erro" as const,
+        detalhe: "sem_executor",
+      };
+      webhookResultado = desfecho.resultado;
+      await db.insertEnrollmentEvent({
+        organization_id: enrollment.organization_id,
+        enrollment_id: enrollment.id,
+        node_id: node.id,
+        event_type: "webhook_called",
+        payload: { resultado: desfecho.resultado, detalhe: desfecho.detalhe },
+        idempotency_key: chave,
+      });
     }
   }
 
@@ -1245,6 +1404,7 @@ async function processEnrollment(
     repeatTaken,
     repeatTotal,
     proximo,
+    webhookResultado,
   });
   // A CONDIÇÃO É REAVALIADA AQUI, no instante do envio — ver
   // `condicao-antes-do-envio.ts`. A decisão tomada no nó de condição pode ter
@@ -1282,7 +1442,8 @@ async function processEnrollment(
   // (`enviar-texto-fixo.ts`), que não tem segunda passada. Só o nó que manda
   // texto paga a leitura — os demais não renderizam nada.
   const contexto =
-    result.kind === "enqueue_turn" && node.type === "action" && node.config.mode === "text"
+    result.kind === "enqueue_turn" &&
+    ((node.type === "action" && node.config.mode === "text") || node.type === "buttons" || node.type === "list")
       ? await db.loadRenderContext?.(enrollment.organization_id, enrollment.contact_id)
       : null;
 
@@ -1788,6 +1949,84 @@ export function createSupabaseAdminClient(admin: SupabaseClient): AdminClient {
     },
     async persistirRespostaFollowup(input) {
       await persistirRespostaFollowupSupabase(admin, input);
+    },
+    /**
+     * 4.3 — nó `webhook`. O contexto é lido AQUI, com o filtro da organização
+     * da inscrição (fonte confiável: veio do banco, não de payload). Só o que
+     * identifica e o que a operação usa: nada de `custom_fields` inteiro,
+     * que pode guardar CPF e o receptor não pediu.
+     */
+    async executarWebhookDoFluxo(item) {
+      const { enrollment } = item;
+      try {
+        const segredo = segredoDoWebhookDoFluxo(enrollment.organization_id, enrollment.pointer_id);
+        const [{ data: contato }, { data: lead }] = await Promise.all([
+          admin
+            .from("contacts")
+            .select("id, name, phone_number, email, tags")
+            .eq("organization_id", enrollment.organization_id)
+            .eq("id", enrollment.contact_id)
+            .maybeSingle(),
+          admin
+            .from("crm_leads")
+            .select("id, title, stage_id, pipeline_id")
+            .eq("organization_id", enrollment.organization_id)
+            .eq("contact_id", enrollment.contact_id)
+            .order("updated_at", { ascending: false })
+            .limit(1)
+            .maybeSingle(),
+        ]);
+        const c = contato as {
+          id: string;
+          name: string | null;
+          phone_number: string | null;
+          email: string | null;
+          tags: string[] | null;
+        } | null;
+        const contexto: ContextoDoWebhookDoFluxo = {
+          organization_id: enrollment.organization_id,
+          flow: {
+            pointer_id: enrollment.pointer_id,
+            version_id: enrollment.version_id,
+            node_id: item.node_id,
+            enrollment_id: enrollment.id,
+          },
+          contact: c
+            ? { id: c.id, name: c.name, phone: c.phone_number, email: c.email, tags: c.tags ?? [] }
+            : null,
+          conversation: enrollment.conversation_id ? { id: enrollment.conversation_id } : null,
+          lead: (lead as ContextoDoWebhookDoFluxo["lead"]) ?? null,
+        };
+        const desfecho = await chamarWebhookDoFluxo({
+          url: item.config.url,
+          ...(item.config.timeout_ms !== undefined ? { timeoutMs: item.config.timeout_ms } : {}),
+          segredo,
+          entrega: idDaEntregaDoFluxo(enrollment.id, item.node_id, enrollment.steps_taken),
+          contexto,
+        });
+        return desfecho.resultado === "ok"
+          ? { resultado: "ok", detalhe: `http_${desfecho.status}` }
+          : { resultado: "erro", detalhe: desfecho.motivo };
+      } catch (err) {
+        return { resultado: "erro", detalhe: (err instanceof Error ? err.message : String(err)).slice(0, 120) };
+      }
+    },
+    async transferirConversaDoFluxo(item) {
+      return transferirConversaDoFluxo(admin, {
+        organizationId: item.enrollment.organization_id,
+        contactId: item.enrollment.contact_id,
+        conversationId: item.enrollment.conversation_id,
+        enrollmentId: item.enrollment.id,
+        config: item.config,
+      });
+    },
+    async devolverConversaAIA(item) {
+      return devolverConversaAIADoFluxo(admin, {
+        organizationId: item.enrollment.organization_id,
+        contactId: item.enrollment.contact_id,
+        conversationId: item.enrollment.conversation_id,
+        enrollmentId: item.enrollment.id,
+      });
     },
   };
 }

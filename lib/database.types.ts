@@ -232,6 +232,7 @@ export type Database = {
           created_at: string;
           dataset_id: string | null;
           enabled: boolean;
+          event_mapping: Json;
           google_api: string;
           google_conversion_action_id: string | null;
           google_customer_id: string | null;
@@ -256,6 +257,7 @@ export type Database = {
           created_at?: string;
           dataset_id?: string | null;
           enabled?: boolean;
+          event_mapping?: Json;
           google_api?: string;
           google_conversion_action_id?: string | null;
           google_customer_id?: string | null;
@@ -279,6 +281,7 @@ export type Database = {
           created_at?: string;
           dataset_id?: string | null;
           enabled?: boolean;
+          event_mapping?: Json;
           google_api?: string;
           google_conversion_action_id?: string | null;
           google_customer_id?: string | null;
@@ -5646,6 +5649,52 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "channel_sessions_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      cliques_de_links_de_saida: {
+        Row: {
+          clicado_em: string;
+          dispositivo: string;
+          id: string;
+          ip_hash: string | null;
+          link_id: string;
+          navegador: string | null;
+          organization_id: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          clicado_em?: string;
+          dispositivo?: string;
+          id?: string;
+          ip_hash?: string | null;
+          link_id: string;
+          navegador?: string | null;
+          organization_id: string;
+        };
+        Update: {
+          clicado_em?: string;
+          dispositivo?: string;
+          id?: string;
+          ip_hash?: string | null;
+          link_id?: string;
+          navegador?: string | null;
+          organization_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "cliques_de_links_de_saida_link_org_fk";
+            columns: ["organization_id", "link_id"];
+            isOneToOne: false;
+            referencedRelation: "links_de_saida";
+            referencedColumns: ["organization_id", "id"];
+          },
+          {
+            foreignKeyName: "cliques_de_links_de_saida_organization_id_fkey";
             columns: ["organization_id"];
             isOneToOne: false;
             referencedRelation: "organizations";
@@ -11090,6 +11139,55 @@ export type Database = {
           },
         ];
       };
+      links_de_saida: {
+        Row: {
+          anonimizado: boolean;
+          codigo: string;
+          contact_id: string | null;
+          created_at: string;
+          destino_url: string;
+          id: string;
+          organization_id: string;
+          rotulo: string | null;
+        };
+        ComputedFields: never;
+        Insert: {
+          anonimizado?: boolean;
+          codigo: string;
+          contact_id?: string | null;
+          created_at?: string;
+          destino_url: string;
+          id?: string;
+          organization_id: string;
+          rotulo?: string | null;
+        };
+        Update: {
+          anonimizado?: boolean;
+          codigo?: string;
+          contact_id?: string | null;
+          created_at?: string;
+          destino_url?: string;
+          id?: string;
+          organization_id?: string;
+          rotulo?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "links_de_saida_contato_org_fk";
+            columns: ["organization_id", "contact_id"];
+            isOneToOne: false;
+            referencedRelation: "contacts";
+            referencedColumns: ["organization_id", "id"];
+          },
+          {
+            foreignKeyName: "links_de_saida_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       map_provider_credentials: {
         Row: {
           api_key_encrypted: string;
@@ -13572,6 +13670,78 @@ export type Database = {
           },
         ];
       };
+      pontuacao_extrato: {
+        Row: {
+          chave: string;
+          contact_id: string;
+          created_at: string;
+          evento: string;
+          id: string;
+          lead_id: string | null;
+          motivo: string;
+          ocorrido_em: string;
+          organization_id: string;
+          pontos: number;
+          regra_id: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          chave: string;
+          contact_id: string;
+          created_at?: string;
+          evento: string;
+          id?: string;
+          lead_id?: string | null;
+          motivo: string;
+          ocorrido_em?: string;
+          organization_id: string;
+          pontos: number;
+          regra_id: string;
+        };
+        Update: {
+          chave?: string;
+          contact_id?: string;
+          created_at?: string;
+          evento?: string;
+          id?: string;
+          lead_id?: string | null;
+          motivo?: string;
+          ocorrido_em?: string;
+          organization_id?: string;
+          pontos?: number;
+          regra_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "pontuacao_extrato_contact_id_fkey";
+            columns: ["contact_id"];
+            isOneToOne: false;
+            referencedRelation: "contacts";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "pontuacao_extrato_lead_id_fkey";
+            columns: ["lead_id"];
+            isOneToOne: false;
+            referencedRelation: "crm_leads";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "pontuacao_extrato_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "pontuacao_extrato_regra_id_fkey";
+            columns: ["regra_id"];
+            isOneToOne: false;
+            referencedRelation: "regras_de_pontuacao";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       push_subscriptions: {
         Row: {
           auth: string;
@@ -13852,6 +14022,57 @@ export type Database = {
           user_id?: string;
         };
         Relationships: [];
+      };
+      regras_de_pontuacao: {
+        Row: {
+          ativo: boolean;
+          condicao: Json;
+          created_at: string;
+          created_by: string | null;
+          evento: string;
+          id: string;
+          nome: string;
+          organization_id: string;
+          pontos: number;
+          teto_por_contato: number | null;
+          updated_at: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          ativo?: boolean;
+          condicao?: Json;
+          created_at?: string;
+          created_by?: string | null;
+          evento: string;
+          id?: string;
+          nome: string;
+          organization_id: string;
+          pontos: number;
+          teto_por_contato?: number | null;
+          updated_at?: string;
+        };
+        Update: {
+          ativo?: boolean;
+          condicao?: Json;
+          created_at?: string;
+          created_by?: string | null;
+          evento?: string;
+          id?: string;
+          nome?: string;
+          organization_id?: string;
+          pontos?: number;
+          teto_por_contato?: number | null;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "regras_de_pontuacao_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       send_ledger: {
         Row: {
@@ -14436,6 +14657,45 @@ export type Database = {
           user_id?: string;
         };
         Relationships: [];
+      };
+      valores_personalizados: {
+        Row: {
+          chave: string;
+          created_at: string;
+          descricao: string | null;
+          id: string;
+          organization_id: string;
+          updated_at: string;
+          valor: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          chave: string;
+          created_at?: string;
+          descricao?: string | null;
+          id?: string;
+          organization_id: string;
+          updated_at?: string;
+          valor: string;
+        };
+        Update: {
+          chave?: string;
+          created_at?: string;
+          descricao?: string | null;
+          id?: string;
+          organization_id?: string;
+          updated_at?: string;
+          valor?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "valores_personalizados_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       voice_calls: {
         Row: {
@@ -16652,6 +16912,21 @@ export type Database = {
         };
         Returns: Json;
       };
+      fn_links_de_saida_resumo: {
+        Args: { p_limite?: number; p_org: string };
+        Returns: {
+          anonimizado: boolean;
+          cliques: number;
+          codigo: string;
+          contact_id: string | null;
+          contato_nome: string | null;
+          created_at: string;
+          destino_url: string;
+          id: string;
+          rotulo: string | null;
+          ultimo_clique: string | null;
+        }[];
+      };
       fn_meta_ctwa_click_enviado_legado: {
         Args: { p_clid: string; p_org: string };
         Returns: boolean;
@@ -16734,6 +17009,18 @@ export type Database = {
         Args: { p_limite?: number; p_retencao_dias?: number };
         Returns: number;
       };
+      fn_pontuacao_do_contato: { Args: { p_contato: string; p_org: string }; Returns: number };
+      fn_pontuacao_registrar: {
+        Args: {
+          p_chave: string;
+          p_contato: string;
+          p_lead: string | null;
+          p_ocorrido_em?: string;
+          p_org: string;
+          p_regra: string;
+        };
+        Returns: number;
+      };
       fn_proposta_aloca_numero: { Args: { p_ano: number; p_org: string }; Returns: number };
       fn_proteger_modulo_provisionado: { Args: Record<PropertyKey, never>; Returns: undefined };
       fn_proteger_tabelas_de_organizacao: { Args: Record<PropertyKey, never>; Returns: undefined };
@@ -16792,6 +17079,16 @@ export type Database = {
         }[];
       };
       fn_reaplicar_modulos_instalados: { Args: Record<PropertyKey, never>; Returns: undefined };
+      fn_registrar_clique_de_saida: {
+        Args: {
+          p_dispositivo: string;
+          p_ip_hash: string | null;
+          p_link: string;
+          p_navegador: string | null;
+          p_org: string;
+        };
+        Returns: string | null;
+      };
       fn_reativar_organizacao: {
         Args: { p_ator: string; p_kind_exigido: string; p_org: string };
         Returns: Json;

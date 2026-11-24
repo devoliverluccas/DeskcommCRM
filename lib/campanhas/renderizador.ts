@@ -76,6 +76,12 @@ export interface ValoresDoDestinatario {
   lead?: CamposPersonalizados | null;
   /** `{{contato.x}}` — campos do contato. */
   contato?: CamposPersonalizados | null;
+  /**
+   * `{{empresa.x}}` — os valores personalizados da organização (fase 4). Sem o
+   * mapa o token fica no corpo congelado e o ENVIO o resolve
+   * (`lib/variaveis/no-envio.ts`); com ele, chave sem valor é falta comum.
+   */
+  empresa?: Readonly<Record<string, string>> | null;
 }
 
 /** A mesma marcação das quatro telas — a forma mora no resolvedor único. */
@@ -108,6 +114,7 @@ export function renderizar(
       nome: valores.nome,
       camposDoNegocio: valores.lead ?? null,
       camposDoContato: valores.contato ?? null,
+      ...(valores.empresa !== undefined ? { empresa: valores.empresa ? { ...valores.empresa } : null } : {}),
     },
     {
       fonte: "campanha",

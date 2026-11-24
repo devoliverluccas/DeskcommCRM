@@ -10,7 +10,14 @@ import type pg from 'pg';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { FlowGraph } from '@/lib/followup/graph-schema';
-import { garantirPerguntaDoRoteiro, perguntaDoRoteiroPodeSair, prepararRoteiroDoTurno, type RoteiroDoTurno, type ValidarResposta } from './roteiro-no-turno';
+import {
+  garantirPerguntaDoRoteiro,
+  perguntaDoRoteiroPodeSair,
+  prepararRoteiroDoTurno,
+  roteiroRespondeSemModelo,
+  type RoteiroDoTurno,
+  type ValidarResposta,
+} from './roteiro-no-turno';
 
 const GRAFO: FlowGraph = {
   nodes: [
@@ -726,5 +733,70 @@ describe('ordem no turno (achado 5 da prova do #1130)', () => {
     expect(guarda).toContain("liveJob().kind === 'inbound_turn'");
     expect(guarda).toContain('!optedOutThisTurn');
     expect(guarda).toContain('!preview');
+  });
+});
+
+describe('MODO HÍBRIDO (4.3) — o roteiro de resposta pronta responde sem o modelo', () => {
+  const GRAFO_PRONTO: FlowGraph = { ...GRAFO, settings: { ...GRAFO.settings, resposta_pronta: true } };
+
+  it('⭐ o validador de IA NÃO é chamado — a resposta é lida pela captura determinística', async () => {
+    const b = banco({ roteiroJaExiste: true, grafo: GRAFO_PRONTO, perguntasFeitas: ['nome_completo'] });
+    const validar = vi.fn(semLeitura);
+    const r = await prepararRoteiroDoTurno(
+      { pool: b.pool, moduloLigado: async () => true, validar, log: log() as never },
+      { ...turno, texto: 'Lia Mendes' },
+    );
+    expect(r?.estado.respostaPronta).toBe(true);
+    expect(validar).not.toHaveBeenCalled();
+  });
+
+  it('⭐ com pergunta pendente, o turno é do roteiro: o modelo não entra', async () => {
+    const b = banco({ roteiroJaExiste: true, grafo: GRAFO_PRONTO });
+    const r = await prepararRoteiroDoTurno(
+      { pool: b.pool, moduloLigado: async () => true, validar: semLeitura, log: log() as never },
+      { ...turno, messageId: null },
+    );
+    expect(roteiroRespondeSemModelo(r)).toBe(true);
+    // E o que sai é a pergunta do roteiro, pela cadeia do turno.
+    const enviar = vi.fn(async () => true);
+    await garantirPerguntaDoRoteiro(
+      { pool: b.pool, log: log() as never },
+      { organizationId: 'org', roteiro: r!, corposEnviados: [], enviar },
+    );
+    expect(enviar).toHaveBeenCalledWith('Nome completo?');
+  });
+
+  it('roteiro comum (sem a marca), roteiro concluído e turno sem roteiro: o agente atende', async () => {
+    const b = banco({ roteiroJaExiste: true });
+    const comum = await prepararRoteiroDoTurno(
+      { pool: b.pool, moduloLigado: async () => true, validar: semLeitura, log: log() as never },
+      { ...turno, messageId: null },
+    );
+    expect(roteiroRespondeSemModelo(comum)).toBe(false);
+    expect(roteiroRespondeSemModelo(null)).toBe(false);
+    const pronto = await prepararRoteiroDoTurno(
+      { pool: banco({ roteiroJaExiste: true, grafo: GRAFO_PRONTO }).pool, moduloLigado: async () => true, validar: semLeitura, log: log() as never },
+      { ...turno, messageId: null },
+    );
+    const concluido: RoteiroDoTurno = {
+      ...pronto!,
+      estado: { ...pronto!.estado, situacao: { ...pronto!.estado.situacao, pendentes: [] } },
+    };
+    expect(roteiroRespondeSemModelo(concluido)).toBe(false);
+  });
+
+  it('⭐ fiado no turno: o desvio do modo híbrido RETORNA antes da compactação e de toda chamada de modelo', () => {
+    const src = readFileSync(join(process.cwd(), 'lib/agent-engine/agent/inbound-turn.ts'), 'utf8');
+    const desvio = src.indexOf('if (roteiro !== null && roteiroRespondeSemModelo(roteiro))');
+    const preparo = src.indexOf('await prepararRoteiroDoTurno(');
+    const compactacao = src.indexOf('await maybeCompact(');
+    const modelo = src.indexOf('await runModelCall(');
+    expect(desvio).toBeGreaterThan(preparo);
+    expect(desvio).toBeLessThan(compactacao);
+    expect(desvio).toBeLessThan(modelo);
+    // O bloco termina num `return;` e não chama modelo nenhum no caminho.
+    const bloco = src.slice(desvio, compactacao);
+    expect(bloco).toMatch(/\n {4}return;\n {2}\}/);
+    expect(bloco).not.toMatch(/runModelCall|maybeCompact|generateText|streamText|deps\.validar/);
   });
 });

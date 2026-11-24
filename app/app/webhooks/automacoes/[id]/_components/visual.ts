@@ -9,7 +9,9 @@ import {
   Funnel,
   Kanban,
   ListChecks,
+  Megaphone,
   PaperPlaneTilt,
+  Pause,
   Play,
   Signpost,
   Sparkle,
@@ -74,6 +76,10 @@ export const VISUAL_DA_ACAO: Record<ActionType, VisualDaCaixa> = {
   // aponta para onde a conversa vai, e INFO porque é escrita no card (como
   // atribuir e mover de etapa), não mensagem.
   define_sector: { icon: Signpost, paleta: "Setor da conversa", ...INFO },
+  // Fase 4 (4.1) — a pausa é um FREIO (cor de aviso); a conversão é o anúncio
+  // (o mesmo Megaphone do menu de anúncios) e não fala com o cliente.
+  pause_ai: { icon: Pause, paleta: "Pausar a IA", ...AVISO },
+  send_ad_conversion: { icon: Megaphone, paleta: "Conversão de anúncio", ...INFO },
 };
 
 /** A ordem da paleta: a mesma do seletor "Adicionar ação" do editor de hoje. */

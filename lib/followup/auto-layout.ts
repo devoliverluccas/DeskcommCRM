@@ -51,6 +51,13 @@ const TYPE_ORDER: Record<NodeType, number> = {
   // porque são o MEIO do caminho (mover o card, etiquetar) e não o epílogo.
   move_lead: 8.5,
   edit_lead_tag: 8.6,
+  // 4.3 — pergunta com opções conversa como o envio; webhook e transferir são
+  // o meio do caminho; "Passar para a IA" é um fim.
+  buttons: 8.1,
+  list: 8.2,
+  webhook: 8.7,
+  transfer: 8.8,
+  handoff_ai: 9,
   end: 9,
 };
 

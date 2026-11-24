@@ -185,6 +185,14 @@ export interface ContextoDeVariaveis extends Record<string, unknown> {
   camposDoNegocio?: Record<string, unknown> | null;
   /** Campos personalizados do CONTATO (campanha). */
   camposDoContato?: Record<string, unknown> | null;
+  /**
+   * Valores personalizados da EMPRESA (`{{empresa.<chave>}}`, migration 9491).
+   * AUSENTE (`undefined`) quer dizer "quem montou o contexto não leu": o token
+   * fica como foi escrito — como a saudação sem instante — e o ENVIO o resolve
+   * (`lib/variaveis/no-envio.ts`). Presente, a chave sem valor é falta comum, e
+   * a política da tela decide.
+   */
+  empresa?: Record<string, string> | null;
 }
 
 /** Aliases do produto: o nome curto e a coluna que ele lê. */
@@ -328,6 +336,37 @@ export function resolverVariaveis(
     desconhecidas: [...desconhecidas],
     pular: quandoVazio === "pular" && vazias.size > 0,
   };
+}
+
+/**
+ * A passada do ENVIO para `{{empresa.<chave>}}` (fase 4, item 4.6): troca SÓ as
+ * marcações da raiz `empresa`, e nada mais — `{{nome}}`, `{{saudacao}}` e o
+ * resto já passaram pela tela, com a política dela, e não são reabertos aqui.
+ *
+ * Chave sem valor: a reserva (`{{empresa.pix|"no balcão"}}`) se houver; senão a
+ * marcação fica LITERAL. Nunca string vazia: um "Pague no PIX " sem a chave é
+ * pior que o token, que ao menos se vê no histórico da conversa.
+ */
+export function resolverValoresDaEmpresa(
+  texto: string,
+  valores: Readonly<Record<string, string>>,
+): { texto: string; faltando: string[] } {
+  const faltando = new Set<string>();
+  const saida = texto.replace(MARCACAO_DE_VARIAVEL, (marca, bruto: string, reserva?: string, modificador?: string) => {
+    const caminho = (bruto ?? "").toLowerCase();
+    if (!caminho.startsWith("empresa.")) return marca;
+    const valor = lerMapa(valores, caminho);
+    if (valor !== null) return comModificador(valor, modificador, {});
+    if (reserva !== undefined) return reserva;
+    faltando.add(caminho);
+    return marca;
+  });
+  return { texto: saida, faltando: [...faltando] };
+}
+
+/** O texto tem alguma `{{empresa.<chave>}}`? Barato: decide se vale ir ao banco. */
+export function temValorDaEmpresa(texto: string): boolean {
+  return /\{\{\s*empresa\./i.test(texto);
 }
 
 function prepararValor(valor: string, opcoes: OpcoesDaResolucao): string {
@@ -490,6 +529,12 @@ function lerCaminho(
   if (SO_DA_EQUIPE.has(nome)) return { valor: null, conhecida, bloqueada: true };
 
   const raiz = nome.slice(0, nome.indexOf("."));
+  if (raiz === "empresa") {
+    // O MESMO sentido nas quatro fontes (`CURINGAS_DE_SENTIDO_UNICO`). Sem o
+    // mapa no contexto, o envio resolve depois — não é falta.
+    if (contexto.empresa === undefined) return { valor: null, conhecida, pendente: true };
+    return { valor: lerMapa(contexto.empresa, nome), conhecida };
+  }
   if (raiz === "lead") {
     if (fonte === "automacao") {
       const valor = resolveField(contexto, nome);

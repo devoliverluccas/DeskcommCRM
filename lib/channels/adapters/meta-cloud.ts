@@ -23,6 +23,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { metaContactsPayload } from "@/lib/channels/meta/contact-card";
 import { graphBaseUrl } from "@/lib/channels/meta/graph-base";
 import { metaCloudTemplateOps } from "@/lib/channels/meta/templates";
+import { corpoInterativoDaCloudApi } from "@/lib/channels/interativo";
 import { resolveMetaCreds } from "../meta/credentials";
 import type {
   ChannelAdapter,
@@ -350,9 +351,15 @@ export const metaCloudAdapter: ChannelAdapter = {
       );
     }
 
+    // Botões/lista (nós do fluxo de mensagens): só texto puro vira interativo —
+    // mídia e cartão de contato têm corpo próprio e ganham deles. O `body` que
+    // chega junto é o texto numerado, e fica no histórico; aqui sai o desenho.
+    const interativo =
+      envelope.interativo && envelope.kind === "text" ? corpoInterativoDaCloudApi(envelope.interativo) : null;
     const corpo =
       contactPayload(envelope) ??
       mediaPayload(envelope) ??
+      interativo ??
       { type: "text", text: { body: envelope.body ?? "" } };
 
     await envelope.beforeSend?.();

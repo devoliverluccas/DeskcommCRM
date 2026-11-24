@@ -46,6 +46,7 @@ const CAPABILITIES = [
   "phonebook",
   "statusUpdates",
   "reportaConversao",
+  "mensagemInterativa",
 ] as const;
 
 describe("matriz capability × provider é exaustiva", () => {
@@ -121,5 +122,15 @@ describe("matriz capability × provider é exaustiva", () => {
     }
     expect(CHANNEL_CAPABILITIES.zernio.reportaConversao).toBe(true);
     expect(CHANNEL_CAPABILITIES.waha.reportaConversao).toBe(false);
+  });
+
+  it("mensagemInterativa: só o canal oficial desenha botões; os demais recebem o texto numerado", () => {
+    // Quem lê esta capability é `interativoParaOCanal` (lib/channels/interativo.ts):
+    // canal com `false` nunca recebe `envelope.interativo`, e o fluxo segue pelo
+    // texto numerado. Ligar `true` num canal exige o adapter traduzir o desenho.
+    expect(CHANNEL_CAPABILITIES.meta_cloud.mensagemInterativa).toBe(true);
+    for (const p of PROVIDERS.filter((x) => x !== "meta_cloud")) {
+      expect(CHANNEL_CAPABILITIES[p].mensagemInterativa, p).toBe(false);
+    }
   });
 });

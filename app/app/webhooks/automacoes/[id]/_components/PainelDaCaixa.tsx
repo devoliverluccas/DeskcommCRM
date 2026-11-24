@@ -39,6 +39,8 @@ import {
   type TelaDoGatilho,
 } from "@/lib/automation/desenho-da-regra";
 import { camposDeDataDoNegocio } from "@/lib/leads/campos-do-funil";
+import { GATILHO_PALAVRA_CHAVE, TELA_DA_PALAVRA_CHAVE_VAZIA } from "@/lib/automation/gatilho-palavra-chave";
+import { PalavraChaveDoGatilho } from "@/app/app/webhooks/_components/PalavraChaveDoGatilho";
 import { ActionConfigForm, type ActionItem } from "@/app/app/webhooks/_components/ActionConfigForm";
 import {
   ValorDaCondicaoDoContato,
@@ -288,6 +290,14 @@ export function PainelDoGatilho({
             {t("Não gerar lembrete quando o cliente tiver compromisso marcado")}
           </label>
         </div>
+      ) : null}
+
+      {evento === GATILHO_PALAVRA_CHAVE ? (
+        <PalavraChaveDoGatilho
+          tela={tela.palavraChave ?? TELA_DA_PALAVRA_CHAVE_VAZIA}
+          onChange={(palavraChave) => onTela({ ...tela, palavraChave })}
+          idPrefixo="designer"
+        />
       ) : null}
 
       {acoesQueFechamLaco(evento, [{ type: "assign_owner" }]).length > 0 ? (

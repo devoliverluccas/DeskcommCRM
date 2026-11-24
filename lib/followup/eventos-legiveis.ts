@@ -139,6 +139,12 @@ const TIPO_DO_NO: Record<FlowNode["type"], string> = {
   // #2065 — as duas ações que também não falam com o cliente.
   move_lead: "Mover no funil",
   edit_lead_tag: "Editar tag",
+  // 4.3
+  buttons: "Botões",
+  list: "Lista",
+  webhook: "Webhook",
+  transfer: "Transferir",
+  handoff_ai: "Passar para a IA",
   end: "Fim",
 };
 
@@ -216,8 +222,32 @@ export function resumoDoNo(node: FlowNode): NoDoDossie {
           ? `grava a(s) tag(s) ${node.config.tags.join(", ")} no lead — sem mensagem ao cliente`
           : "grava tag no lead, ainda sem destino escolhido — sem mensagem ao cliente",
       };
+    case "buttons":
+    case "list":
+      return {
+        ...base,
+        resumo: `pergunta com as opções: ${node.config.options.map((o) => o.label).join(", ")}`,
+      };
+    case "webhook":
+      // Só o host: o caminho da URL pode carregar token de quem recebe.
+      return { ...base, resumo: `avisa um sistema externo${hostDaUrl(node.config.url)}` };
+    case "transfer":
+      return {
+        ...base,
+        resumo: node.config.destino.tipo === "setor" ? "passa a conversa para um setor" : "passa a conversa para um atendente",
+      };
+    case "handoff_ai":
+      return { ...base, resumo: "encerra o fluxo e devolve a conversa ao agente de IA" };
     case "end":
       return { ...base, resumo: `encerra — ${DESFECHO[node.config.outcome] ?? node.config.outcome}` };
+  }
+}
+
+function hostDaUrl(url: string): string {
+  try {
+    return ` (${new URL(url).host})`;
+  } catch {
+    return "";
   }
 }
 
@@ -278,6 +308,11 @@ function fraseDoRamoDeclarado(origem: FlowNode | undefined, branchId: string, no
   if (origem.type === "match_reply") {
     const label = origem.config.branches.find((b) => b.id === branchId)?.label;
     return label ? `quando a resposta casa com “${label}”` : RAMO_SEM_NOME;
+  }
+
+  if (origem.type === "buttons" || origem.type === "list") {
+    const label = origem.config.options.find((o) => o.id === branchId)?.label;
+    return label ? `quando o cliente escolhe “${label}”` : RAMO_SEM_NOME;
   }
 
   if (origem.type === "condition") {
@@ -505,6 +540,17 @@ export function descreveEvento(
         detalhe: texto(p.error) ?? texto(p.codigo),
         ...motor,
       };
+    // 4.3 — os efeitos dos nós novos. O webhook registra o desfecho (é dele
+    // que a saída Sucesso/Erro saiu); as trocas de comando só aparecem quando
+    // FALHAM — o avanço do fluxo já está na linha do passo.
+    case "webhook_called":
+      return p.resultado === "ok"
+        ? { titulo: "Avisou o sistema externo", detalhe: texto(p.detalhe), ...motor }
+        : { titulo: "O aviso ao sistema externo falhou — seguiu por Erro", detalhe: texto(p.detalhe), ...motor };
+    case "transfer_failed":
+      return { titulo: "Não conseguiu transferir a conversa", detalhe: texto(p.motivo), ...motor };
+    case "handoff_ai_failed":
+      return { titulo: "Não conseguiu devolver a conversa à IA", detalhe: texto(p.motivo), ...motor };
     case "waiting_for_taken_slot":
       // A espera "imune à resposta" libera a vaga do contato; outro fluxo entrou
       // nela enquanto esta dormia. Adiar NÃO é falhar — sem esta linha a trilha

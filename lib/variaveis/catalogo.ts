@@ -82,6 +82,7 @@ export const GRUPOS_DE_VARIAVEL = [
   "contato",
   "campo-do-negocio",
   "campo-do-contato",
+  "empresa",
   "acao",
 ] as const;
 
@@ -95,6 +96,8 @@ export const ROTULO_DO_GRUPO: Readonly<Record<GrupoDeVariavel, string>> = {
   contato: "Contato",
   "campo-do-negocio": "Campo do negócio",
   "campo-do-contato": "Campo do contato",
+  // Fase 4, item 4.6: os valores personalizados da empresa (`{{empresa.pix}}`).
+  empresa: "Da empresa",
   // Grupo das variáveis que a AÇÃO preenche (o `{{resumo}}` do e-mail): não são
   // variáveis de CRM e por isso não estão no catálogo.
   acao: "Da ação",
@@ -120,9 +123,10 @@ export const SUFIXO_DE_CURINGA = ".*";
 /**
  * As raízes de caminho do produto, cada uma no dialeto da fonte que a usa:
  * `lead` e `contato` (campanha, automação e fluxo), `contact` (só automação —
- * é o nome da linha de `contacts` no contexto de `renderTemplate`).
+ * é o nome da linha de `contacts` no contexto de `renderTemplate`) e `empresa`
+ * (as quatro — os valores personalizados da organização, migration 9491).
  */
-export const RAIZES_DE_CAMPO = ["lead", "contato", "contact"] as const;
+export const RAIZES_DE_CAMPO = ["lead", "contato", "contact", "empresa"] as const;
 
 export type RaizDeCampo = (typeof RAIZES_DE_CAMPO)[number];
 
@@ -135,6 +139,7 @@ export const DICA_DO_CURINGA: Readonly<Record<RaizDeCampo, string>> = {
   lead: "Para outro dado do negócio, escreva {{lead.nome_do_campo}}",
   contato: "Para um campo do contato, escreva {{contato.nome_do_campo}}",
   contact: "Para uma coluna do contato, escreva {{contact.nome_da_coluna}}",
+  empresa: "Para um valor da empresa, escreva {{empresa.chave}} (Configurações › Valores personalizados)",
 };
 
 /**
@@ -270,7 +275,31 @@ export const VARIAVEIS_DO_CATALOGO: readonly VariavelDoCatalogo[] = [
     },
     disponivelEm: ["automacao"],
   },
+  {
+    nome: "empresa.*",
+    grupo: "empresa",
+    descricao: "Valor da EMPRESA, escrito como `{{empresa.<chave>}}` (PIX, endereço, horário)",
+    exemplo: "{{empresa.pix}} → “pix@loja.exemplo”",
+    origem: {
+      fonte: "valores_personalizados.valor da organização (migration 9491)",
+      regra:
+        "O MESMO sentido nas quatro fontes: a chave da tela Valores personalizados. Quem monta o " +
+        "contexto pode passar o mapa (`contexto.empresa`) e a chave sem valor vira falta comum, " +
+        "com a política da tela. Sem o mapa, o token fica como foi escrito — como a saudação sem " +
+        "instante — e o ENVIO o resolve (`lib/variaveis/no-envio.ts`, chamado em " +
+        "`sendMessageHandler`, a porta de saída de todas as fontes), inclusive no valor de " +
+        "parâmetro do modelo aprovado. Chave que não existe no envio fica literal.",
+    },
+    disponivelEm: ["inbox", "campanha", "automacao", "fluxo"],
+  },
 ];
+
+/**
+ * Curingas que existem em mais de uma fonte com o MESMO sentido — a exceção
+ * declarada à regra "curinga em várias fontes diverge" (`SENTIDOS_DIVERGENTES`).
+ * `empresa.*` lê a mesma linha de `valores_personalizados` em todas elas.
+ */
+export const CURINGAS_DE_SENTIDO_UNICO: readonly string[] = ["empresa.*"];
 
 /** Um curinga cobre um mapa inteiro (`lead.*`); o resto é chave fechada. */
 export function eCuringa(nome: string): boolean {
@@ -517,5 +546,21 @@ export const VOCABULARIOS_ABERTOS: readonly VocabularioAberto[] = [
     motivo:
       "É seletor de tela, não resolvedor: o catálogo só tem o curinga `lead.*`, que o seletor " +
       "mostra como dica (não insere), e o caminho concreto que a tela oferece vem daqui.",
+  },
+  {
+    arquivo: "lib/variaveis/link.ts",
+    dialeto:
+      "`{{link:https://…}}` e `{{link:https://…|rótulo}}` — a URL que sai encurtada e rastreada.",
+    motivo:
+      "Não é variável do contato e nenhuma tela a resolve: a URL curta é uma por CONTATO, e só o " +
+      "envio (`sendMessageHandler`) sabe para quem a mensagem vai. O destino é qualquer URL " +
+      "http/https que quem escreve escolhe — vocabulário aberto por natureza (fase 4, item 4.4).",
+  },
+  {
+    arquivo: "lib/variaveis/valores-personalizados.ts",
+    dialeto: "As chaves de `{{empresa.<chave>}}`, criadas pela organização.",
+    motivo:
+      "As chaves nascem na tela Valores personalizados, em runtime (migration 9491). O catálogo " +
+      "guarda a FORMA (`empresa.*`); a lista sai da tabela da organização na hora.",
   },
 ];

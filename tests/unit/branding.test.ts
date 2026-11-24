@@ -1011,6 +1011,16 @@ const HOSTS_DECLARADOS: Record<string, EntradaDeHost> = {
     motivo:
       "endpoint da Google Ads API, para onde `lib/plataformas-de-anuncio/google/conversions.ts` reporta a venda de volta ao anúncio que trouxe o lead. Irmão de `graph.facebook.com` no eixo da Meta: é contrato do fornecedor, não escolha nossa — a conta de anúncios é do cliente, o domínio é do Google.",
   },
+  "www.google-analytics.com": {
+    categoria: "FORNECEDOR",
+    motivo:
+      "coletor do Measurement Protocol do GA4 (`lib/plataformas-de-anuncio/ga4/conversions.ts`), para onde a venda e o lead vão quando a organização conecta o Google Analytics 4 (9488). Endereço do protocolo oficial; a propriedade é do cliente, o domínio é do Google.",
+  },
+  "business-api.tiktok.com": {
+    categoria: "FORNECEDOR",
+    motivo:
+      "Events API do TikTok (`lib/plataformas-de-anuncio/tiktok/conversions.ts`), para onde a venda volta ao pixel do anúncio que trouxe o lead (9488). Irmão de `graph.facebook.com` no eixo da Meta: contrato do fornecedor.",
+  },
   "accounts.google.com": {
     categoria: "FORNECEDOR",
     motivo:

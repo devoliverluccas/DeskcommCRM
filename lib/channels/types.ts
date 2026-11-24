@@ -9,6 +9,7 @@ import type { OutboundMedia } from "@/lib/waha/media-send";
 import type { TemplateContract } from "@/lib/channels/meta/template-contract";
 import type { ContatoDoAparelho } from "@/lib/waha/client";
 import type { DefeitoDoNumero } from "./defeito-do-numero";
+import type { MensagemInterativa } from "./interativo";
 
 // O tipo do contato do aparelho ATRAVESSA o seam como tipo só (o import some na
 // compilação), do mesmo jeito do `OutboundMedia` acima: quem fora daqui precisa
@@ -135,6 +136,16 @@ export interface ChannelCapabilities {
    * qualquer divergência entre as duas, nos dois sentidos.
    */
   reportaConversao: boolean;
+  /**
+   * O canal DESENHA botões de resposta e lista de opções (os nós "Botões" e
+   * "Lista" do fluxo de mensagens)?
+   *
+   * `false` não é erro: o fluxo manda o mesmo conteúdo como texto numerado
+   * ("Responda 1, 2 ou 3") e casa a resposta pelo número ou pelo rótulo — ver
+   * `./interativo.ts`. Quem decide é esta capability, nunca o nome do canal, e
+   * o adapter que a declara é o único que lê `OutboundEnvelope.interativo`.
+   */
+  mensagemInterativa: boolean;
 }
 
 /**
@@ -251,6 +262,14 @@ export interface OutboundEnvelope extends ChannelTenantScope {
    * `undefined` = envio solto, que é o caso comum.
    */
   replyToExternalId?: string | null;
+  /**
+   * Botões ou lista que acompanham o `body` (nós "Botões"/"Lista" do fluxo).
+   *
+   * OPCIONAL, e só chega preenchido a canal com `mensagemInterativa`
+   * (`interativoParaOCanal`, `./interativo.ts`). O `body` continua sendo o
+   * texto numerado: é o que o canal sem botão manda e o que o histórico guarda.
+   */
+  interativo?: MensagemInterativa;
 }
 
 /**

@@ -44,6 +44,7 @@ import { MidiasDaConversa } from "./MidiasDaConversa";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { OrcamentoDaConversa } from "@/components/inbox/OrcamentoDaConversa";
 import { PropostasDaConversa } from "@/components/inbox/PropostasDaConversa";
+import { PontosDoContato } from "@/components/pontuacao/PontosDoContato";
 import {
   ABAS_DA_LATERAL,
   ROTULO_DA_ABA,
@@ -1829,6 +1830,14 @@ export function CRMSidePanel({
               {/* ORÇAMENTOS do contato (fase 2, item 2.1) no fim da aba Negócios:
                   orçamento é do negócio, e uma quinta aba apertaria as outras
                   quatro na largura da lateral. Só com a capacidade ligada. */}
+              {/* PONTOS do contato (fase 4, item 4.5): o total das regras de
+                  pontuação com o extrato. Sem pontos, o componente não desenha
+                  nada e o `empty:hidden` some com a faixa. */}
+              {id === "negocios" && contactId ? (
+                <div className="border-b border-border px-4 py-3 empty:hidden" data-testid="lateral-pontos">
+                  <PontosDoContato contactId={contactId} />
+                </div>
+              ) : null}
               {id === "negocios" && podeOrcar && contactId ? (
                 <div
                   className="border-b border-border px-4 py-4 [&_h3]:text-xs [&_h3]:font-medium [&_h3]:text-text-muted"

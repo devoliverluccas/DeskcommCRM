@@ -24,6 +24,12 @@ import {
   configDaEtapaParada,
   configDoSilencio,
 } from "@/lib/automation/gatilhos-de-tempo";
+import {
+  GATILHO_PALAVRA_CHAVE,
+  MENSAGEM_DA_PALAVRA_CHAVE_INVALIDA,
+  configDaPalavraChave,
+} from "@/lib/automation/gatilho-palavra-chave";
+import { EVENTOS_DA_CONVERSAO_NA_AUTOMACAO } from "@/lib/automation/conversao-pela-automacao";
 
 /**
  * Os gatilhos que o motor reconhece, e a entidade que cada um tem que trazer.
@@ -63,6 +69,11 @@ export const ENTIDADE_ESPERADA_POR_GATILHO = {
   "lead.reopened": "crm_lead",
   "lead.assigned": "crm_lead",
   "message.received": "message",
+  // "Mensagem com palavra-chave" (fase 4, 4.1). Gatilho DERIVADO: ninguém emite
+  // esta linha — o motor avalia estas regras sobre o próprio `message.received`
+  // e só as que casam o texto rodam (`lib/automation/gatilho-palavra-chave.ts`).
+  // A entidade é a mesma do evento de origem.
+  "message.keyword": "message",
   // A entrega FALHOU depois de aceita — o 131047 que a Meta recusa pelo
   // webhook de status, o timeout do transporte, o pré-voo do próprio envio.
   // Gatilho novo porque quem integra via token não lê o nosso banco (#1614):
@@ -755,6 +766,23 @@ const acoesFixas = [
       canal: z.literal("whatsapp"),
     }),
   }),
+  // Fase 4 (4.1) — "Pausar a IA nesta conversa": o mesmo silêncio durável da
+  // rota `conversations/[id]/pause-ai` (`bot_silenced_until = infinity`). Sem
+  // configuração: a conversa é a do evento (ou a aberta mais recente do contato).
+  z.object({
+    type: z.literal("pause_ai"),
+    config: z.object({}),
+  }),
+  // Fase 4 (4.1) — "Enviar conversão para plataforma de anúncio". A regra
+  // escolhe o EVENTO; a plataforma sai da atribuição do contato e do registro
+  // de transportes, pelo mesmo envio das regras de conversão
+  // (`lib/automation/conversao-pela-automacao.ts`).
+  z.object({
+    type: z.literal("send_ad_conversion"),
+    config: z.object({
+      evento: z.enum(EVENTOS_DA_CONVERSAO_NA_AUTOMACAO),
+    }),
+  }),
 ] as const;
 
 /**
@@ -921,6 +949,7 @@ export const createAutomationRuleSchema = z
   })
   .superRefine(exigirConfigDoGatilhoDeData)
   .superRefine(exigirConfigDosGatilhosDeTempo)
+  .superRefine(exigirConfigDaPalavraChave)
   .superRefine(exigirIdDaFonteWebhook)
   .superRefine(recusarLimitePorContatoTorto)
   .superRefine(recusarAntecedenciaTorta)
@@ -1028,6 +1057,28 @@ function exigirConfigDosGatilhosDeTempo(
   }
 }
 
+/**
+ * A regra de palavra-chave sem palavras é uma regra que NUNCA dispara (fase 4,
+ * 4.1): o motor só a roda quando o texto casa uma palavra da lista. Mesma
+ * recusa dos outros gatilhos com configuração, pelo MESMO leitor do motor.
+ *
+ * No PATCH vale quando o patch troca PARA este gatilho; o patch que só traz o
+ * `trigger_config` de uma regra que já é de palavra-chave é conferido na rota,
+ * contra o gatilho gravado.
+ */
+export function exigirConfigDaPalavraChave(
+  regra: { trigger_event?: string; trigger_config?: Record<string, unknown> },
+  ctx: z.RefinementCtx,
+): void {
+  if (regra.trigger_event !== GATILHO_PALAVRA_CHAVE) return;
+  if (configDaPalavraChave(regra.trigger_config)) return;
+  ctx.addIssue({
+    code: "custom",
+    path: ["trigger_config"],
+    message: MENSAGEM_DA_PALAVRA_CHAVE_INVALIDA,
+  });
+}
+
 function exigirConfigDoGatilhoDeData(
   regra: { trigger_event: string; trigger_config?: Record<string, unknown> },
   ctx: z.RefinementCtx,
@@ -1068,6 +1119,7 @@ export const updateAutomationRuleSchema = z
     // a varredura não sabe avaliar.
     exigirConfigDosGatilhosDeTempo(patch as { trigger_event: string; trigger_config?: Record<string, unknown> }, ctx);
   })
+  .superRefine(exigirConfigDaPalavraChave)
   .superRefine(exigirIdDaFonteWebhook)
   .superRefine(recusarLimitePorContatoTorto)
   .superRefine(recusarAntecedenciaTorta)

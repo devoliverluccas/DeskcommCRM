@@ -414,6 +414,12 @@ export interface EstadoDeAtendimento {
    * passa-bastão do encadeamento: o próximo passo não repergunta nem recomeça.
    */
   notaAnterior?: string;
+  /**
+   * MODO HÍBRIDO (4.3, `settings.resposta_pronta`): o roteiro fala sozinho —
+   * o motor manda a pergunta pendente e lê a resposta sem o modelo. Ausente =
+   * o agente conduz, como sempre.
+   */
+  respostaPronta?: boolean;
 }
 
 /** O valor de um campo personalizado como texto — ou `null` se não há o que ler. */
@@ -671,6 +677,7 @@ export async function carregarEstadoDeAtendimento(
       maxTentativas,
     }),
     ...(notaAnterior !== null ? { notaAnterior } : {}),
+    ...(parsed.data.settings?.resposta_pronta === true ? { respostaPronta: true } : {}),
   };
 }
 

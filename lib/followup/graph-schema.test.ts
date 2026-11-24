@@ -42,6 +42,12 @@ describe('graph-schema', () => {
         // #2065 — dois tipos de ação que não falam com o cliente.
         'move_lead',
         'edit_lead_tag',
+        // 4.3 — opções, webhook, transferir e passar para a IA.
+        'buttons',
+        'list',
+        'webhook',
+        'transfer',
+        'handoff_ai',
         'end',
       ]);
     });

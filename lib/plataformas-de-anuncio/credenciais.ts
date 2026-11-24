@@ -21,6 +21,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { logger } from "@/lib/logger";
 import { decryptWebhookSecret } from "@/lib/webhooks/secrets";
+import { ehPlataformaComMapeamento, lerMapeamento } from "./mapeamento-de-eventos";
 import { lerIdentidadeDaMeta } from "./meta/identidade";
 import type { CredencialDeConversao, PlataformaDeAnuncio } from "./types";
 
@@ -131,6 +132,43 @@ export async function lerCredencial(
 
   if (!linha.dataset_id || !linha.access_token_encrypted) {
     return { ok: false, motivo: "credencial_incompleta" };
+  }
+
+  // GA4 e TikTok (9488): mesmo par de colunas da Meta (`dataset_id` =
+  // measurement_id / pixel_code; `access_token_encrypted` = api_secret /
+  // token), mais o mapeamento de eventos. Ramo próprio porque o `select` do
+  // mapeamento só pode rodar para eles: num clone sem a 9488 aplicada, pedir a
+  // coluna derrubaria também a leitura da Meta e do Google.
+  if (ehPlataformaComMapeamento(plataforma)) {
+    const segredo = await decryptWebhookSecret(admin, linha.access_token_encrypted);
+    if (!segredo) return { ok: false, motivo: "cifra_indisponivel" };
+    const { data: mapa, error: erroDoMapa } = await admin
+      .from("ad_platform_connections")
+      .select("event_mapping")
+      .eq("organization_id", organizationId)
+      .eq("platform", plataforma)
+      .maybeSingle();
+    if (erroDoMapa) {
+      logger.error("[conversoes.credencial] leitura do mapeamento falhou", {
+        organizationId,
+        plataforma,
+        error: erroDoMapa.message,
+      });
+      return { ok: false, motivo: "leitura_indisponivel" };
+    }
+    return {
+      ok: true,
+      credencial: {
+        datasetId: linha.dataset_id,
+        accessToken: segredo,
+        // O GA4 não tem código de teste; o TikTok tem.
+        testEventCode: plataforma === "tiktok" ? linha.test_event_code : null,
+        mapeamento: lerMapeamento(
+          plataforma,
+          (mapa as { event_mapping?: unknown } | null)?.event_mapping,
+        ),
+      },
+    };
   }
 
   const token = await decryptWebhookSecret(admin, linha.access_token_encrypted);

@@ -145,12 +145,19 @@ export function interpolateTemplate(
   body: string,
   contact: TemplateContact,
   agora?: InstanteDoEnvio,
+  /**
+   * Os valores da empresa (`{{empresa.pix}}`, fase 4). Sem eles o token fica no
+   * compositor como foi escrito e o ENVIO o resolve — o operador vê o que vai
+   * ser trocado, e o cliente recebe o valor salvo.
+   */
+  empresa?: Readonly<Record<string, string>>,
 ): string {
   return resolverVariaveis(
     body,
     {
       nome: nomeResolvido(contact) || null,
       contact: { name: contact.name, display_name: contact.displayName },
+      ...(empresa !== undefined ? { empresa: { ...empresa } } : {}),
     },
     { fonte: "inbox", quandoVazio: "literal", agora },
   ).texto;

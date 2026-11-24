@@ -1,6 +1,14 @@
 import { z } from 'zod';
 import { variaveisDoModeloSchema } from '@/lib/channels/meta/variaveis-do-fluxo';
 
+import {
+  MAX_BOTOES,
+  MAX_CORPO_INTERATIVO,
+  MAX_DESCRICAO_DA_LISTA,
+  MAX_ITENS_DA_LISTA,
+  MAX_ROTULO_DA_LISTA,
+  MAX_ROTULO_DO_BOTAO,
+} from '@/lib/channels/interativo';
 import { PRIORIDADES_DA_TAREFA } from '@/lib/tarefas/tipos';
 import { ehOpDeData, OPS_DE_DATA } from './condicao-por-data';
 
@@ -30,6 +38,17 @@ export const NODE_TYPES = [
   // fora desta fatia e é o passo seguinte da issue.
   'move_lead',
   'edit_lead_tag',
+  // 4.3 — os nós do fluxo de mensagens que conversam com OPÇÕES e com o mundo
+  // de fora. `buttons`/`list` mandam a pergunta com as opções (desenhadas
+  // como botões onde o canal deixa, texto numerado onde não deixa) e esperam a
+  // resposta; cada opção é uma saída. `webhook` avisa um sistema externo e
+  // segue por "Sucesso" ou "Erro". `transfer` passa a conversa a um setor ou a
+  // um atendente. `handoff_ai` encerra o fluxo e devolve a conversa à IA.
+  'buttons',
+  'list',
+  'webhook',
+  'transfer',
+  'handoff_ai',
   'end',
 ] as const;
 export type NodeType = (typeof NODE_TYPES)[number];
@@ -65,6 +84,10 @@ export const CONDITION_FALSE_BRANCH_ID = 'false';
 export const REPEAT_BODY_BRANCH_ID = 'body';
 /** Saída do `repeat` quando o contador chegou a zero. */
 export const REPEAT_DONE_BRANCH_ID = 'done';
+/** Saída do `webhook` quando o destino respondeu 2xx dentro do prazo. */
+export const WEBHOOK_OK_BRANCH_ID = 'webhook_ok';
+/** Saída do `webhook` quando o destino falhou, demorou ou foi recusado (URL interna). */
+export const WEBHOOK_ERROR_BRANCH_ID = 'webhook_erro';
 
 /** Branch ids the contract owns — a user-declared branch may not claim one. */
 export const RESERVED_BRANCH_IDS = [
@@ -74,6 +97,8 @@ export const RESERVED_BRANCH_IDS = [
   CONDITION_FALSE_BRANCH_ID,
   REPEAT_BODY_BRANCH_ID,
   REPEAT_DONE_BRANCH_ID,
+  WEBHOOK_OK_BRANCH_ID,
+  WEBHOOK_ERROR_BRANCH_ID,
 ] as const;
 
 /** Id of a branch the user declared (a check, an AI class) — opaque, stable across renames. */
@@ -540,6 +565,91 @@ export const skillConfigSchema = z.strictObject({
 });
 
 /**
+ * ---------------------------------------------------------------------------
+ * 4.3 — Botões, Lista, Webhook, Transferir, Passar para a IA
+ * ---------------------------------------------------------------------------
+ * Os tetos de tamanho são os da plataforma que DESENHA botões
+ * (`lib/channels/interativo.ts`); no canal que não desenha, o mesmo conteúdo
+ * sai como texto numerado, então respeitar o teto aqui serve aos dois.
+ *
+ * ⚠️ FROUXO NO RASCUNHO, como `move_lead.stage_id`: o painel grava a cada
+ * tecla, e corpo/rótulo/URL/destino em branco são estados de construção. Quem
+ * exige preenchido é o publish (`validate-publish.ts`).
+ */
+
+/** Uma opção de `buttons`/`list`: id estável (é o ramo) + o texto que o cliente lê. */
+export const opcaoDeBotaoSchema = z.strictObject({
+  id: declaredBranchIdSchema,
+  label: z.string().max(MAX_ROTULO_DO_BOTAO),
+});
+export const opcaoDeListaSchema = z.strictObject({
+  id: declaredBranchIdSchema,
+  label: z.string().max(MAX_ROTULO_DA_LISTA),
+  description: z.string().max(MAX_DESCRICAO_DA_LISTA).optional(),
+});
+
+const idsDeOpcaoUnicos = (c: { options: { id: string }[] }) =>
+  new Set(c.options.map((o) => o.id)).size === c.options.length;
+
+/**
+ * Nó `buttons`: manda `body` com até 3 opções e espera a resposta. Cada opção é
+ * uma saída; a resposta casa pelo id do botão, pelo número ou pelo rótulo
+ * (`casarOpcaoInterativa`). Sem resposta na carência → "Sem resposta".
+ */
+export const buttonsConfigSchema = z
+  .strictObject({
+    body: z.string().max(MAX_CORPO_INTERATIVO),
+    options: z.array(opcaoDeBotaoSchema).min(1).max(MAX_BOTOES),
+    grace_timeout_ms: z.number().int().min(900_000),
+  })
+  .refine(idsDeOpcaoUnicos, { message: 'options[].id must be unique within the node', path: ['options'] });
+
+/** Nó `list`: como `buttons`, com até 10 itens atrás de um botão "Ver opções". */
+export const listConfigSchema = z
+  .strictObject({
+    body: z.string().max(MAX_CORPO_INTERATIVO),
+    button_label: z.string().max(MAX_ROTULO_DO_BOTAO),
+    options: z.array(opcaoDeListaSchema).min(1).max(MAX_ITENS_DA_LISTA),
+    grace_timeout_ms: z.number().int().min(900_000),
+  })
+  .refine(idsDeOpcaoUnicos, { message: 'options[].id must be unique within the node', path: ['options'] });
+
+/** Teto do tempo de espera do webhook do fluxo: o tick não pode pendurar. */
+export const WEBHOOK_TIMEOUT_MAX_MS = 10_000;
+export const WEBHOOK_TIMEOUT_PADRAO_MS = 5_000;
+
+/**
+ * Nó `webhook`: POST para `url` com o contexto do contato e da conversa,
+ * assinado com HMAC SHA-256 pelo segredo do fluxo (`webhook-do-fluxo.ts`). A
+ * URL é conferida contra rede interna NA HORA da chamada (DNS incluído) — o
+ * publish só confere a forma.
+ */
+export const webhookConfigSchema = z.strictObject({
+  url: z.string().max(2000),
+  timeout_ms: z.number().int().min(1_000).max(WEBHOOK_TIMEOUT_MAX_MS).optional(),
+});
+
+/**
+ * Nó `transfer`: a MESMA troca do botão Transferir (atendente) e da fila do
+ * setor (`definirSetorDaConversa`). O id é texto, e não `uuid()`, porque o
+ * rascunho nasce sem destino — o publish exige um id válido.
+ */
+export const transferConfigSchema = z.strictObject({
+  destino: z.discriminatedUnion('tipo', [
+    z.strictObject({ tipo: z.literal('setor'), sector_id: z.string().max(64) }),
+    z.strictObject({ tipo: z.literal('atendente'), user_id: z.string().max(64) }),
+  ]),
+});
+
+/**
+ * Nó `handoff_ai`: encerra o fluxo e devolve o comando da conversa ao agente
+ * de IA (`devolverAtendimentoAoAgente`). É TERMINAL — não tem saída — e não
+ * tem configuração: quem responde dali em diante é o agente publicado, com o
+ * prompt dele. Um campo de orientação aqui seria config sem consumidor.
+ */
+export const handoffAiConfigSchema = z.strictObject({});
+
+/**
  * Ação ao finalizar um fluxo de atendimento — "quando finaliza, chama qual skill
  * ou manda pra IA". Opcional para não quebrar grafos existentes; ausente = `nada`
  * (comportamento anterior).
@@ -704,6 +814,46 @@ export const flowNodeSchema = z.discriminatedUnion('type', [
     }),
     config: editLeadTagConfigSchema,
   }),
+  // 4.3 — Botões: pergunta com até 3 opções, cada uma uma saída
+  z.strictObject({
+    id: z.string().min(1),
+    type: z.literal('buttons'),
+    label: z.string().min(1).max(60),
+    position: z.strictObject({ x: z.number(), y: z.number() }),
+    config: buttonsConfigSchema,
+  }),
+  // 4.3 — Lista: pergunta com até 10 itens, cada um uma saída
+  z.strictObject({
+    id: z.string().min(1),
+    type: z.literal('list'),
+    label: z.string().min(1).max(60),
+    position: z.strictObject({ x: z.number(), y: z.number() }),
+    config: listConfigSchema,
+  }),
+  // 4.3 — Webhook: avisa um sistema externo; sai por Sucesso ou Erro
+  z.strictObject({
+    id: z.string().min(1),
+    type: z.literal('webhook'),
+    label: z.string().min(1).max(60),
+    position: z.strictObject({ x: z.number(), y: z.number() }),
+    config: webhookConfigSchema,
+  }),
+  // 4.3 — Transferir: setor ou atendente
+  z.strictObject({
+    id: z.string().min(1),
+    type: z.literal('transfer'),
+    label: z.string().min(1).max(60),
+    position: z.strictObject({ x: z.number(), y: z.number() }),
+    config: transferConfigSchema,
+  }),
+  // 4.3 — Passar para a IA: terminal
+  z.strictObject({
+    id: z.string().min(1),
+    type: z.literal('handoff_ai'),
+    label: z.string().min(1).max(60),
+    position: z.strictObject({ x: z.number(), y: z.number() }),
+    config: handoffAiConfigSchema,
+  }),
   // End node: terminal state
   z.strictObject({
     id: z.string().min(1),
@@ -815,6 +965,20 @@ export const flowSettingsSchema = z.strictObject({
    * alguém esquece de conferir antes de publicar.
    */
   somente_interno: z.boolean().optional(),
+  /**
+   * MODO HÍBRIDO (4.3) — só faz sentido no roteiro de ATENDIMENTO: quando o
+   * roteador escolhe uma intenção que aponta este roteiro (ou a palavra-gatilho
+   * o liga), quem fala é o ROTEIRO, sem o modelo grande. O motor manda o texto
+   * de cada pergunta pendente pela cadeia de envio e lê a resposta pela captura
+   * determinística (`captura-do-fluxo.ts`) — sem validador de IA. Quando o
+   * roteiro conclui, o agente volta a atender (é o "Passar para a IA").
+   *
+   * A configuração mora AQUI, no roteiro, e não na intenção: a intenção já
+   * aponta o roteiro (`ai_router_members.flow_pointer_id`), e "este roteiro é de
+   * resposta pronta" é uma propriedade dele, que vale igual quando quem o liga é
+   * a palavra-gatilho ou a etapa do funil. Ausente = o agente conduz (hoje).
+   */
+  resposta_pronta: z.boolean().optional(),
 });
 export type FlowSettings = z.infer<typeof flowSettingsSchema>;
 
@@ -1075,6 +1239,50 @@ export function nodeBranches(node: BranchableNode): FlowBranch[] {
         },
         fallbackBranch(FALLBACK_OTHERS_LABEL),
       ];
+
+    case 'buttons':
+    case 'list':
+      return [
+        ...node.config.options.map((o, i) => ({
+          id: o.id,
+          // Rótulo em branco ainda é rascunho: o desenho mostra a posição.
+          label: o.label.trim() || `Opção ${i + 1}`,
+          check: null,
+          kind: 'match' as const,
+          condition: { type: 'branch' as const, branch_id: o.id },
+        })),
+        {
+          id: NO_REPLY_BRANCH_ID,
+          label: NO_REPLY_LABEL,
+          check: null,
+          kind: 'match',
+          condition: { type: 'branch', branch_id: NO_REPLY_BRANCH_ID },
+        },
+        fallbackBranch(FALLBACK_OTHERS_LABEL),
+      ];
+
+    case 'webhook':
+      return [
+        {
+          id: WEBHOOK_OK_BRANCH_ID,
+          label: 'Sucesso',
+          check: null,
+          kind: 'match',
+          condition: { type: 'branch', branch_id: WEBHOOK_OK_BRANCH_ID },
+        },
+        {
+          id: WEBHOOK_ERROR_BRANCH_ID,
+          label: 'Erro',
+          check: null,
+          kind: 'match',
+          condition: { type: 'branch', branch_id: WEBHOOK_ERROR_BRANCH_ID },
+        },
+        fallbackBranch(FALLBACK_OTHERS_LABEL),
+      ];
+
+    // Terminal: encerra o fluxo e devolve a conversa à IA — nenhuma saída.
+    case 'handoff_ai':
+      return [];
 
     default:
       return [fallbackBranch(FALLBACK_ALWAYS_LABEL)];

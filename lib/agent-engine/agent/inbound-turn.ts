@@ -230,7 +230,12 @@ import {
   type PublishedAgentConfig,
 } from './agent-config';
 import { reservaDeModeloDaVersao } from './reserva-do-modelo-da-versao';
-import { garantirPerguntaDoRoteiro, perguntaDoRoteiroPodeSair, prepararRoteiroDoTurno } from './roteiro-no-turno';
+import {
+  garantirPerguntaDoRoteiro,
+  perguntaDoRoteiroPodeSair,
+  prepararRoteiroDoTurno,
+  roteiroRespondeSemModelo,
+} from './roteiro-no-turno';
 import { validarRespostaDoFluxo } from './flow-validate';
 import { moduloLigadoComMemo } from '@/lib/instalacao/modulos';
 import { msAteAJanelaAbrir, msAteAJanelaAbrirPulandoFeriado } from './janela-de-atendimento';
@@ -3929,6 +3934,69 @@ async function executarTurnoDoAgente(
           },
         )
       : null;
+
+  // MODO HÍBRIDO (4.3): o roteiro de "resposta pronta" que a intenção do
+  // roteador (ou a palavra-gatilho) ligou RESPONDE SOZINHO — a pergunta
+  // pendente sai pela mesma cadeia de envio e o turno termina aqui, antes da
+  // compactação, do prompt e de qualquer chamada de modelo. Quando o roteiro
+  // conclui, `roteiroRespondeSemModelo` devolve `false` e o agente volta a
+  // atender. Ver `roteiro-no-turno.ts`.
+  if (roteiro !== null && roteiroRespondeSemModelo(roteiro)) {
+    let seqDoRoteiro = input.apresentacaoVetada ? input.apresentacaoVetada.proximaSeq - 1 : 0;
+    await garantirPerguntaDoRoteiro(
+      { pool, log: runLog },
+      {
+        organizationId: tenantId,
+        roteiro,
+        // Nada saiu do modelo: o motor é quem fala.
+        corposEnviados: [],
+        enviar: async (texto) => {
+          const chain = await runBeforeSend({
+            pool,
+            log: runLog,
+            agentOperation,
+            tenantId,
+            leadId,
+            jobId: liveJob().id,
+            channelSessionId: input.channelSessionId,
+            body: texto,
+            optedOutThisTurn,
+            resposta: eTurnoDeResposta(liveJob()),
+            crmDailyLimit: null,
+            // A pergunta repete por design (feita e não respondida) — mesmo
+            // motivo da trava "a pergunta saiu?".
+            enforceSpinning: false,
+            now: clock(),
+            sleep: deps.sleep,
+            lgpd,
+            ...(deps.knobs.disclosureMode !== undefined
+              ? { disclosureMode: deps.knobs.disclosureMode }
+              : {}),
+            send: (finalBody: string) => {
+              pararDigitando();
+              seqDoRoteiro += 1;
+              return liveChannel().send({
+                tenantId,
+                leadId,
+                jobId: liveJob().id,
+                jobClaim: claimOfJob(liveJob()),
+                agentOperation,
+                seq: seqDoRoteiro,
+                conversationId: input.conversationId,
+                body: finalBody,
+              });
+            },
+          });
+          return chain.status !== 'vetoed' && (chain.outcome.kind === 'sent' || chain.outcome.kind === 'already_sent');
+        },
+      },
+    );
+    runLog.info('roteiro de resposta pronta respondeu sem o modelo (modo híbrido)', {
+      enrollment_id: roteiro.estado.enrollment.id,
+      pergunta: roteiro.estado.situacao.pendentes[0]?.config.key ?? null,
+    });
+    return;
+  }
 
   // F3-07: compaction + flush pré-compaction. Quando o histórico cresce além do limiar,
   // o FLUSH grava as notas duráveis (lead_notes) e a compaction resume a conversa com o

@@ -88,6 +88,14 @@ import { RegrasDeConversaoMeta } from "./_regrasMeta";
 import { listarRegrasMeta } from "@/lib/conversoes/regras-meta";
 
 export const metadata = { title: "Conversões" };
+
+/** O nome de cada destino na coluna Origem das pendências. */
+const NOME_DA_ORIGEM: Record<string, string> = {
+  meta_ads: "Meta Ads",
+  google_ads: "Google Ads",
+  ga4: "Google Analytics 4",
+  tiktok: "TikTok Ads",
+};
 export const dynamic = "force-dynamic";
 
 /** O que a volta do OAuth do Google Ads diz, traduzido — ver o callback. */
@@ -432,6 +440,34 @@ export default async function ConversoesPage({
             />
           )}
 
+          {/* GA4 e TikTok (9488): telas próprias, com porta também no catálogo. */}
+          <nav
+            aria-labelledby="outras-plataformas"
+            className="flex flex-col gap-2 border-t border-border pt-6"
+          >
+            <h2 id="outras-plataformas" className="text-sm font-semibold">
+              {t("Outras plataformas")}
+            </h2>
+            <ul className="flex flex-col divide-y divide-border">
+              {(
+                [
+                  ["/app/settings/conversoes/ga4", "Google Analytics 4"],
+                  ["/app/settings/conversoes/tiktok", "TikTok Ads"],
+                ] as const
+              ).map(([href, nome]) => (
+                <li key={href}>
+                  <a
+                    href={href}
+                    className="flex min-h-11 items-center justify-between gap-3 py-2 text-sm hover:bg-hover lg:min-h-9"
+                  >
+                    <span className="font-medium">{nome}</span>
+                    <span className="text-xs text-text-muted">{t("Configurar")}</span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </nav>
+
           {slug && (
             <FormularioDeCapturaDeUtm
               plataforma="google"
@@ -500,11 +536,7 @@ export default async function ConversoesPage({
                             : t(rotuloDoEvento(p.evento, rotulosDeEtapa))}
                         </td>
                         <td className="p-3">
-                          {p.plataforma === "meta_ads"
-                            ? "Meta Ads"
-                            : p.plataforma === "google_ads"
-                              ? "Google Ads"
-                              : "—"}
+                          {NOME_DA_ORIGEM[p.plataforma] ?? "—"}
                         </td>
                         <td className="p-3 whitespace-nowrap">
                           {p.valorCentavos === null ? "—" : formatCentsBRL(p.valorCentavos)}

@@ -159,6 +159,14 @@ const NASCE_DONE_NA_ORIGEM: Record<string, { onde: string[]; porque: string }> =
       "inserido com `status='done'` no mesmo statement (o turno do Operador é registro " +
       "por decisão explícita, documentada no cabeçalho do módulo).",
   },
+  "link.clicked": {
+    onde: ["supabase/migrations/20261124140300_9490_links_rastreados_de_saida.sql"],
+    porque:
+      "fase 4, item 4.4: `fn_registrar_clique_de_saida` insere o fato com `status='done'` no " +
+      "mesmo statement — é REGISTRO do clique de gente num link de saída, sem consumidor hoje. " +
+      "Quem criar o gatilho de automação \"clicou no link\" registra o handler e troca para " +
+      "`pending` no mesmo PR (e tira esta linha).",
+  },
   "voice_call.ended": {
     onde: ["lib/wacalls/events-bridge.ts"],
     porque:

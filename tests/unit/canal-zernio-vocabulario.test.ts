@@ -45,6 +45,9 @@ describe("capabilities do canal intermediado", () => {
       statusUpdates: false,
       // A ponte da venda pela conversa é deste provedor (#4552): `reportConversion` no adapter.
       reportaConversao: true,
+      // 4.3 — o provedor não expõe o corpo interativo no envio: os nós Botões/Lista
+      // saem como texto numerado por aqui.
+      mensagemInterativa: false,
     });
   });
 

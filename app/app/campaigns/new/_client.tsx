@@ -45,6 +45,7 @@ import {
   variaveisQueImpedemOBroadcast,
   type Velocidade,
 } from "../_components/VelocidadeDaCampanha";
+import { ResumoDoEnvio } from "../_components/ResumoDoEnvio";
 
 export function NovaCampanha({ emailLigado = false }: { emailLigado?: boolean }) {
   const t = useT();
@@ -134,6 +135,40 @@ export function NovaCampanha({ emailLigado = false }: { emailLigado?: boolean })
     filtro.funis.length > 0 ||
     filtro.etapas.length > 0 ||
     filtro.sem_interacao_ha_dias !== null;
+
+  /**
+   * O pedido do RESUMO (fase 4, 4.7): o mesmo público, mensagem e modelo da
+   * prévia, mais o número e o ritmo — exatamente o que `salvar()` mandaria.
+   * Sem critério de público não há o que contar.
+   */
+  const pedidoDoResumo = temCriterio
+    ? {
+        audience_filter: filtro,
+        message_body: ehOficial ? "" : texto,
+        ...(canalDeEmail
+          ? { canal: "email" as const }
+          : {
+              ...(canal ? { channel_session_id: canal } : {}),
+              channel_session_ids: ehOficial ? [] : extras,
+            }),
+        ...(ehOficial && modelo
+          ? {
+              modelo: {
+                channel_session_id: canal,
+                name: modelo.name,
+                language: modelo.language,
+                variables: modelo.variables,
+              },
+            }
+          : {}),
+        velocidade: velocidadeEfetiva,
+        intervalo_segundos: intervalo && velocidadeEfetiva === "gradual" ? Number(intervalo) : null,
+        janela_inicio_hora: janelaInicio ? Number(janelaInicio) : null,
+        janela_fim_hora: janelaFim ? Number(janelaFim) : null,
+        teto_diario: tetoDiario && !emBroadcast ? Number(tetoDiario) : null,
+        teto_horario: tetoHorario && !emBroadcast ? Number(tetoHorario) : null,
+      }
+    : null;
 
   const podeSalvar =
     nome.trim() !== "" &&
@@ -703,6 +738,10 @@ export function NovaCampanha({ emailLigado = false }: { emailLigado?: boolean })
         </div>
       </Card>
       )}
+
+      {/* A conferência antes de enviar (fase 4, 4.7) — seção da MESMA página,
+          não passo de assistente (ver o cabeçalho deste arquivo). */}
+      <ResumoDoEnvio pedido={pedidoDoResumo} />
 
       <div className="flex items-center justify-end gap-2">
         <Button variant="outline" onClick={() => router.push("/app/campaigns")}>

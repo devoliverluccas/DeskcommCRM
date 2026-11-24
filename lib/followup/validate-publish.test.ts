@@ -469,6 +469,9 @@ describe('validateFlowForPublish', () => {
         'collect',
         'skill',
         'action',
+        // 4.3 — a pergunta com opções fala com o cliente e o faz esperar.
+        'buttons',
+        'list',
       ]);
     });
   });

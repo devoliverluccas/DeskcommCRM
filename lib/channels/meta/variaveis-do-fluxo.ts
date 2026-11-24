@@ -76,6 +76,12 @@ export interface DadosParaVariaveis {
   nomeDoContato: string | null;
   /** `custom_fields` do negócio mais recente do contato. */
   camposDoNegocio: Record<string, unknown>;
+  /**
+   * Valores da empresa (`{{empresa.x}}`, fase 4). Sem o mapa, o parâmetro sai
+   * com o token e o ENVIO o troca (`lib/variaveis/no-envio.ts` alcança os
+   * `template_values`).
+   */
+  empresa?: Readonly<Record<string, string>>;
 }
 
 /** Variável que um fluxo consegue preencher: texto, no corpo ou no cabeçalho. */
@@ -124,6 +130,7 @@ export function valorDaFonte(fonte: FonteDeVariavel, dados: DadosParaVariaveis):
         {
           nome: nomeParaSaudar(dados.nomeDoContato),
           camposDoNegocio: dados.camposDoNegocio,
+          ...(dados.empresa !== undefined ? { empresa: { ...dados.empresa } } : {}),
         },
         { fonte: "fluxo", quandoVazio: "vazio" },
       );

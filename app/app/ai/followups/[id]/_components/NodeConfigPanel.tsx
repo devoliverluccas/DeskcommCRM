@@ -25,6 +25,7 @@ import { EditLeadTagForm } from "./forms/EditLeadTagForm";
 import { RepeatForm } from "./forms/RepeatForm";
 import { SkillForm } from "./forms/SkillForm";
 import { WaitForm } from "./forms/WaitForm";
+import { ButtonsForm, HandoffAiForm, ListForm, TransferForm, WebhookForm } from "./forms/MessageFlowForms";
 import type { ConfigOf } from "./forms/shared";
 import { NODE_VISUALS } from "./nodes/nodeVisuals";
 
@@ -171,6 +172,24 @@ export function NodeConfigPanel({
             onChange={(config) => onChange({ config })}
           />
         )}
+        {/* 4.3 — os nós de opções, webhook, transferir e passar para a IA. */}
+        {type === "buttons" && (
+          <ButtonsForm config={node.data.config as ConfigOf<"buttons">} onChange={(config) => onChange({ config })} />
+        )}
+        {type === "list" && (
+          <ListForm config={node.data.config as ConfigOf<"list">} onChange={(config) => onChange({ config })} />
+        )}
+        {type === "webhook" && (
+          <WebhookForm
+            config={node.data.config as ConfigOf<"webhook">}
+            onChange={(config) => onChange({ config })}
+            {...(flowId !== undefined ? { flowId } : {})}
+          />
+        )}
+        {type === "transfer" && (
+          <TransferForm config={node.data.config as ConfigOf<"transfer">} onChange={(config) => onChange({ config })} />
+        )}
+        {type === "handoff_ai" && <HandoffAiForm />}
         {type === "end" && (
           <EndForm
             config={node.data.config as ConfigOf<"end">}

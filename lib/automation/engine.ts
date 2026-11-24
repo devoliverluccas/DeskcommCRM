@@ -42,6 +42,12 @@ import {
 import { logger } from "@/lib/logger";
 import { lerEscolhaNoEnvio } from "@/lib/agenda/escolha-no-envio";
 import { ocultarProvaMetaNaResposta } from "@/lib/leads/prova-meta-lead-submitted";
+import {
+  EVENTO_DE_ORIGEM_DA_PALAVRA_CHAVE,
+  GATILHO_PALAVRA_CHAVE,
+  configDaPalavraChave,
+  palavraQueCasa,
+} from "@/lib/automation/gatilho-palavra-chave";
 
 export const AUTOMATION_CONSUMER_KEY = "automation-rules";
 
@@ -640,6 +646,62 @@ function detailDoBloqueio(motivos: readonly MotivoDoBloqueio[]): string {
   return motivos.includes("intervalo_por_contato") ? "intervalo_por_contato" : "uma_vez_por_contato";
 }
 
+/**
+ * AS REGRAS DE PALAVRA-CHAVE QUE ESTA MENSAGEM CASA (fase 4, 4.1).
+ *
+ * Só no `message.received` e só de mensagem `inbound` (o evento de origem já
+ * exclui grupo, reação e histórico importado; a direção é conferida de novo por
+ * defesa). A pergunta ao banco das regras vem primeiro: a instalação sem
+ * nenhuma regra de palavra-chave não ganha leitura de mensagem nenhuma.
+ *
+ * O texto é o CORPO da mensagem (o `body_preview` do evento corta em 280); sem
+ * conseguir lê-lo, o preview vale — fail-open no texto, como no resto do motor.
+ * Regra com configuração torta (gravada por outra porta) não casa nunca e não
+ * derruba as vizinhas.
+ */
+async function regrasDaPalavraChave(
+  admin: SupabaseClient,
+  row: EventRow,
+): Promise<{ regras: RuleRow[] } | { error: string }> {
+  if (row.event_type !== EVENTO_DE_ORIGEM_DA_PALAVRA_CHAVE) return { regras: [] };
+  if (row.payload?.direction !== undefined && row.payload.direction !== "inbound") return { regras: [] };
+  const { data, error } = await admin
+    .from("automation_rules")
+    .select("id, name, conditions, actions, trigger_config")
+    .eq("organization_id", row.organization_id)
+    .eq("trigger_event", GATILHO_PALAVRA_CHAVE)
+    .eq("is_active", true)
+    .order("created_at", { ascending: true });
+  if (error) return { error: error.message };
+  const candidatas = (data ?? []) as unknown as RuleRow[];
+  if (!candidatas.length) return { regras: [] };
+
+  let texto = typeof row.payload?.body_preview === "string" ? row.payload.body_preview : "";
+  const messageId =
+    row.entity_id ?? (typeof row.payload?.message_id === "string" ? row.payload.message_id : null);
+  if (messageId) {
+    try {
+      const { data: mensagem } = await admin
+        .from("messages")
+        .select("body")
+        .eq("id", messageId)
+        .eq("organization_id", row.organization_id)
+        .maybeSingle();
+      const corpo = (mensagem as { body?: unknown } | null)?.body;
+      if (typeof corpo === "string" && corpo.trim()) texto = corpo;
+    } catch {
+      // fica o preview do evento
+    }
+  }
+
+  return {
+    regras: candidatas.filter((regra) => {
+      const config = configDaPalavraChave(regra.trigger_config);
+      return config !== null && palavraQueCasa(texto, config) !== null;
+    }),
+  };
+}
+
 export async function runAutomationForEvent(
   admin: SupabaseClient,
   row: EventRow,
@@ -664,6 +726,13 @@ export async function runAutomationForEvent(
     return { consumer_key: AUTOMATION_CONSUMER_KEY, status: "skipped", detail: "contato_pessoal" };
   }
 
+  // O gatilho de palavra-chave é DERIVADO do `message.received` (fase 4, 4.1):
+  // uma linha `message.keyword` no `event_log` não passou pelo trigger da
+  // mensagem e não tem como provar que é do cliente — recusa nomeada.
+  if (row.event_type === GATILHO_PALAVRA_CHAVE) {
+    return { consumer_key: AUTOMATION_CONSUMER_KEY, status: "skipped", detail: "gatilho_derivado" };
+  }
+
   const { data: rules, error } = await admin
     .from("automation_rules")
     .select("id, name, conditions, actions, trigger_config")
@@ -674,7 +743,11 @@ export async function runAutomationForEvent(
   if (error) {
     return { consumer_key: AUTOMATION_CONSUMER_KEY, status: "error", detail: error.message };
   }
-  const todas = (rules ?? []) as unknown as RuleRow[];
+  const daPalavraChave = await regrasDaPalavraChave(admin, row);
+  if ("error" in daPalavraChave) {
+    return { consumer_key: AUTOMATION_CONSUMER_KEY, status: "error", detail: daPalavraChave.error };
+  }
+  const todas = [...((rules ?? []) as unknown as RuleRow[]), ...daPalavraChave.regras];
   if (!todas.length) {
     return { consumer_key: AUTOMATION_CONSUMER_KEY, status: "ok", detail: "no_rules" };
   }

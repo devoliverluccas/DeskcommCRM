@@ -25,7 +25,10 @@ export type ActionType =
   // #2642 — o único destino que não é o lead: a EQUIPE.
   | "notify_team"
   // #3881 — a automação escolhe a FILA da conversa (módulo `setores`).
-  | "define_sector";
+  | "define_sector"
+  // Fase 4 (4.1) — o mesmo silêncio da rota pause-ai, e a conversão pela regra.
+  | "pause_ai"
+  | "send_ad_conversion";
 
 export const TRIGGER_LABELS: Record<TriggerEvent, string> = {
   "lead.created": "Quando entrar um contato novo (webhook)",
@@ -40,6 +43,9 @@ export const TRIGGER_LABELS: Record<TriggerEvent, string> = {
   "lead.reopened": "Quando um lead encerrado for reaberto",
   "lead.assigned": "Quando o responsável do lead mudar",
   "message.received": "Quando chegar mensagem no WhatsApp",
+  // Fase 4 (4.1) — o gatilho derivado: a mesma mensagem recebida, só quando o
+  // texto traz uma das palavras da regra. As palavras ficam embaixo.
+  "message.keyword": "Quando chegar mensagem com palavra-chave",
   // A frase é do ponto de vista de quem RECEBE o aviso: a falha é do envio, e
   // é ela que manda o integrador verificar. "não for entregue" cobre os dois
   // caminhos que emitem (recusa da plataforma e pré-voo), sem prometer que a
@@ -111,6 +117,9 @@ export const ACTION_LABELS: Record<ActionType, string> = {
   // #3881 — a frase diz o que muda na operação (a conversa passa a ser
   // distribuída para quem atende aquele setor) e não fala em "sector_id".
   define_sector: "Definir o setor da conversa",
+  // Fase 4 (4.1) — as duas frases dizem o EFEITO, como as vizinhas.
+  pause_ai: "Pausar a IA nesta conversa",
+  send_ad_conversion: "Enviar conversão para plataforma de anúncio",
 };
 
 /**

@@ -39,6 +39,7 @@ import { avisoDePropostaNoWhatsAppHandler } from "@/lib/propostas/aviso-no-whats
 import { avisoDeAgendamentoNoWhatsAppHandler } from "@/lib/agenda/aviso-de-agendamento.handler";
 import { cobrancaSinalHandler } from "@/lib/cobranca/sinal.handler";
 import { reenvioDesaceleradoHandler } from "@/lib/messaging/reenvio-desacelerado.handler";
+import { pontuacaoPorRegraHandler } from "@/lib/leads/pontuacao-por-regra.handler";
 import { registerHandler } from "@/lib/event-log/dispatcher";
 
 let _registered = false;
@@ -95,6 +96,9 @@ export function ensureHandlersRegistered(): void {
   // Os consumidores dos canais (ex.: o pino que entrou sem coordenadas).
   for (const consumidor of CONSUMIDORES_DOS_CANAIS) registerHandler(consumidor);
   registerHandler(webPushInboundHandler);
+  // Pontos por regra (fase 4, 4.5): escrita interna no extrato, sem rede —
+  // fica antes de todo consumidor que sai por rede de terceiro.
+  registerHandler(pontuacaoPorRegraHandler);
   // A cobrança do revendedor: relê o provedor (rede de terceiro) e só então
   // escreve. Consome um evento só dela, então a posição não atrasa ninguém.
   registerHandler(cobrancaSinalHandler);

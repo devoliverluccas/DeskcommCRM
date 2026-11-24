@@ -19,6 +19,13 @@
  * pela API) entra aqui como uma ação opaca: o desenho o mostra, mantém a
  * posição dele na fila e o devolve byte a byte, sem editar.
  */
+import {
+  GATILHO_PALAVRA_CHAVE,
+  TELA_DA_PALAVRA_CHAVE_VAZIA,
+  configDaTelaDaPalavraChave,
+  telaDaPalavraChave,
+  type TelaDaPalavraChave,
+} from "@/lib/automation/gatilho-palavra-chave";
 import { configAoSalvarDaTela } from "@/lib/automation/config-ao-salvar";
 import { horasDoIntervaloDaTela, horasDoIntervaloNaConfig } from "@/lib/automation/limite-por-contato";
 import {
@@ -129,6 +136,11 @@ export type TelaDoGatilho = {
   repetirAposHoras: string;
   data: { pipeline_id: string; campo: string; dias: string };
   tempo: { dias: string; direcao: DirecaoDoSilencio; proteger_pela_agenda: boolean };
+  /**
+   * Fase 4 (4.1) — o gatilho de palavra-chave: as palavras como TEXTO, o modo e
+   * o acento. Opcional porque o desenho de antes não o tinha; ausente lê como vazio.
+   */
+  palavraChave?: TelaDaPalavraChave;
 };
 
 export type AcaoDaRegra = { type: string; config: Record<string, unknown> };
@@ -266,6 +278,7 @@ export function telaDoGatilho(config: unknown): TelaDoGatilho {
     data: data
       ? { pipeline_id: data.pipeline_id, campo: data.campo, dias: String(data.dias) }
       : { pipeline_id: "", campo: "", dias: DIAS_PADRAO },
+    palavraChave: telaDaPalavraChave(config),
     tempo: {
       dias: tempo ? String(tempo.dias) : DIAS_PADRAO,
       direcao: silencio ? silencio.direcao : "da_equipe",
@@ -306,6 +319,13 @@ export function triggerConfigDaTela(
         ...(evento === GATILHO_SILENCIO ? { direcao: tela.tempo.direcao } : {}),
         proteger_pela_agenda: tela.tempo.proteger_pela_agenda,
       },
+    });
+  }
+  if (evento === GATILHO_PALAVRA_CHAVE) {
+    // A mesma montagem da gaveta (`RuleEditor`): o merge preserva o que só a API grava.
+    return configAoSalvarDaTela({
+      ...base,
+      configDaTela: { ...configDaTelaDaPalavraChave(tela.palavraChave ?? TELA_DA_PALAVRA_CHAVE_VAZIA) },
     });
   }
   if (evento === "lead.created") {

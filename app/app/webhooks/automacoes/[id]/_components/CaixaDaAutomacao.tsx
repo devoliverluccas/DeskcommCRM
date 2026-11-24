@@ -22,6 +22,7 @@ import { CURATED_FIELDS, OP_LABELS, type CuratedField, type Op } from "@/app/app
 import { valorDaCondicaoNaTela } from "@/app/app/webhooks/_components/CondicaoDoContato";
 import { CONDICOES_DO_CONTATO } from "@/lib/automation/conditions";
 import { ACTION_LABELS, TRIGGER_LABELS, type ActionType, type TriggerEvent } from "@/app/app/webhooks/_components/labels";
+import { ROTULOS_DA_CONVERSAO_NA_AUTOMACAO } from "@/lib/automation/conversao-pela-automacao";
 
 import { VISUAL_DAS_CONDICOES, VISUAL_DO_GATILHO, visualDaAcao } from "./visual";
 import { rotuloDoMembro } from "@/lib/users/rotulo-do-atendente";
@@ -196,6 +197,12 @@ function DescricaoDaAcao({ tipo, config }: { tipo: string; config: Record<string
     // #3881 — mesmo defeito: sem caso, a caixa dizia « define_sector ».
     case "define_sector":
       return <DescricaoDoSetor config={config} />;
+    case "pause_ai":
+      return <>{t("Na conversa do evento")}</>;
+    case "send_ad_conversion": {
+      const evento = ROTULOS_DA_CONVERSAO_NA_AUTOMACAO.find((e) => e.valor === config.evento);
+      return <>{evento ? t(evento.rotulo) : t("Escolha o evento")}</>;
+    }
   }
   return <>{tipo}</>;
 }

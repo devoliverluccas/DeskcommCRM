@@ -99,10 +99,18 @@ describe("Composer — o microfone só onde a nota de voz chega", () => {
 });
 
 describe("Inbox — a prop vem da capability da conversa aberta", () => {
-  it("o InboxLayout passa recusaNotaDeVoz(provider da conversa) ao Composer", () => {
+  // A decisão mudou de casa (fase 1, item 1.4): `lib/inbox/estado-do-compositor.ts`
+  // decide para o Inbox E para o dossiê do funil. A cerca vigia as duas pontas:
+  // o estado pergunta à matriz pelo provider da conversa, e o InboxLayout passa
+  // ESSE valor ao Composer.
+  it("o estado do compositor pergunta recusaNotaDeVoz(provider da conversa)", () => {
+    const fonte = readFileSync(join(process.cwd(), "lib/inbox/estado-do-compositor.ts"), "utf8");
+    expect(fonte).toMatch(/recusaNotaDeVoz: canalRecusaNotaDeVoz\(provider\)/);
+    expect(fonte).toMatch(/const provider = conversa\?\.channel_sessions\?\.provider/);
+  });
+
+  it("o InboxLayout passa o recusaNotaDeVoz do estado ao Composer", () => {
     const fonte = readFileSync(join(process.cwd(), "components/inbox/InboxLayout.tsx"), "utf8");
-    expect(fonte).toMatch(
-      /recusaNotaDeVoz=\{recusaNotaDeVoz\(selectedConversation\.channel_sessions\?\.provider\)\}/,
-    );
+    expect(fonte).toMatch(/recusaNotaDeVoz=\{compositor\.recusaNotaDeVoz\}/);
   });
 });

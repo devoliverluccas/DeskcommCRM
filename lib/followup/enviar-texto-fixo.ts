@@ -382,7 +382,10 @@ export async function enviarTextoFixoPendente(
         // (imagem × PDF). Sem mídia: `type: "text"`, como sempre saiu daqui.
         (midia
           ? {conversation_id:conversationId,type:midia.type,body,media_url:mediaUrl,media_mime:midia.mime,metadata:{idempotency_key:key}}
-          : {conversation_id:conversationId,type:"text",body,metadata:{idempotency_key:key}}) as Parameters<typeof sendMessageHandler>[2],
+          // 4.3 — Botões/Lista: o `body` é o texto numerado; o desenho vai no
+          // `metadata.interativo`, e só o canal com a capability o desenha
+          // (`interativoParaOCanal`, lib/channels/interativo.ts).
+          : {conversation_id:conversationId,type:"text",body,metadata:{idempotency_key:key,...(payload.fixed_interativo?{interativo:payload.fixed_interativo}:{})}}) as Parameters<typeof sendMessageHandler>[2],
       ));
       if(resultado.kind!=="sent" && resultado.kind!=="already_sent") throw new Error(`message_${resultado.kind}`);
       // CONTABILIZA. Sem esta linha o envio não entrava no `pacing_ledger` e o

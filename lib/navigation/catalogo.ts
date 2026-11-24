@@ -1150,6 +1150,41 @@ export const NAV_CATALOG = [
     minRole: "manager",
   },
   {
+    // Fase 4, item 4.5 (migration 9492): as regras que dão PONTOS ao contato
+    // quando um fato acontece. O número aparece na ficha do negócio, ao lado do
+    // score, com o extrato. `manager`, como os motivos: as rotas cobram `manager`.
+    href: "/app/settings/pontuacao",
+    label: "Pontuação do lead",
+    description: "Quantos pontos vale cada resposta, agendamento, orçamento, etapa ou tag.",
+    icon: "Gauge",
+    group: "organizacao",
+    section: "Sua empresa",
+    minRole: "manager",
+  },
+  {
+    // Fase 4, item 4.6 (migration 9491): o PIX, o endereço, o horário — textos
+    // da empresa que viram `{{empresa.<chave>}}` em qualquer mensagem.
+    // `manager`: as rotas que gravam cobram `manager` pelo papel nesta organização.
+    href: "/app/settings/valores-personalizados",
+    label: "Valores personalizados",
+    description: "PIX, endereço, horário: textos da empresa que entram nas mensagens como {{empresa.chave}}.",
+    icon: "ClipboardText",
+    group: "organizacao",
+    section: "Sua empresa",
+    minRole: "manager",
+  },
+  {
+    // Fase 4, item 4.4 (migration 9490): quem abriu o link que a empresa mandou
+    // (`{{link:https://…}}`). `manager`, como a rota: a lista diz quem abriu o quê.
+    href: "/app/settings/links-de-saida",
+    label: "Links de saída",
+    description: "Os links curtos que saíram nas mensagens e quem clicou, por campanha e por contato.",
+    icon: "PaperPlaneTilt",
+    group: "organizacao",
+    section: "Sua empresa",
+    minRole: "manager",
+  },
+  {
     // A área única dos recursos opcionais (pedido do mantenedor, doc 73/80):
     // tudo o que a empresa pode ligar, com o estado e o caminho até a tela onde
     // se liga. Só leitura — quem liga continua sendo a tela do assunto.
@@ -1188,6 +1223,27 @@ export const NAV_CATALOG = [
     // `admin` pelo mesmo critério das vizinhas: o token grava na conta de
     // anúncios da empresa, e quem o troca decide para onde vai o dinheiro de
     // mídia. Um `manager` ficaria acima de billing na mesma prancheta.
+    minRole: "admin",
+  },
+  {
+    // GA4 e TikTok (9488): sub-telas de Conversões, com porta própria ao lado
+    // dela. Mesma natureza e mesmo piso `admin`: o segredo grava conversões na
+    // conta da empresa.
+    href: "/app/settings/conversoes/ga4",
+    label: "Google Analytics 4",
+    description: "Mandar vendas e leads para o GA4 pelo Measurement Protocol.",
+    icon: "ChartBar",
+    group: "organizacao",
+    section: "Sua empresa",
+    minRole: "admin",
+  },
+  {
+    href: "/app/settings/conversoes/tiktok",
+    label: "TikTok Ads",
+    description: "Devolver ao TikTok as vendas e os leads que os anúncios trouxeram.",
+    icon: "Megaphone",
+    group: "organizacao",
+    section: "Sua empresa",
     minRole: "admin",
   },
   {

@@ -80,7 +80,10 @@ const DADO_GRAVADO_EM_PORTUGUES = ["Cliente Anonimizado #N"];
 
 /** As palavras em português que a tradução carrega sem serem nome próprio nem dado citado. */
 function sobraDePortugues(valor: string): string[] {
-  const semDado = DADO_GRAVADO_EM_PORTUGUES.reduce((texto, dado) => texto.split(dado).join(" "), valor);
+  // `{{empresa.chave}}`, `{{link:...}}`: é SINTAXE que a pessoa digita igual em
+  // qualquer idioma (o resolvedor só entende o token em português), não prosa.
+  const semToken = valor.replace(/{{[^}]*}}/g, " ");
+  const semDado = DADO_GRAVADO_EM_PORTUGUES.reduce((texto, dado) => texto.split(dado).join(" "), semToken);
   return palavras(semDado).filter(
     (palavra) =>
       (LETRA_DO_PORTUGUES.test(palavra) && !NOMES_PROPRIOS_COM_ACENTO.has(palavra)) ||

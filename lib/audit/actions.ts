@@ -454,6 +454,9 @@ export const AUDIT_ACTIONS = [
   "automation.rule_deleted",
   "automation.rule_executed",
   "automation.run_resent",
+  // Fase 4 (4.1) — o "Testar" do editor: a regra simulada contra um contato,
+  // SEM efeito. A única escrita da rota é esta linha (quem testou o quê).
+  "automation.rule_tested",
   "ai.skill_imported",
   "ai.skill_installed",
   "ai.skill_uninstalled",
@@ -649,6 +652,9 @@ export const AUDIT_ACTIONS = [
   // O `metadata` carrega o dataset (identificador, não segredo) e um booleano
   // dizendo se o token foi trocado. O token, nem em metadata.
   "ad_platform_connection.updated",
+  // "Testar conexão" do GA4/TikTok (9488): fala com a conta da empresa (o
+  // TikTok recebe um evento de teste), então tem dono na trilha.
+  "ad_platform_connection.tested",
   "ad_conversion.retry_requested",
   // O que cada etapa do funil informa ao Google Ads (0436) e a ação de
   // conversão criada NA CONTA do cliente pela tela. A segunda escreve na conta
@@ -1659,6 +1665,12 @@ export const AUDIT_ACTIONS = [
   "motivo_de_encerramento.criado",
   "motivo_de_encerramento.alterado",
   "settings.motivo_obrigatorio_alterado",
+  // Pontuação do lead por regra (fase 4, item 4.5, migration 9492): criar e
+  // alterar uma regra (nome, condição, pontos, teto, ativo). Metadata leva o
+  // evento, os pontos e os campos mudados — configuração, nunca dado do contato.
+  // O extrato em si não audita: cada linha dele JÁ é o registro do fato.
+  "pontuacao.regra_criada",
+  "pontuacao.regra_alterada",
   "demanda.motivo_registrado",
   // SLA do atendimento (fase 3, item 3.3, migration 9483): um gestor tira UMA
   // conversa da conta do SLA, ou a devolve; e as metas da organização mudam em
@@ -1679,6 +1691,12 @@ export const AUDIT_ACTIONS = [
   "feriados.nacionais_importados",
   "conversation.encerrada_por_inatividade",
   "settings.encerrar_inativas_alterada",
+  // Valores personalizados da empresa (fase 4, item 4.6, migration 9491):
+  // `{{empresa.<chave>}}`. Metadata leva só a CHAVE (e os campos alterados) —
+  // nunca o valor, que pode ser conta ou PIX da empresa.
+  "valor_personalizado.criado",
+  "valor_personalizado.alterado",
+  "valor_personalizado.removido",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

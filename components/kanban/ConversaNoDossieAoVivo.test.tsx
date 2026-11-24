@@ -64,6 +64,7 @@ import { AuthProvider } from "@/hooks/auth/AuthProvider";
 import { ApiError } from "@/lib/api/types";
 import type { ActiveOrg, AuthUser } from "@/lib/auth/types";
 import { ConversaNoDossieAoVivo } from "./ConversaNoDossieAoVivo";
+import { DEFAULT_CHANNEL_PROVIDER, CHANNEL_PROVIDER_META } from "@/lib/channels/capabilities";
 
 // jsdom: o fio mede a rolagem e acompanha o fim.
 window.HTMLElement.prototype.scrollIntoView ??= () => undefined;
@@ -119,7 +120,7 @@ function conversaCompleta(over: Record<string, unknown> = {}) {
       is_anonymized: false,
       is_personal: false,
     },
-    channel_sessions: { provider: "waha" },
+    channel_sessions: { provider: DEFAULT_CHANNEL_PROVIDER },
     ...over,
   };
 }
@@ -208,7 +209,7 @@ describe("a caixa travada mostra o motivo", () => {
   it("janela de 24h fechada no canal oficial: o motivo aparece e a resposta trava", async () => {
     responder(
       conversaCompleta({
-        channel_sessions: { provider: "meta_cloud" },
+        channel_sessions: { provider: CHANNEL_PROVIDER_META },
         last_inbound_at: new Date(Date.now() - 30 * 3_600_000).toISOString(),
       }),
     );

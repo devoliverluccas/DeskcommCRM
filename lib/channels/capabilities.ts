@@ -41,6 +41,9 @@ export const CHANNEL_CAPABILITIES: Record<ProviderDeMensagem, ChannelCapabilitie
     // Sem ponte de conversão: a venda desta linha sai pela conexão direta com a Meta
     // (conjunto de dados + token). Declarar `true` ofereceria uma chave que não envia nada.
     reportaConversao: false,
+    // O botão de resposta do WhatsApp por QR não é estável (o app descarta o
+    // tipo em versões recentes): o fluxo manda o texto numerado, que chega sempre.
+    mensagemInterativa: false,
   },
   // Hetero-restrição: não me banem, mas a Meta me proíbe e me cobra.
   meta_cloud: {
@@ -67,6 +70,9 @@ export const CHANNEL_CAPABILITIES: Record<ProviderDeMensagem, ChannelCapabilitie
     // Sem ponte de conversão: a venda desta linha sai pela conexão direta com a Meta
     // (conjunto de dados + token). Declarar `true` ofereceria uma chave que não envia nada.
     reportaConversao: false,
+    // A Cloud API desenha botões de resposta (até 3) e lista (até 10 linhas) e
+    // devolve o id do botão tocado no webhook (`interactive.button_reply`).
+    mensagemInterativa: true,
   },
   // Mesma hetero-restrição do canal oficial, por baixo: é um BSP: a WABA é da
   // Meta, os templates são aprovados pela Meta e a janela de 24h é da Meta. O
@@ -128,6 +134,8 @@ export const CHANNEL_CAPABILITIES: Record<ProviderDeMensagem, ChannelCapabilitie
     // Sem ponte de conversão: a venda desta linha sai pela conexão direta com a Meta
     // (conjunto de dados + token). Declarar `true` ofereceria uma chave que não envia nada.
     reportaConversao: false,
+    // O provedor não documenta botão de resposta nas DMs: texto numerado.
+    mensagemInterativa: false,
   },
   zernio: {
     freeformOutsideWindow: false,
@@ -155,6 +163,8 @@ export const CHANNEL_CAPABILITIES: Record<ProviderDeMensagem, ChannelCapabilitie
     // O provedor tem a ponte: reporta a venda ao conjunto de dados da Meta pela
     // conversa (`reportConversion` no adapter, `../zernio/conversoes.ts`).
     reportaConversao: true,
+    // O provedor não expõe o corpo `interactive` no envio: texto numerado.
+    mensagemInterativa: false,
   },
   // Parceiro homologado pela Meta que espelha a Cloud API (recorte do #1130):
   // a WABA, a janela de 24h e o custo são da Meta. O parceiro muda o TRANSPORTE
@@ -187,6 +197,9 @@ export const CHANNEL_CAPABILITIES: Record<ProviderDeMensagem, ChannelCapabilitie
     // Sem ponte de conversão: a venda desta linha sai pela conexão direta com a Meta
     // (conjunto de dados + token). Declarar `true` ofereceria uma chave que não envia nada.
     reportaConversao: false,
+    // Espelha a Cloud API, mas o envio interativo não foi medido no parceiro:
+    // até ser, o fluxo manda o texto numerado (`corpoInterativoDaCloudApi` está pronta).
+    mensagemInterativa: false,
   },
   /**
    * Bot do Telegram (Bot API, o robô do @BotFather — issue #3440).
@@ -241,6 +254,8 @@ export const CHANNEL_CAPABILITIES: Record<ProviderDeMensagem, ChannelCapabilitie
     // A conversão de venda volta à Meta pela conversa de WhatsApp; o robô do
     // Telegram não tem ponte, e `true` ofereceria uma chave que não envia nada.
     reportaConversao: false,
+    // A Bot API tem teclado inline, e o adapter da v1 não o implementa.
+    mensagemInterativa: false,
   },
 };
 

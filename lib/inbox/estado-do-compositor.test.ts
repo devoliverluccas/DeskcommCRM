@@ -4,6 +4,7 @@ import { recusaNotaDeVoz } from "@/lib/channels/capabilities";
 import { estadoDaJanela } from "@/lib/channels/janela";
 import { composerBloqueadoAteAssumir } from "@/lib/inbox/bloqueio-ate-assumir";
 import { motivoDaJanelaFechada, motivoDoContato } from "@/lib/inbox/motivo-do-envio-bloqueado";
+import { DEFAULT_CHANNEL_PROVIDER, CHANNEL_PROVIDER_META, CHANNEL_PROVIDER_SOCIAL, CHANNEL_PROVIDER_TELEGRAM } from "@/lib/channels/capabilities";
 
 import {
   estadoDoCompositor,
@@ -32,7 +33,7 @@ function conversa(over: Partial<ConversaDoCompositor> = {}): ConversaDoComposito
     last_inbound_at: HA(1),
     channel_session_id: "sess-1",
     contacts: { id: "c-1", is_blocked: false, is_anonymized: false },
-    channel_sessions: { provider: "waha" },
+    channel_sessions: { provider: DEFAULT_CHANNEL_PROVIDER },
     ...over,
   };
 }
@@ -68,7 +69,7 @@ describe("conversa comum, nada barra", () => {
 describe("a janela de 24h", () => {
   it("canal oficial com o cliente escrevendo há 30h: fechada, com o motivo do modelo", () => {
     const e = estadoDoCompositor(
-      entrada({ conversa: conversa({ channel_sessions: { provider: "meta_cloud" }, last_inbound_at: HA(30) }) }),
+      entrada({ conversa: conversa({ channel_sessions: { provider: CHANNEL_PROVIDER_META }, last_inbound_at: HA(30) }) }),
     );
     expect(e.janela.tipo).toBe("fechada");
     expect(e.janelaFechada).toContain("«A janela de 24h fechou há»");
@@ -80,7 +81,7 @@ describe("a janela de 24h", () => {
 
   it("canal oficial em que o cliente nunca escreveu: fechada, 'nunca abriu'", () => {
     const e = estadoDoCompositor(
-      entrada({ conversa: conversa({ channel_sessions: { provider: "meta_cloud" }, last_inbound_at: null }) }),
+      entrada({ conversa: conversa({ channel_sessions: { provider: CHANNEL_PROVIDER_META }, last_inbound_at: null }) }),
     );
     expect(e.janelaFechada).toBe(
       "«O cliente ainda não escreveu — a janela de 24h nunca abriu. Só um modelo aprovado sai daqui.»",
@@ -89,7 +90,7 @@ describe("a janela de 24h", () => {
 
   it("canal oficial dentro das 24h: aberta, sem motivo", () => {
     const e = estadoDoCompositor(
-      entrada({ conversa: conversa({ channel_sessions: { provider: "meta_cloud" }, last_inbound_at: HA(2) }) }),
+      entrada({ conversa: conversa({ channel_sessions: { provider: CHANNEL_PROVIDER_META }, last_inbound_at: HA(2) }) }),
     );
     expect(e.janela.tipo).toBe("aberta");
     expect(e.janelaFechada).toBeNull();
@@ -97,7 +98,7 @@ describe("a janela de 24h", () => {
 
   it("rede social fechada: o motivo é esperar o cliente, não modelo", () => {
     const e = estadoDoCompositor(
-      entrada({ conversa: conversa({ channel_sessions: { provider: "zernio_social" }, last_inbound_at: HA(48) }) }),
+      entrada({ conversa: conversa({ channel_sessions: { provider: CHANNEL_PROVIDER_SOCIAL }, last_inbound_at: HA(48) }) }),
     );
     expect(e.janelaFechada).toBe(
       "«Aguarde uma nova mensagem do cliente para reabrir o atendimento nesta rede.»",
@@ -196,7 +197,7 @@ describe("a trava até assumir (#3012)", () => {
 describe("o canal e os recursos", () => {
   it("rede social recusa a nota de voz", () => {
     const e = estadoDoCompositor(
-      entrada({ conversa: conversa({ channel_sessions: { provider: "zernio_social" } }) }),
+      entrada({ conversa: conversa({ channel_sessions: { provider: CHANNEL_PROVIDER_SOCIAL } }) }),
     );
     expect(e.recusaNotaDeVoz).toBe(true);
   });
@@ -252,7 +253,7 @@ function comoOInboxDecide(e: EntradaDoCompositor) {
 
 describe("paridade com o InboxLayout", () => {
   it("dá o MESMO resultado numa matriz de estados", () => {
-    const providers = ["waha", "meta_cloud", "zernio_social", "telegram", null];
+    const providers = [DEFAULT_CHANNEL_PROVIDER, CHANNEL_PROVIDER_META, CHANNEL_PROVIDER_SOCIAL, CHANNEL_PROVIDER_TELEGRAM, null];
     const entradas = [null, HA(1), HA(30)];
     const donos = [null, EU, OUTRO];
     const status = ["open", "closed", "archived"];

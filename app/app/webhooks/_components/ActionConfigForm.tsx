@@ -44,6 +44,8 @@ import {
 import type { PlanoDeTarefas } from "@/lib/tarefas/plano";
 import { CaretDown, CaretUp, Pause, Play, X } from "@/lib/ui/icons";
 import { rotuloDoMembro } from "@/lib/users/rotulo-do-atendente";
+import type { EventoDaConversaoNaAutomacao } from "@/lib/automation/conversao-pela-automacao";
+import { EnviarConversaoForm, PausarIaForm } from "./AcoesDaPausaEDaConversao";
 import {
   CAMPOS_DE_ETIQUETA_GOOGLE_ADS,
   ROTULOS_DE_ETIQUETA_GOOGLE_ADS,
@@ -191,7 +193,10 @@ export type ActionItem =
   // #3881 — a conversa vai para um SETOR. Mesmos campos do schema da API: o
   // setor escolhido e a caixa (desligada por padrão) que autoriza a regra a
   // reclassificar o que uma pessoa classificou à mão.
-  | { type: "define_sector"; config: { sector_id: string; sobrescrever_setor_manual?: boolean } };
+  | { type: "define_sector"; config: { sector_id: string; sobrescrever_setor_manual?: boolean } }
+  // Fase 4 (4.1) — mesmos campos do schema da API.
+  | { type: "pause_ai"; config: Record<string, never> }
+  | { type: "send_ad_conversion"; config: { evento: EventoDaConversaoNaAutomacao | "" } };
 
 export function defaultActionConfig(type: ActionItem["type"]): ActionItem {
   switch (type) {
@@ -248,6 +253,11 @@ export function defaultActionConfig(type: ActionItem["type"]): ActionItem {
     // disparo (`sector_id_ausente`) em vez de gravar qualquer coisa.
     case "define_sector":
       return { type, config: { sector_id: "" } };
+    // Fase 4 (4.1) — a pausa não tem o que escolher; a conversão nasce sem evento.
+    case "pause_ai":
+      return { type, config: {} };
+    case "send_ad_conversion":
+      return { type, config: { evento: "" } };
   }
 }
 
@@ -1942,6 +1952,15 @@ export function ActionConfigForm({
     case "define_sector":
       return (
         <DefineSectorForm
+          config={action.config}
+          onChange={(config) => onChange({ type: action.type, config })}
+        />
+      );
+    case "pause_ai":
+      return <PausarIaForm />;
+    case "send_ad_conversion":
+      return (
+        <EnviarConversaoForm
           config={action.config}
           onChange={(config) => onChange({ type: action.type, config })}
         />

@@ -23,6 +23,7 @@ import { ConversasDosNumeros } from "./ConversasDosNumeros";
 import { LeadFieldsForm, type ControleDosCamposDoNegocio } from "./LeadFieldsForm";
 import { RevisaoDoDocumento } from "./RevisaoDoDocumento";
 import { ScoreSlot } from "./ScoreSlot";
+import { PontosDoContato } from "@/components/pontuacao/PontosDoContato";
 import { LeadTimeline } from "./LeadTimeline";
 import { PropostasDoNegocio } from "./PropostasDoNegocio";
 import { TarefasDoNegocio } from "./TarefasDoNegocio";
@@ -296,6 +297,10 @@ export function LeadDossier({
           factors={score.factors.slice(0, 3)}
         />
       )}
+      {/* Os PONTOS das regras da organização (fase 4, 4.5), AO LADO do score e
+          nunca dentro dele: o score é a probabilidade, os pontos são o que a
+          organização decidiu valorizar. Sem regra nem extrato, não desenha. */}
+      <PontosDoContato contactId={lead.contact_id} />
 
       <button
         type="button"

@@ -27,10 +27,21 @@ export const CONTEXTO_DE_EXEMPLO: ContextoDeVariaveis = {
   camposDoContato: { link_previa: "https://loja.exemplo/previa/ana" },
 };
 
-/** A frase como ela sairia para o contato de exemplo, nesta fonte. */
-export function previaDoTexto(texto: string, fonte: Resolvedor): string {
-  return resolverVariaveis(texto, CONTEXTO_DE_EXEMPLO, {
-    fonte,
-    quandoVazio: "literal",
-  }).texto;
+/**
+ * A frase como ela sairia para o contato de exemplo, nesta fonte.
+ *
+ * `empresa` são os valores REAIS da organização (`{{empresa.pix}}`, migration
+ * 9491) — não há exemplo inventado para eles: sem o mapa o token fica como foi
+ * escrito, porque quem o resolve é o envio, com o valor que estiver salvo lá.
+ */
+export function previaDoTexto(
+  texto: string,
+  fonte: Resolvedor,
+  empresa?: Readonly<Record<string, string>>,
+): string {
+  return resolverVariaveis(
+    texto,
+    empresa === undefined ? CONTEXTO_DE_EXEMPLO : { ...CONTEXTO_DE_EXEMPLO, empresa: { ...empresa } },
+    { fonte, quandoVazio: "literal" },
+  ).texto;
 }

@@ -86,8 +86,10 @@ import { nomeDoAgenteDeIA } from "@/lib/messaging/nome-do-agente-de-ia";
 import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
 import { nomesDosAtendentes } from "@/lib/users/nome-do-atendente";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { conteudoPrecisaDoEnvio, resolverNoEnvio } from "@/lib/variaveis/no-envio";
 import { enderecoDaUltimaRecebida } from "@/lib/channels/endereco-da-ultima-recebida";
 import type { Message } from "@/lib/types/messaging";
+import { interativoParaOCanal } from "@/lib/channels/interativo";
 
 type SB = SupabaseClient;
 
@@ -807,6 +809,19 @@ export async function sendMessageHandler(
     }
   }
 
+  // ─── `{{empresa.*}}` e `{{link:…}}` (fase 4, itens 4.4 e 4.6) ──────────────
+  // O que só o ENVIO sabe resolver: o valor da empresa salvo agora e o link
+  // curto deste contato. Antes da linha nascer, para `messages.body` guardar o
+  // que o cliente recebeu. Sem marcação, `input` volta intacto e nada é lido.
+  // Service role com a organização do CONTEXTO: a sessão não escreve link.
+  if (input.type !== "contact" && conteudoPrecisaDoEnvio(input) && isServiceRoleConfigured()) {
+    input = await resolverNoEnvio(
+      createAdminClient(),
+      { organizationId: ctx.organization_id, contactId: c.is_group ? null : c.contact_id },
+      input,
+    );
+  }
+
   let outboundBody = input.body ?? null;
   let outboundMetadata: Record<string, unknown> = { ...(input.metadata ?? {}) };
 
@@ -1468,6 +1483,9 @@ export async function sendMessageHandler(
           kind: input.type,
           body: corpoDoCanal(input.body ?? "") ?? "",
           replyToExternalId: citada?.external_id ?? null,
+          // Botões/lista do fluxo (fase 4, item 4.3): só o canal que DECLARA a
+          // capacidade os recebe; nos demais o `body` já é o texto numerado.
+          interativo: interativoParaOCanal(c.channel_sessions?.provider, input.metadata?.interativo),
         }));
       }
 

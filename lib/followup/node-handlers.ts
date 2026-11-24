@@ -4,7 +4,15 @@ import type { ServiceBoundary } from "@/lib/atendimento/fronteira";
  * `engine.ts` owns the tick/DB orchestration; this file only decides "given
  * this node + these facts, what happens next" so it's testable without Postgres.
  */
-import { NO_REPLY_BRANCH_ID, REPEAT_BODY_BRANCH_ID, REPEAT_DONE_BRANCH_ID, nodeBranches } from "./graph-schema";
+import {
+  NO_REPLY_BRANCH_ID,
+  REPEAT_BODY_BRANCH_ID,
+  REPEAT_DONE_BRANCH_ID,
+  WEBHOOK_ERROR_BRANCH_ID,
+  WEBHOOK_OK_BRANCH_ID,
+  nodeBranches,
+} from "./graph-schema";
+import { casarOpcaoInterativa } from "@/lib/channels/interativo";
 import type { FlowEdge, FlowNode, ReplySaveTo } from "./graph-schema";
 import { avaliarDataRelativa, ehOpDeData, type OpDeData } from "./condicao-por-data";
 import { parseReplyCount } from "./parse-count";
@@ -227,6 +235,9 @@ export function atrasoDoRecheck(rechecksJaFeitos: number): number {
  * (`action_turn_never_completed`) enquanto o envio ainda ia acontecer.
  */
 export const EVENTO_ACAO_ADIADA = "action_deferred";
+
+/** O motivo gravado na inscrição que terminou num nó "Passar para a IA". */
+export const MOTIVO_PASSOU_PARA_A_IA = "Passou para a IA";
 
 /**
  * O turno de classificar rodou e o cliente ainda não tinha respondido ao envio
@@ -616,6 +627,12 @@ export function processNode(input: {
   repeatTotal?: number | null;
   /** Próximo nó pela aresta `always` — a ação olha o `match_reply` seguinte para pular o envio. */
   proximo?: FlowNode | null;
+  /**
+   * `webhook`: o desfecho da chamada, feita pelo motor ANTES desta decisão
+   * (`webhook-do-fluxo.ts`). Ausente = a chamada não aconteceu, e isso é erro:
+   * o nó nunca segue por "Sucesso" sem um 2xx de verdade.
+   */
+  webhookResultado?: "ok" | "erro";
 }): NodeResult {
   const {
     node,
@@ -635,6 +652,7 @@ export function processNode(input: {
     repeatTaken,
     repeatTotal,
     proximo,
+    webhookResultado,
   } = input;
 
   switch (node.type) {
@@ -973,6 +991,85 @@ export function processNode(input: {
       if (!edge) return { kind: "fail", error: `edit_lead_tag node "${node.id}" has no outbound edge` };
       return { kind: "advance", next_node_id: edge.target, next_eval_at: clock() };
     }
+
+    case "buttons":
+    case "list": {
+      // 1ª entrada: manda a pergunta com as opções e estaciona esperando a
+      // resposta — o mesmo `waiting_reply` do `match_reply` de confirmação. O
+      // texto (numerado) e o desenho dos botões saem de `turnPayloadExtras`
+      // no motor, que tem o contexto do contato para as variáveis.
+      if (!waitElapsed && !wokeEarly) {
+        return { kind: "enqueue_turn", purpose: "send_message", wake_status: "waiting_reply" };
+      }
+      if (wokeEarly) {
+        const body = (lastInboundBody ?? "").trim();
+        // Acordou sem texto desta pergunta (reação, figurinha): continua
+        // esperando, como o `match_reply` — nunca conta como "Sem resposta".
+        if (!body) {
+          if (!waitElapsed) {
+            return {
+              kind: "wait",
+              next_eval_at: new Date(clock().getTime() + node.config.grace_timeout_ms),
+              wake_status: "waiting_reply",
+            };
+          }
+        } else {
+          const escolhida = casarOpcaoInterativa(
+            node.config.options.map((o) => ({ id: o.id, rotulo: o.label })),
+            body,
+          );
+          const edge =
+            escolhida !== null
+              ? selectEdge(edges, node.id, { type: "branch", branch_id: escolhida })
+              : selectEdge(edges, node.id, { type: "always" });
+          if (!edge) {
+            return {
+              kind: "fail",
+              error: `${node.type} node "${node.id}" has no edge for option "${escolhida ?? "else"}" (fallback also missing)`,
+            };
+          }
+          return {
+            kind: "advance",
+            next_node_id: edge.target,
+            next_eval_at: clock(),
+            // O RÓTULO vai como desfecho do passo (`ultimoDesfechoDe`): é o que a
+            // condição "Desfecho do passo anterior" compara, e é o que a pessoa
+            // escreveu na opção — o id é opaco.
+            ...(escolhida !== null
+              ? { class: node.config.options.find((o) => o.id === escolhida)?.label ?? escolhida }
+              : {}),
+          };
+        }
+      }
+      const edge = selectEdge(edges, node.id, { type: "branch", branch_id: NO_REPLY_BRANCH_ID });
+      if (!edge) {
+        return { kind: "fail", error: `${node.type} node "${node.id}" has no edge for "no_reply" (fallback also missing)` };
+      }
+      return { kind: "advance", next_node_id: edge.target, next_eval_at: clock(), class: NO_REPLY_BRANCH_ID };
+    }
+
+    case "webhook": {
+      // A chamada já aconteceu (o motor a faz antes de decidir); aqui só se
+      // escolhe a saída. Falha NUNCA segura o fluxo: segue por "Erro", e sem
+      // aresta de erro, pelo escape.
+      const ramo = webhookResultado === "ok" ? WEBHOOK_OK_BRANCH_ID : WEBHOOK_ERROR_BRANCH_ID;
+      const edge = selectEdge(edges, node.id, { type: "branch", branch_id: ramo });
+      if (!edge) return { kind: "fail", error: `webhook node "${node.id}" has no edge for "${ramo}" (fallback also missing)` };
+      return { kind: "advance", next_node_id: edge.target, next_eval_at: clock() };
+    }
+
+    case "transfer": {
+      // Passagem no relógio, como `move_lead`: quem TRANSFERE é o motor ao
+      // aplicar o `advance`, depois do evento do passo (a trava do replay).
+      const edge = selectEdge(edges, node.id, { type: "always" });
+      if (!edge) return { kind: "fail", error: `transfer node "${node.id}" has no outbound edge` };
+      return { kind: "advance", next_node_id: edge.target, next_eval_at: clock() };
+    }
+
+    case "handoff_ai":
+      // Terminal: o fluxo acaba aqui e a conversa volta ao agente de IA (o motor
+      // devolve o comando ao aplicar o `complete`).
+      return { kind: "complete", outcome: null, cancel_reason: MOTIVO_PASSOU_PARA_A_IA };
 
     case "end": {
       if (node.config.outcome === "custom") {

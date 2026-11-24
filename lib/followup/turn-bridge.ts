@@ -186,7 +186,10 @@ export async function completeTurnForEnrollment(
     //    nela. No `match_reply` soma-se a carência: a pergunta só sai em
     //    `until`, e o lead precisa da carência INTEIRA depois disso para
     //    responder — acordar em `until` leria silêncio como "não respondeu".
-    const carencia = node.type === "match_reply" ? node.config.grace_timeout_ms : 0;
+    const carencia =
+      node.type === "match_reply" || node.type === "buttons" || node.type === "list"
+        ? node.config.grace_timeout_ms
+        : 0;
     const voltaEm = new Date(result.until.getTime() + carencia);
     const patch: EnrollmentPatch = {
       next_eval_at: voltaEm.toISOString(),
@@ -241,6 +244,9 @@ export async function completeTurnForEnrollment(
     // Completar o envio não avança — a resposta do lead é que avança.
     // Lançar aqui devolvia o job pra pending e o pipeline mandava a pergunta de novo.
     if (node.type === "match_reply") return;
+    // 4.3 — Botões/Lista: a pergunta saiu e o nó fica esperando a escolha. Quem
+    // avança é a RESPOSTA (ou a carência vencida), nunca o fim do envio.
+    if (node.type === "buttons" || node.type === "list") return;
     if (node.type !== "action") {
       throw new Error(`completeTurnForEnrollment: resultado 'sent' mas o nó "${node.id}" não é 'action'`);
     }

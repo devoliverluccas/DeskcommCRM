@@ -20,6 +20,11 @@ import {
   mensagemDaEtapaDePerdaSemMotivo,
 } from "@/lib/automation/motivo-da-perda-na-acao";
 import { autoriaDaMudanca } from "@/lib/operacao/autoria";
+import {
+  GATILHO_PALAVRA_CHAVE,
+  MENSAGEM_DA_PALAVRA_CHAVE_INVALIDA,
+  configDaPalavraChave,
+} from "@/lib/automation/gatilho-palavra-chave";
 import type { Conditions } from "@/lib/automation/conditions";
 import { updateAutomationRuleSchema } from "@/lib/schemas";
 import {
@@ -125,6 +130,18 @@ export async function PATCH(req: NextRequest, ctx: RouteCtx): Promise<Response> 
         { requestId, details: { campo: CAMPO_DO_MOTIVO_DA_PERDA } },
       );
     }
+  }
+
+  // A palavra-chave (fase 4, 4.1) pelo PATCH parcial: só o `trigger_config` de
+  // uma regra que JÁ é de palavra-chave — o schema não vê o gatilho gravado, e
+  // uma lista vazia deixaria a regra salva e muda para sempre.
+  if (
+    parsed.data.trigger_event === undefined &&
+    parsed.data.trigger_config !== undefined &&
+    gravada.trigger_event === GATILHO_PALAVRA_CHAVE &&
+    !configDaPalavraChave(parsed.data.trigger_config)
+  ) {
+    return fail("invalid_request", t(MENSAGEM_DA_PALAVRA_CHAVE_INVALIDA), 400, { requestId });
   }
 
   // A condição `campo_alterado` (#1749) lê `event.fields`, que só o gatilho de

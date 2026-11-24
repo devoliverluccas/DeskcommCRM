@@ -317,7 +317,17 @@ const DECISOES: Record<string, Decisao> = {
     caminho: "gatilho",
     razao: "Doc 199 (pergunta 2 = A): ctwa_clid liga a pessoa ao anúncio em que clicou na Meta; fn_apaga_cliques_ctwa_de_contato_anonimizado (0806) APAGA as linhas do contato na virada de is_anonymized. Custo aceito: clique antigo reenviado pela Meta seria contado de novo.",
   },
+  links_de_saida: {
+    decidida: "redigir",
+    caminho: "gatilho",
+    razao: "9490 (fase 4, item 4.4): trg_links_de_saida_lgpd, na virada de contacts.is_anonymized, tira o contato do link, corta o destino para só a origem (o caminho pode nomear a pessoa) e marca anonimizado — a rota pública deixa de redirecionar; os cliques perdem ip_hash e navegador. Efeito provado em tests/invariants/links-de-saida-e-valores-personalizados.test.ts.",
+  },
   // ── manter: a linha e o conteúdo ficam, por decisão ───────────────────────
+  pontuacao_extrato: {
+    decidida: "manter",
+    razao:
+      "9492 (fase 4, item 4.5): o extrato guarda PONTOS, a regra que os deu, o tipo do fato e a chave de idempotência — nenhum texto livre nem dado pessoal. Anonimizado o contato, a linha passa a apontar para `Cliente Anonimizado #N`, que não identifica ninguém; apagar o extrato só destruiria a soma sem proteger ninguém.",
+  },
   satisfacao_do_atendimento: {
     decidida: "manter",
     razao:

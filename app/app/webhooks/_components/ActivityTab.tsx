@@ -138,6 +138,18 @@ const MOTIVO_DA_PARADA: Record<string, string> = {
   falha_ao_gravar:
     "Não foi possível gravar o setor da conversa. Tente de novo; se persistir, veja o log da automação.",
   lead_nao_encontrado: "O lead deste evento não foi encontrado nesta organização, então ninguém foi atribuído.",
+  /* Fase 4 (4.1) — as duas ações novas. `pausa_sem_conversa_aberta` nasce em
+     lib/automation/actions/pause-ai.ts; os três `conversao_*`, em
+     lib/automation/actions/send-ad-conversion.ts. O código detalhado do envio
+     fica no recibo e na tela de Conversões, onde a pendência se resolve. */
+  pausa_sem_conversa_aberta:
+    "Não há conversa aberta deste contato para pausar a IA. Nada mudou.",
+  conversao_sem_negocio:
+    "O contato não tem negócio aberto, então não havia conversão para enviar.",
+  conversao_nao_enviada:
+    "A conversão não foi enviada: o contato pode não ter vindo de anúncio, ou falta conexão, valor ou o negócio ganho. Veja o motivo em Conversões.",
+  conversao_adiada:
+    "A plataforma de anúncio não respondeu agora. A conversão ficou pendente em Conversões, onde dá para reenviar.",
   /* #4297 — a automação que move para a etapa de perda SEM motivo. A recusa é a
      mesma do arrasto (#917, `decideMotivoDaPerda`), devolvida pelo executor como
      CÓDIGO: sem esta frase o operador lia `lost_reason_required` — ou, antes do

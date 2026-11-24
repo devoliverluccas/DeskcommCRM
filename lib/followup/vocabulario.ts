@@ -49,6 +49,8 @@ import {
   NO_REPLY_BRANCH_ID,
   REPEAT_BODY_BRANCH_ID,
   REPEAT_DONE_BRANCH_ID,
+  WEBHOOK_ERROR_BRANCH_ID,
+  WEBHOOK_OK_BRANCH_ID,
   type RESERVED_BRANCH_IDS,
   type actionConfigSchema,
   type aiClassifyConfigSchema,
@@ -503,6 +505,8 @@ export const RAMOS_RESERVADOS_EM_FRASE: Record<RamoReservado, string> = {
   [CONDITION_FALSE_BRANCH_ID]: "quando a condição é falsa",
   [REPEAT_BODY_BRANCH_ID]: "quando ainda falta uma volta",
   [REPEAT_DONE_BRANCH_ID]: "quando as voltas acabaram",
+  [WEBHOOK_OK_BRANCH_ID]: "quando o sistema externo confirma o aviso",
+  [WEBHOOK_ERROR_BRANCH_ID]: "quando o aviso ao sistema externo falha",
 };
 
 /**
@@ -561,6 +565,8 @@ export const RAMOS_RESERVADOS: Record<RamoReservado, string> = {
   [CONDITION_FALSE_BRANCH_ID]: conditionLabel({ type: "cond_result", value: false }),
   [REPEAT_BODY_BRANCH_ID]: "Próxima volta",
   [REPEAT_DONE_BRANCH_ID]: "Acabou",
+  [WEBHOOK_OK_BRANCH_ID]: "Sucesso",
+  [WEBHOOK_ERROR_BRANCH_ID]: "Erro",
 };
 
 // ─── classificação pela IA ───────────────────────────────────────────────

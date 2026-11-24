@@ -15,6 +15,7 @@ import { interpolateTemplate } from "@/lib/inbox/template-vars";
 import { substituirVariaveis } from "@/lib/propostas/documento/variaveis";
 import {
   ARQUIVOS_DOS_RESOLVEDORES,
+  CURINGAS_DE_SENTIDO_UNICO,
   DICA_DO_CURINGA,
   GRUPOS_DE_VARIAVEL,
   LACUNAS_CONHECIDAS,
@@ -104,10 +105,17 @@ const TELAS_COM_SELETOR: { arquivo: string; fonte: string }[] = [
 ];
 
 const CONTATO = { name: "Ana Souza" };
+/**
+ * Os valores personalizados da empresa (fase 4, item 4.6). Cada fonte RECEBE o
+ * mapa de quem a chama — sem ele o token fica para o envio resolver (ver o
+ * bloco "valores da empresa" abaixo).
+ */
+const EMPRESA = { pix: "pix@loja.exemplo" };
 const VALORES = {
   nome: "Ana Souza",
   lead: { gancho: "do bolo", title: "Maria" },
   contato: { gancho: "ctt" },
+  empresa: EMPRESA,
 };
 /** 15:00Z = meio-dia em São Paulo — o primeiro segundo de "Boa tarde". */
 const QUANDO = { agora: new Date("2026-10-29T15:00:00Z"), fuso: "America/Sao_Paulo" };
@@ -122,6 +130,7 @@ const CONTEXTO = {
     custom_fields: { gancho: "cf-contato" },
   },
   lead: { title: "Negocio X", custom_fields: { gancho: "cf-negocio" } },
+  empresa: EMPRESA,
 };
 
 /**
@@ -138,6 +147,7 @@ const TOKEN_DE_EXEMPLO: Record<string, string> = {
   "lead.*": "{{lead.gancho}}",
   "contato.*": "{{contato.gancho}}",
   "contact.*": "{{contact.phone_number}}",
+  "empresa.*": "{{empresa.pix}}",
 };
 
 describe("o catálogo descreve o que o Inbox e a campanha fazem, variável por variável", () => {
@@ -151,11 +161,12 @@ describe("o catálogo descreve o que o Inbox e a campanha fazem, variável por v
       inbox: "{{contato.gancho}}",
       campanha: "ctt",
     },
+    { token: "{{empresa.pix}}", inbox: "pix@loja.exemplo", campanha: "pix@loja.exemplo" },
   ];
 
   for (const caso of casos) {
     it(`${caso.token}: Inbox devolve "${caso.inbox}", campanha devolve "${caso.campanha}"`, () => {
-      const inbox = interpolateTemplate(caso.token, CONTATO, AGORA_INBOX);
+      const inbox = interpolateTemplate(caso.token, CONTATO, AGORA_INBOX, EMPRESA);
       const campanha = renderizar(caso.token, VALORES, QUANDO);
 
       expect(inbox).toBe(caso.inbox);
@@ -194,6 +205,7 @@ describe("o catálogo descreve o que a automação faz, variável por variável"
     { token: "{{lead.custom_fields.gancho}}", esperado: "cf-negocio" },
     { token: "{{gancho}}", esperado: "cf-negocio" },
     { token: "{{contact.custom_fields.gancho}}", esperado: "cf-contato" },
+    { token: "{{empresa.pix}}", esperado: "pix@loja.exemplo" },
   ];
 
   for (const caso of casos) {
@@ -211,14 +223,14 @@ describe("toda variável que uma fonte conhece está no catálogo", () => {
     for (const nome of variaveisDe("inbox")) {
       const token = TOKEN_DE_EXEMPLO[nome]!;
       expect(
-        interpolateTemplate(token, CONTATO, AGORA_INBOX),
+        interpolateTemplate(token, CONTATO, AGORA_INBOX, EMPRESA),
         `${nome} está catalogada no Inbox (${INBOX}) e não resolve lá`,
       ).not.toBe(token);
     }
     for (const v of VARIAVEIS_DO_CATALOGO.filter((v) => !v.disponivelEm.includes("inbox"))) {
       const token = TOKEN_DE_EXEMPLO[v.nome]!;
       expect(
-        interpolateTemplate(token, CONTATO, AGORA_INBOX),
+        interpolateTemplate(token, CONTATO, AGORA_INBOX, EMPRESA),
         `${v.nome} NÃO está catalogada no Inbox e mesmo assim resolve em ${INBOX}`,
       ).toBe(token);
     }
@@ -311,7 +323,7 @@ describe("toda variável que uma fonte conhece está no catálogo", () => {
   });
 
   it(`fluxo (${FLUXO}): cada origem resolve o valor que o catálogo promete`, () => {
-    const dados = { nomeDoContato: "Ana Souza", camposDoNegocio: { gancho: "do bolo" } };
+    const dados = { nomeDoContato: "Ana Souza", camposDoNegocio: { gancho: "do bolo" }, empresa: EMPRESA };
     const esperado: { fonte: FonteDeVariavel; valor: string | null }[] = [
       { fonte: { kind: "contact_name" }, valor: "Ana Souza" },
       { fonte: { kind: "contact_first_name" }, valor: "Ana" },
@@ -321,6 +333,7 @@ describe("toda variável que uma fonte conhece está no catálogo", () => {
       { fonte: { kind: "variavel", chave: "nome" }, valor: "Ana Souza" },
       { fonte: { kind: "variavel", chave: "primeiro_nome" }, valor: "Ana" },
       { fonte: { kind: "variavel", chave: "lead.gancho" }, valor: "do bolo" },
+      { fonte: { kind: "variavel", chave: "empresa.pix" }, valor: "pix@loja.exemplo" },
       // `{{saudacao}}` não vale no fluxo (o fluxo não tem instante de envio
       // quando monta a tela): sem valor, o passo é recusado com motivo.
       { fonte: { kind: "variavel", chave: "saudacao" }, valor: null },
@@ -360,7 +373,7 @@ describe("toda variável que uma fonte conhece está no catálogo", () => {
           tela.fonte === "campanha"
             ? renderizar(token, VALORES, QUANDO).texto
             : tela.fonte === "inbox"
-              ? interpolateTemplate(token, CONTATO, AGORA_INBOX)
+              ? interpolateTemplate(token, CONTATO, AGORA_INBOX, EMPRESA)
               : renderTemplate(token, CONTEXTO, undefined, AGORA_INBOX);
         expect(
           resolvido,
@@ -399,7 +412,7 @@ describe("a divergência entre as fontes não fica escondida", () => {
     );
     for (const lacuna of doInbox) {
       const token = TOKEN_DE_EXEMPLO[lacuna.variavel]!;
-      expect(interpolateTemplate(token, CONTATO, AGORA_INBOX)).toBe(token);
+      expect(interpolateTemplate(token, CONTATO, AGORA_INBOX, EMPRESA)).toBe(token);
     }
   });
 
@@ -428,8 +441,10 @@ describe("a divergência entre as fontes não fica escondida", () => {
   });
 
   it("os caminhos com MAIS DE UM sentido estão declarados em SENTIDOS_DIVERGENTES", () => {
+    // `empresa.*` existe nas quatro com o MESMO sentido — a exceção é declarada
+    // no catálogo (`CURINGAS_DE_SENTIDO_UNICO`), não escondida aqui.
     const curingasComVariasFontes = VARIAVEIS_DO_CATALOGO.filter(
-      (v) => eCuringa(v.nome) && v.disponivelEm.length > 1,
+      (v) => eCuringa(v.nome) && v.disponivelEm.length > 1 && !CURINGAS_DE_SENTIDO_UNICO.includes(v.nome),
     ).map((v) => v.nome);
     expect(SENTIDOS_DIVERGENTES.map((s) => s.variavel).sort()).toEqual(curingasComVariasFontes.sort());
   });
@@ -599,5 +614,36 @@ describe("as variáveis exclusivas de cada fonte", () => {
       "campanha",
       "inbox",
     ]);
+  });
+});
+
+describe("valores da empresa (`{{empresa.*}}`, fase 4, item 4.6)", () => {
+  it("o MESMO valor nas quatro fontes quando quem chama passa o mapa", () => {
+    const token = "{{empresa.pix}}";
+    expect(interpolateTemplate(token, CONTATO, AGORA_INBOX, EMPRESA)).toBe("pix@loja.exemplo");
+    expect(renderizar(token, VALORES, QUANDO).texto).toBe("pix@loja.exemplo");
+    expect(renderTemplate(token, CONTEXTO)).toBe("pix@loja.exemplo");
+    expect(valorDaFonte({ kind: "variavel", chave: "empresa.pix" }, { nomeDoContato: null, camposDoNegocio: {}, empresa: EMPRESA })).toBe(
+      "pix@loja.exemplo",
+    );
+    expect(variavelDoCatalogo(token)?.nome).toBe("empresa.*");
+    expect(CURINGAS_DE_SENTIDO_UNICO).toContain("empresa.*");
+  });
+
+  it("SEM o mapa o token fica como foi escrito — não é falta, é o ENVIO que resolve", () => {
+    const token = "{{empresa.pix}}";
+    expect(interpolateTemplate(token, CONTATO, AGORA_INBOX)).toBe(token);
+    const campanha = renderizar(token, { nome: "Ana" }, QUANDO);
+    expect(campanha.texto).toBe(token);
+    expect(campanha.faltando).toEqual([]);
+    expect(campanha.desconhecidas).toEqual([]);
+    expect(renderTemplate(token, { contact: CONTEXTO.contact })).toBe(token);
+  });
+
+  it("COM o mapa, chave que não existe é falta comum, com a política de cada tela", () => {
+    const token = "{{empresa.nao_existe}}";
+    expect(interpolateTemplate(token, CONTATO, AGORA_INBOX, EMPRESA)).toBe(token);
+    expect(renderizar(token, VALORES, QUANDO).faltando).toEqual(["empresa.nao_existe"]);
+    expect(renderTemplate(token, CONTEXTO)).toBe("");
   });
 });

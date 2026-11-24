@@ -17,7 +17,7 @@ import { type NextRequest } from "next/server";
 import { z } from "zod";
 
 import { checkRateLimit } from "@/lib/ai/dispatcher/rate-limit";
-import { comIdDaRequisicao } from "@/lib/api/wrappers";
+import { comIdDaRequisicao, fail } from "@/lib/api/wrappers";
 import { ipDoCliente } from "@/lib/http/ip-do-cliente";
 import { logger } from "@/lib/logger";
 import { hashDoToken, tokenTemFormato } from "@/lib/propostas/link-publico";
@@ -63,7 +63,7 @@ export async function POST(req: NextRequest, ctx: Ctx): Promise<Response> {
   const requestId = randomUUID();
   const { token } = await ctx.params;
   if (!tokenTemFormato(token)) {
-    return comIdDaRequisicao(new Response(null, { status: 404, headers: { "Cache-Control": "no-store" } }), requestId);
+    return fail("not_found", "Orçamento não encontrado", 404, { requestId });
   }
 
   const ip = ipDoCliente(req.headers);
@@ -87,7 +87,7 @@ export async function POST(req: NextRequest, ctx: Ctx): Promise<Response> {
     });
     if (r.ok) return voltar(token, `r=${r.decisao}`, requestId);
     if (r.motivo === "nao_encontrado") {
-      return comIdDaRequisicao(new Response(null, { status: 404, headers: { "Cache-Control": "no-store" } }), requestId);
+      return fail("not_found", "Orçamento não encontrado", 404, { requestId });
     }
     return voltar(token, r.motivo === "fechado" ? "erro=fechado" : "erro=falha", requestId);
   } catch (erro) {

@@ -14,6 +14,11 @@ export const PUBLIC_PATHS: RegExp[] = [
   // pela linha do link. Forma exata do token e âncora `$`: só a página e o
   // `decidir`, nenhum sub-path nasce público de carona.
   /^\/o\/[A-Za-z0-9_-]{43}(\/decidir)?$/,
+  // LINK CURTO DE SAÍDA (migration 9490): quem abre é o CONTATO, tocando no
+  // link que recebeu numa mensagem — nunca teve sessão nossa. A rota resolve a
+  // organização pela LINHA do link e só redireciona e registra o clique. Forma
+  // exata do código (10 alfanuméricos) e âncora `$`: nenhum sub-path de carona.
+  /^\/l\/[A-Za-z0-9]{10}$/,
   /^\/$/,
   /^\/login(\/.*)?$/,
   /^\/signup$/,

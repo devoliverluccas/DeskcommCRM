@@ -26,11 +26,20 @@
  */
 import { transporteMeta } from "./meta/conversions";
 import { transporteGoogle } from "./google/conversions";
+import { transporteGa4 } from "./ga4/conversions";
+import { transporteTiktok } from "./tiktok/conversions";
 import type { PlataformaDeAnuncio, TransporteDeConversao } from "./types";
 
+/**
+ * GA4 e TikTok (9488) entram como as outras duas: credencial em
+ * `ad_platform_connections`, mesmo livro-razão, mesma retentativa. Quem
+ * despacha não muda uma linha — pede pelo slug e recebe o transporte.
+ */
 const TRANSPORTES: Record<PlataformaDeAnuncio, TransporteDeConversao | null> = {
   meta_ads: transporteMeta,
   google_ads: transporteGoogle,
+  ga4: transporteGa4,
+  tiktok: transporteTiktok,
 };
 
 /** O transporte da plataforma, ou `null` quando ela é conhecida e não tem um. */

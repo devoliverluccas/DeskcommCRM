@@ -113,6 +113,11 @@ const CODIGOS_DAS_ACOES = new Set([
   "user_not_in_org",
   "whatsapp_enviado",
   "whatsapp_falhou",
+  /* Fase 4 (4.1) — as ações pause_ai e send_ad_conversion. */
+  "pausa_sem_conversa_aberta",
+  "conversao_sem_negocio",
+  "conversao_nao_enviada",
+  "conversao_adiada",
 ]);
 const CODIGOS_DE_INFRA = new Set([
   "23502",

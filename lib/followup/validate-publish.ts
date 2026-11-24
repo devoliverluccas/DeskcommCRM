@@ -59,6 +59,10 @@ export const PUBLISH_ERROR_CODES = [
   // hora torta — o motor não teria como obedecer e terminaria a espera na
   // duração crua, calado (`espera-no-horario.ts` falha aberta).
   'horario_da_espera_invalido',
+  // 4.3 — os nós novos do fluxo de mensagens nascem em branco no rascunho.
+  'opcoes_incompletas',
+  'webhook_url_invalida',
+  'destino_da_transferencia_ausente',
 ] as const;
 export type PublishErrorCode = (typeof PUBLISH_ERROR_CODES)[number];
 
@@ -276,8 +280,8 @@ function cicloDoEncadeamento(
  * recusava em silêncio; a recusa aqui é o erro que a pessoa lê no editor.
  */
 export const NOS_DA_SUPERFICIE: Record<FollowupFlowSurface, readonly NodeType[]> = {
-  followup: ['trigger', 'wait', 'condition', 'ai_classify', 'match_reply', 'repeat', 'action', 'internal_task', 'move_lead', 'edit_lead_tag', 'end'],
-  crm_automation: ['trigger', 'wait', 'condition', 'ai_classify', 'match_reply', 'repeat', 'action', 'internal_task', 'move_lead', 'edit_lead_tag', 'end'],
+  followup: ['trigger', 'wait', 'condition', 'ai_classify', 'match_reply', 'repeat', 'action', 'buttons', 'list', 'webhook', 'transfer', 'internal_task', 'move_lead', 'edit_lead_tag', 'handoff_ai', 'end'],
+  crm_automation: ['trigger', 'wait', 'condition', 'ai_classify', 'match_reply', 'repeat', 'action', 'buttons', 'list', 'webhook', 'transfer', 'internal_task', 'move_lead', 'edit_lead_tag', 'handoff_ai', 'end'],
   atendimento: ['trigger', 'collect', 'skill', 'end'],
 };
 
@@ -288,7 +292,7 @@ export const NOS_DA_SUPERFICIE: Record<FollowupFlowSurface, readonly NodeType[]>
  * de atendimento — superfícies que não têm a marca "somente interno" e, num
  * fluxo interno, já teriam sido recusadas por `no_fora_da_superficie`.
  */
-const NOS_QUE_ENVIAM: readonly NodeType[] = ['action'];
+const NOS_QUE_ENVIAM: readonly NodeType[] = ['action', 'buttons', 'list'];
 
 /**
  * SOMENTE INTERNO (#1540): o fluxo marcou que não fala com o cliente, e tem nó
@@ -430,6 +434,12 @@ export const CONTA_NO_TETO: Record<NodeType, boolean> = {
   move_lead: false, // move o card no funil
   edit_lead_tag: false, // grava tag no lead
   end: false, // desfecho
+  // 4.3
+  buttons: true, // pergunta com opções + espera da escolha
+  list: true, // idem, em lista
+  webhook: false, // aviso a um sistema de fora
+  transfer: false, // troca quem atende
+  handoff_ai: false, // desfecho: a IA assume
 };
 
 function waitMs(config: Extract<FlowNode, { type: 'wait' }>['config']): number {
@@ -438,7 +448,9 @@ function waitMs(config: Extract<FlowNode, { type: 'wait' }>['config']): number {
 
 /** A wait node whose duration meets the 5min floor required to break a cycle. */
 function isSufficientWaitNode(node: FlowNode): boolean {
-  if (node.type === 'match_reply') return node.config.grace_timeout_ms >= MIN_CYCLE_WAIT_MS;
+  if (node.type === 'match_reply' || node.type === 'buttons' || node.type === 'list') {
+    return node.config.grace_timeout_ms >= MIN_CYCLE_WAIT_MS;
+  }
   if (node.type !== 'wait') return false;
   return node.config.mode === 'fixed'
     ? node.config.duration_ms >= MIN_CYCLE_WAIT_MS
@@ -897,6 +909,81 @@ function conferirEtapaDestino(
  * schema aceita, porque o rascunho tem de salvar trabalho pela metade; publicado,
  * um nó que não grava nada é mentira de interface.
  */
+/**
+ * 4.3 — Botões/Lista: corpo e rótulos preenchidos, rótulos distintos (a
+ * resposta casa pelo rótulo, e dois iguais tornariam a escolha ambígua), a
+ * carência mínima e cada opção ligada a uma saída.
+ */
+function conferirOpcoes(
+  node: Extract<FlowNode, { type: 'buttons' | 'list' }>,
+  outgoing: FlowEdge[],
+  errors: PublishValidationError[],
+  nomes: NomesDeValor,
+): void {
+  const cfg = node.config;
+  const rotulos = cfg.options.map((o) => o.label.trim().toLowerCase());
+  const semBotao = node.type === 'list' && node.config.button_label.trim() === '';
+  if (cfg.body.trim() === '' || rotulos.some((r) => r === '') || semBotao) {
+    errors.push({
+      node_id: node.id,
+      code: 'opcoes_incompletas',
+      message: `A caixa "${node.label}" precisa do texto da pergunta e do nome de cada opção${node.type === 'list' ? ' e do botão da lista' : ''}.`,
+    });
+  } else if (new Set(rotulos).size !== rotulos.length) {
+    errors.push({
+      node_id: node.id,
+      code: 'opcoes_incompletas',
+      message: `A caixa "${node.label}" tem duas opções com o mesmo nome — o cliente não teria como escolher entre elas.`,
+    });
+  }
+  if (cfg.grace_timeout_ms < 900_000) {
+    errors.push({
+      node_id: node.id,
+      code: 'grace_too_short',
+      message: `Nó "${node.id}" tem grace_timeout_ms abaixo do mínimo de 15min.`,
+    });
+  }
+  cobrirRamos(node, outgoing, errors, nomes);
+}
+
+/** 4.3 — Webhook: URL com forma de endereço público (a rede é conferida na chamada). */
+function conferirUrlDoWebhook(
+  node: Extract<FlowNode, { type: 'webhook' }>,
+  errors: PublishValidationError[],
+): void {
+  const url = node.config.url.trim();
+  let valida = false;
+  try {
+    const u = new URL(url);
+    valida = u.protocol === 'https:' || u.protocol === 'http:';
+  } catch {
+    valida = false;
+  }
+  if (!valida) {
+    errors.push({
+      node_id: node.id,
+      code: 'webhook_url_invalida',
+      message: `A caixa "${node.label}" precisa de um endereço que comece com https://.`,
+    });
+  }
+}
+
+/** 4.3 — Transferir: setor ou atendente escolhido. */
+function conferirDestinoDaTransferencia(
+  node: Extract<FlowNode, { type: 'transfer' }>,
+  errors: PublishValidationError[],
+): void {
+  const d = node.config.destino;
+  const id = d.tipo === 'setor' ? d.sector_id : d.user_id;
+  if (!UUID_RX.test(id.trim())) {
+    errors.push({
+      node_id: node.id,
+      code: 'destino_da_transferencia_ausente',
+      message: `A caixa "${node.label}" precisa de ${d.tipo === 'setor' ? 'um setor' : 'um atendente'} para onde transferir.`,
+    });
+  }
+}
+
 function conferirTags(
   node: Extract<FlowNode, { type: 'edit_lead_tag' }>,
   errors: PublishValidationError[]
@@ -1052,7 +1139,8 @@ export function validateFlowForPublish(
       }
     }
 
-    const endNodes = nodes.filter((n) => n.type === 'end');
+    // "Passar para a IA" também encerra o fluxo (4.3): é um fim com outra saída.
+    const endNodes = nodes.filter((n) => n.type === 'end' || n.type === 'handoff_ai');
     const canReachEnd = bfsReachable(endNodes.map((n) => n.id), inEdges);
     for (const node of [...nodes].sort(byId)) {
       if (reachable.has(node.id) && !canReachEnd.has(node.id)) {
@@ -1177,6 +1265,9 @@ export function validateFlowForPublish(
   for (const node of [...nodes].sort(byId)) {
     if (node.type === 'move_lead') conferirEtapaDestino(node, contexto, errors);
     if (node.type === 'edit_lead_tag') conferirTags(node, errors);
+    if (node.type === 'buttons' || node.type === 'list') conferirOpcoes(node, outEdges.get(node.id) ?? [], errors, nomes);
+    if (node.type === 'webhook') conferirUrlDoWebhook(node, errors);
+    if (node.type === 'transfer') conferirDestinoDaTransferencia(node, errors);
     if (node.type === 'action' && contexto.modelos !== undefined) {
       const { prontos, doCanal } = contexto.modelos;
       const cfg = node.config;

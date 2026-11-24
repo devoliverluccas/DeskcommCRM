@@ -46,7 +46,13 @@ import type { IdentificadoresGoogle } from "./google/identificadores";
  */
 export type ApiDeConversaoGoogle = "google_ads" | "data_manager";
 
-export type PlataformaDeAnuncio = "meta_ads" | "google_ads";
+/**
+ * `ga4` e `tiktok` entraram na 9488. O GA4 não é plataforma de ANÚNCIO no
+ * sentido estrito — é a análise do site —, mas recebe conversão de volta pelo
+ * mesmo contrato (credencial, transporte, livro-razão), e é isso que este tipo
+ * descreve: para onde se pode REPORTAR.
+ */
+export type PlataformaDeAnuncio = "meta_ads" | "google_ads" | "ga4" | "tiktok";
 
 /**
  * Venda, qualificação e cada etapa configurada são resultados distintos e
@@ -110,6 +116,25 @@ export interface ConversaoOffline {
    * `LeadSubmitted`…), enquanto o livro-razão guarda `MetaEtapa:<uuid>`.
    */
   eventoNaPlataforma?: string | null;
+  /**
+   * A identidade do CONTATO para as plataformas que casam por ela (GA4 e
+   * TikTok, 9488) — `lerIdentidadeDoContato` (`./identidade-do-contato.ts`)
+   * monta. Ausente = o chamador só tem a atribuição: o TikTok usa então o
+   * `cliqueDeOrigem` como `ttclid` (o despacho por atribuição só chama o
+   * transporte do TikTok quando a atribuição É do TikTok) e o GA4 deriva o
+   * `client_id` do lead.
+   */
+  identidadeDoContato?: IdentidadeDoContato;
+}
+
+/** Ver `ConversaoOffline.identidadeDoContato`. E-mail EM CLARO: o hash é do transporte. */
+export interface IdentidadeDoContato {
+  contatoId: string;
+  email: string | null;
+  /** `client_id` do GA4 lido do cookie `_ga` capturado, quando existe. */
+  gaClientId: string | null;
+  /** Clique do TikTok capturado na chegada, quando existe. */
+  ttclid: string | null;
 }
 
 /**
@@ -176,13 +201,32 @@ export interface CredencialDeConversao {
     /** Envia o telefone em SHA-256 (E.164) junto da conversão (0436). */
     enviarTelefone?: boolean;
   };
+  /**
+   * GA4 e TikTok (9488): `datasetId` é o `measurement_id` / `pixel_code` e
+   * `accessToken` o `api_secret` / token de acesso. O que só eles têm é o
+   * mapeamento evento da casa → evento da plataforma, gravado na conexão.
+   */
+  mapeamento?: MapeamentoDeEventos;
 }
+
+/**
+ * Evento da casa → nome do evento NA plataforma. `null` = a organização
+ * escolheu não enviar aquele evento. Schema em `./mapeamento-de-eventos.ts`.
+ */
+export type MapeamentoDeEventos = Record<EventoMapeavel, string | null>;
+export type EventoMapeavel = "Purchase" | "LeadSubmitted" | "QualifiedLead";
 
 /** O contrato que todo transporte de conversão cumpre. */
 export interface TransporteDeConversao {
   plataforma: PlataformaDeAnuncio;
   consultar?(credencial: CredencialDeConversao, protocolo: string): Promise<ResultadoDeEnvio>;
   enviar(credencial: CredencialDeConversao, conversao: ConversaoOffline): Promise<ResultadoDeEnvio>;
+  /**
+   * "Testar conexão" da tela (9488): fala com a plataforma SEM registrar uma
+   * conversão que conte — endpoint de validação (GA4) ou evento marcado como
+   * teste (TikTok). Opcional: Meta e Google não oferecem.
+   */
+  testarConexao?(credencial: CredencialDeConversao): Promise<ResultadoDeEnvio>;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

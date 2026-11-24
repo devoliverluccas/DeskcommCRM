@@ -1,6 +1,25 @@
 import type { ComponentType } from "react";
 
-import { Bell, Play, Clock, GitBranch, Brain, ChatCircle, ArrowsClockwise, PaperPlaneTilt, Flag, Question, PuzzlePiece, Funnel, Tag } from "@/lib/ui/icons";
+import {
+  ArrowBendUpRight,
+  ArrowsClockwise,
+  Bell,
+  Brain,
+  ChatCircle,
+  Clock,
+  Flag,
+  Funnel,
+  GitBranch,
+  List,
+  ListChecks,
+  PaperPlaneTilt,
+  Play,
+  PuzzlePiece,
+  Question,
+  Robot,
+  Tag,
+  WebhooksLogo,
+} from "@/lib/ui/icons";
 import type { FlowNode, NodeType } from "@/lib/followup/graph-schema";
 import { RESULTADOS_DO_FIM } from "@/lib/followup/vocabulario";
 import { NOS_DA_SUPERFICIE } from "@/lib/followup/validate-publish";
@@ -187,6 +206,70 @@ export const NODE_VISUALS: Record<NodeType, NodeVisual> = {
     defaultLabel: "Gravar tag no lead",
     defaultConfig: () => ({ tags: [] }),
   },
+  // 4.3 — os nós de opções nascem com DUAS opções preenchidas: um nó de
+  // escolha com uma opção só não ensina nada a quem monta. Os textos são DADO
+  // do usuário (vão ao cliente), fora do dicionário pelo mesmo motivo das
+  // classes do classificar.
+  buttons: {
+    type: "buttons",
+    paletteLabel: "Botões",
+    icon: ListChecks,
+    chipClassName: "bg-success-bg text-success-fg",
+    borderClassName: "border-l-success",
+    defaultLabel: "Perguntar com botões",
+    defaultConfig: () => ({
+      body: "Como podemos ajudar?",
+      options: [
+        { id: "op_1", label: "Opção 1" },
+        { id: "op_2", label: "Opção 2" },
+      ],
+      grace_timeout_ms: 3_600_000,
+    }),
+  },
+  list: {
+    type: "list",
+    paletteLabel: "Lista",
+    icon: List,
+    chipClassName: "bg-success-bg text-success-fg",
+    borderClassName: "border-l-success",
+    defaultLabel: "Perguntar com lista",
+    defaultConfig: () => ({
+      body: "Escolha uma opção:",
+      button_label: "Ver opções",
+      options: [
+        { id: "op_1", label: "Opção 1" },
+        { id: "op_2", label: "Opção 2" },
+      ],
+      grace_timeout_ms: 3_600_000,
+    }),
+  },
+  webhook: {
+    type: "webhook",
+    paletteLabel: "Webhook",
+    icon: WebhooksLogo,
+    chipClassName: "bg-info-bg text-info-fg",
+    borderClassName: "border-l-info",
+    defaultLabel: "Avisar sistema externo",
+    defaultConfig: () => ({ url: "" }),
+  },
+  transfer: {
+    type: "transfer",
+    paletteLabel: "Transferir",
+    icon: ArrowBendUpRight,
+    chipClassName: "bg-warning-bg text-warning-fg",
+    borderClassName: "border-l-warning",
+    defaultLabel: "Transferir conversa",
+    defaultConfig: () => ({ destino: { tipo: "setor", sector_id: "" } }),
+  },
+  handoff_ai: {
+    type: "handoff_ai",
+    paletteLabel: "Passar para a IA",
+    icon: Robot,
+    chipClassName: "bg-accent-soft text-accent",
+    borderClassName: "border-l-accent-500",
+    defaultLabel: "Passar para a IA",
+    defaultConfig: () => ({}),
+  },
   end: {
     type: "end",
     paletteLabel: "Fim",
@@ -297,6 +380,27 @@ export function describeNodeConfig(
       const c = config as ConfigOf<"edit_lead_tag">;
       return c.tags.length ? c.tags.join(", ") : t("sem tag escolhida");
     }
+    case "buttons":
+    case "list": {
+      const c = config as ConfigOf<"buttons">;
+      return `${c.options.length} ${c.options.length === 1 ? t("opção") : t("opções")} · ${t("espera")} ${minutos(c.grace_timeout_ms)}`;
+    }
+    case "webhook": {
+      const c = config as ConfigOf<"webhook">;
+      try {
+        return new URL(c.url).host;
+      } catch {
+        return t("sem endereço");
+      }
+    }
+    case "transfer": {
+      const c = config as ConfigOf<"transfer">;
+      const id = c.destino.tipo === "setor" ? c.destino.sector_id : c.destino.user_id;
+      if (!id) return t("sem destino escolhido");
+      return c.destino.tipo === "setor" ? t("para um setor") : t("para um atendente");
+    }
+    case "handoff_ai":
+      return t("encerra o fluxo e a IA assume");
     case "end": {
       const c = config as ConfigOf<"end">;
       return t(RESULTADOS_DO_FIM[c.outcome]);

@@ -723,6 +723,21 @@ beforeAll(() => {
           values (v_org, date '2026-12-24', 'RLS invariant');
         end if;
 
+        -- migrations 9490 e 9491 (fase 4) -- link de saida do contato semeado, um
+        -- clique nele, e um valor personalizado. Leitura org-scoped; escrita so do
+        -- servidor. O codigo e unico na instalacao: derivado da organizacao.
+        if not exists (select 1 from public.links_de_saida where organization_id = v_org) then
+          insert into public.links_de_saida (organization_id, codigo, destino_url, rotulo, contact_id)
+          values (v_org, substr(md5(v_org::text || 'link-de-saida'), 1, 10),
+                  'https://rls.invariante/oferta', 'rls', v_contact);
+          insert into public.cliques_de_links_de_saida (organization_id, link_id, dispositivo)
+          select v_org, l.id, 'celular' from public.links_de_saida l where l.organization_id = v_org;
+        end if;
+        if not exists (select 1 from public.valores_personalizados where organization_id = v_org) then
+          insert into public.valores_personalizados (organization_id, chave, valor)
+          values (v_org, 'pix', 'RLS invariant');
+        end if;
+
         -- migration 9336 (#3118) -- a mensagem agendada da conversa semeada.
         if not exists (select 1 from public.mensagens_agendadas where organization_id = v_org) then
           insert into public.mensagens_agendadas
@@ -753,6 +768,10 @@ export const TABLES = [
   // migrations 9482 e 9486 (fase 3) — motivo de encerramento e feriado da organização.
   "motivos_de_encerramento",
   "feriados",
+  // migrations 9490 e 9491 (fase 4) — link de saída, clique e valor personalizado.
+  "links_de_saida",
+  "cliques_de_links_de_saida",
+  "valores_personalizados",
   // migration 9336 (#3118, primeira parte) — a mensagem agendada na conversa. A
   // leitura exige a conversa visível pela sessão; a semente usa v_conv, sem dono,
   // que o agent semeado enxerga (visibility_mode padrão).

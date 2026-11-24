@@ -50,6 +50,14 @@ export const CUSTO_NO_MOTOR: Record<NodeType, number> = {
   // este preço que a publicação multiplica pelas voltas que o `repeat` permite
   // (`custoNoMotorDoFluxo`, #2977).
   repeat: 1,
+  // 4.3 — Botões/Lista: enfileiram a pergunta e resolvem na resposta (como o
+  // `match_reply` de confirmação). Webhook/Transferir: um tick, o efeito é do
+  // motor. Passar para a IA: conclui em um tick, como o Fim.
+  buttons: 2,
+  list: 2,
+  webhook: 1,
+  transfer: 1,
+  handoff_ai: 1,
 };
 
 /**

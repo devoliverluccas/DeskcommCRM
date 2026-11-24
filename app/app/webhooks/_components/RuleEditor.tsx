@@ -77,6 +77,17 @@ import { ActionConfigForm, defaultActionConfig, type ActionItem } from "./Action
 import { EtapaDeQualquerFunil } from "./EtapaDeQualquerFunil";
 import { ValorDaCondicaoDoContato } from "./CondicaoDoContato";
 import { useT } from "@/hooks/i18n/useT";
+import { GATILHO_PALAVRA_CHAVE } from "@/lib/automation/gatilho-palavra-chave";
+import {
+  PalavraChaveDoGatilho,
+  TELA_DA_PALAVRA_CHAVE_VAZIA,
+  configDaTelaDaPalavraChave,
+  telaDaPalavraChave,
+  type TelaDaPalavraChave,
+} from "./PalavraChaveDoGatilho";
+import { ProntaParaAtivar } from "./ProntaParaAtivar";
+import { TestarAutomacao } from "./TestarAutomacao";
+import { HistoricoDaAutomacao } from "./HistoricoDaAutomacao";
 
 interface Props {
   open: boolean;
@@ -184,6 +195,8 @@ export const CURATED_FIELDS: Record<TriggerEvent, CuratedField[]> = {
   "lead.reopened": LEAD_FIELDS,
   "lead.assigned": LEAD_FIELDS,
   "message.received": MESSAGE_FIELDS,
+  // Fase 4 (4.1) — a mesma mensagem recebida: os mesmos campos para filtrar.
+  "message.keyword": MESSAGE_FIELDS,
   // O que a regra quer filtrar numa falha é o MOTIVO (só o 131047, só o
   // timeout) e de QUEM é o contato — `event.erro.codigo` é o mesmo valor que a
   // coluna `messages.error_code` grava, então quem compara com o webhook da
@@ -366,6 +379,8 @@ export function RuleEditor({ open, onOpenChange, rule }: Props) {
    * para a gaveta e o desenho não divergirem.
    */
   const [repetirAposHoras, setRepetirAposHoras] = React.useState("");
+  /** Fase 4 (4.1) — as palavras do gatilho de palavra-chave, como texto. */
+  const [palavraChave, setPalavraChave] = React.useState<TelaDaPalavraChave>(TELA_DA_PALAVRA_CHAVE_VAZIA);
 
   const create = useCreateAutomationRule();
   const update = useUpdateAutomationRule();
@@ -403,6 +418,8 @@ export function RuleEditor({ open, onOpenChange, rule }: Props) {
     // como vazio, em vez de a tela mostrar um N que o motor não vai respeitar.
     const horas = horasDoIntervaloNaConfig(rule?.trigger_config);
     setRepetirAposHoras(horas === null ? "" : String(horas));
+    // O leitor é o MESMO do motor: palavra-chave torta abre vazia.
+    setPalavraChave(telaDaPalavraChave(rule?.trigger_config));
     // #3726 — o leitor é o MESMO da varredura. Regra antiga (sem a chave) abre
     // com 0, que é o comportamento que ela já tem no banco.
     setAntecedenciaDoAniversario(
@@ -446,6 +463,7 @@ export function RuleEditor({ open, onOpenChange, rule }: Props) {
     triggerEvent === GATILHO_SILENCIO || triggerEvent === GATILHO_ETAPA_PARADA;
   const ehGatilhoDeNovoContato = triggerEvent === "lead.created";
   const ehGatilhoDoAniversario = triggerEvent === "contact.birthday";
+  const ehGatilhoDePalavraChave = triggerEvent === GATILHO_PALAVRA_CHAVE;
   const camposDeData = camposDeDataDoNegocio(
     (pipelinesRes?.data ?? []).find((p) => p.id === configDaData.pipeline_id)?.settings ?? null,
   );
@@ -484,34 +502,12 @@ export function RuleEditor({ open, onOpenChange, rule }: Props) {
     });
   };
 
-  const onSubmit = async () => {
-    const payload = {
-      name,
-      trigger_event: triggerEvent,
-      // Serializa o grupo do topo: "todas" ⇒ a lista simples (formato antigo,
-      // compatível) e "qualquer" ⇒ `{any:[…]}`. Operador sem valor não exige o
-      // campo de valor. Regra sem condição nenhuma vai como `[]` nos dois modos.
-      conditions: (() => {
-        const linhas = conditions
-          .filter((c) => c.field.trim() && (OPS_SEM_VALOR.has(c.op) || c.value.trim()))
-          .map((c) => ({
-            field: c.field.trim(),
-            op: c.op,
-            value: OPS_SEM_VALOR.has(c.op) ? "" : c.value.trim(),
-          }));
-        const resultado: Conditions =
-          linhas.length === 0 || modoDasCondicoes === "todas" ? linhas : { any: linhas };
-        return resultado;
-      })(),
-      actions,
-      // `Number("")` é 0 — o que gravaria "avisar no dia" para quem não
-      // digitou nada. O campo vazio vira `NaN`, que o schema recusa com a
-      // mensagem certa em vez de aceitar um zero silencioso.
-      //
-      // As duas ramificações preservam o que a tela NÃO edita (issue #2483):
-      // o `pipeline_id`/`stage_id` gravados pela API sobrevivem ao salvar. Ver
-      // `configAoSalvarDaTela`.
-      trigger_config: ehGatilhoDeData
+  /**
+   * O `trigger_config` que a tela grava — o mesmo objeto que vai para a API e
+   * que o "Pronta para ativar?" confere (fase 4, 4.1).
+   */
+  const triggerConfigDaTela = (): Record<string, unknown> =>
+      ehGatilhoDeData
         ? configAoSalvarDaTela({
             gatilhoDaRegra: rule?.trigger_event,
             configDaRegra: rule?.trigger_config,
@@ -565,6 +561,15 @@ export function RuleEditor({ open, onOpenChange, rule }: Props) {
                 if (horas === null) delete config.repetir_apos_horas;
                 return config;
               })()
+            : ehGatilhoDePalavraChave
+              ? // Fase 4 (4.1) — as palavras, o modo e o acento. O merge preserva o
+                // que a API gravou e esta tela não desenha (ex.: uma vez por contato).
+                configAoSalvarDaTela({
+                  gatilhoDaRegra: rule?.trigger_event,
+                  configDaRegra: rule?.trigger_config,
+                  gatilhoDaTela: triggerEvent,
+                  configDaTela: { ...configDaTelaDaPalavraChave(palavraChave) },
+                })
             : ehGatilhoDoAniversario
               ? configAoSalvarDaTela({
                   gatilhoDaRegra: rule?.trigger_event,
@@ -593,7 +598,36 @@ export function RuleEditor({ open, onOpenChange, rule }: Props) {
                 configDaRegra: rule?.trigger_config,
                 gatilhoDaTela: triggerEvent,
                 configDaTela: {},
-              }),
+              });
+
+  const onSubmit = async () => {
+    const payload = {
+      name,
+      trigger_event: triggerEvent,
+      // Serializa o grupo do topo: "todas" ⇒ a lista simples (formato antigo,
+      // compatível) e "qualquer" ⇒ `{any:[…]}`. Operador sem valor não exige o
+      // campo de valor. Regra sem condição nenhuma vai como `[]` nos dois modos.
+      conditions: (() => {
+        const linhas = conditions
+          .filter((c) => c.field.trim() && (OPS_SEM_VALOR.has(c.op) || c.value.trim()))
+          .map((c) => ({
+            field: c.field.trim(),
+            op: c.op,
+            value: OPS_SEM_VALOR.has(c.op) ? "" : c.value.trim(),
+          }));
+        const resultado: Conditions =
+          linhas.length === 0 || modoDasCondicoes === "todas" ? linhas : { any: linhas };
+        return resultado;
+      })(),
+      actions,
+      // `Number("")` é 0 — o que gravaria "avisar no dia" para quem não
+      // digitou nada. O campo vazio vira `NaN`, que o schema recusa com a
+      // mensagem certa em vez de aceitar um zero silencioso.
+      //
+      // As duas ramificações preservam o que a tela NÃO edita (issue #2483):
+      // o `pipeline_id`/`stage_id` gravados pela API sobrevivem ao salvar. Ver
+      // `configAoSalvarDaTela`.
+      trigger_config: triggerConfigDaTela(),
     };
     const parsed = createAutomationRuleSchema.safeParse(payload);
     if (!parsed.success) {
@@ -722,6 +756,14 @@ export function RuleEditor({ open, onOpenChange, rule }: Props) {
                       : t("Deixe vazio para não ter intervalo. Com um número, a automação não repete para o mesmo contato antes de passar esse tanto de horas (1 a 720, ou seja até 30 dias). O contador é por contato e por automação, e sobrevive a reinício.")}
                   </p>
                 </div>
+              </div>
+            ) : null}
+
+            {/* Fase 4 (4.1) — a palavra-chave: sem palavras a regra nunca dispara,
+                e a porta da API recusa pelo mesmo leitor do motor. */}
+            {ehGatilhoDePalavraChave ? (
+              <div className="rounded-sm border border-border p-3">
+                <PalavraChaveDoGatilho tela={palavraChave} onChange={setPalavraChave} idPrefixo="regra" />
               </div>
             ) : null}
 
@@ -1197,6 +1239,18 @@ export function RuleEditor({ open, onOpenChange, rule }: Props) {
               </SelectContent>
             </Select>
           </section>
+
+          {/* Fase 4 (4.1) — antes de ligar: o checklist; e, na regra salva, o
+              teste sem efeito e as últimas execuções desta regra. */}
+          <div className="space-y-8 border-t border-border pt-6">
+            <ProntaParaAtivar evento={triggerEvent} triggerConfig={triggerConfigDaTela()} acoes={actions} />
+            {rule ? (
+              <>
+                <TestarAutomacao ruleId={rule.id} evento={rule.trigger_event} />
+                <HistoricoDaAutomacao ruleId={rule.id} />
+              </>
+            ) : null}
+          </div>
 
           {!isEdit ? (
             <p className="rounded-sm border border-border bg-muted p-3 text-sm text-muted-foreground">

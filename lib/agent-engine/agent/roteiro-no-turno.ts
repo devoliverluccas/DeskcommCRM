@@ -284,7 +284,11 @@ export async function prepararRoteiroDoTurno(
     }));
 
     let validacoes: Array<{ campo: string; valor: string }> | undefined;
-    if (perguntas.length > 0 || preenchidos.length > 0 || esgotados.length > 0) {
+    // MODO HÍBRIDO (4.3): o roteiro de resposta pronta não chama modelo nenhum —
+    // nem o validador. A resposta é lida pela captura determinística
+    // (`processarInboundDoFluxo` sem `validacoes`), e o que ela não entende
+    // conta tentativa, como qualquer pergunta não respondida.
+    if (!atual.respostaPronta && (perguntas.length > 0 || preenchidos.length > 0 || esgotados.length > 0)) {
       const leitura = await deps.validar({
         perguntas,
         preenchidos,
@@ -337,6 +341,27 @@ export async function prepararRoteiroDoTurno(
     });
     return montar(atual, iniciado);
   }
+}
+
+/**
+ * MODO HÍBRIDO (4.3) — a decisão do turno: o ROTEIRO responde, e o modelo
+ * grande não é chamado.
+ *
+ * Vale quando o roteiro em andamento é de "resposta pronta"
+ * (`settings.resposta_pronta`) e ainda tem pergunta pendente: o motor manda o
+ * texto dela (`garantirPerguntaDoRoteiro`, pela mesma cadeia de envio) e o turno
+ * termina. Sem pendente — o roteiro concluiu neste turno ou esgotou as
+ * tentativas — devolve `null`, e o agente volta a atender: é o "Passar para a
+ * IA" do roteiro, com o `ao_finalizar` do Fim no contexto.
+ *
+ * Pura de propósito: é ela que o turno consulta ANTES de montar o prompt, e é
+ * nela que o teste prova que o caminho híbrido não chega ao modelo.
+ */
+export function roteiroRespondeSemModelo(roteiro: RoteiroDoTurno | null): boolean {
+  if (roteiro === null) return false;
+  if (roteiro.estado.respostaPronta !== true) return false;
+  if (roteiro.finalizacao !== undefined) return false;
+  return roteiro.estado.situacao.pendentes.length > 0;
 }
 
 /**

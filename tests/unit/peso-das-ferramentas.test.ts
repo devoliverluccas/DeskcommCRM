@@ -64,7 +64,7 @@ const TETO: Readonly<Record<string, { tokens: number; motivo: string }>> = {
   "crm_get_org_memory": { tokens: 114, motivo: BASE },
   "crm_save_org_memory": { tokens: 285, motivo: BASE },
   "crm_list_contact_orders": { tokens: 234, motivo: BASE },
-  "crm_search_products": { tokens: 362, motivo: BASE },
+  "crm_search_products": { tokens: 380, motivo: "BASE + a busca no catálogo inteiro (migration 9481): a descrição diz que não há teto de itens e explica preço promocional" },
   "crm_get_honorarios_contrato": { tokens: 253, motivo: BASE },
   "crm_list_honorarios_parcelas": { tokens: 222, motivo: BASE },
   "crm_preparar_proposta": { tokens: 132, motivo: BASE },
@@ -185,7 +185,7 @@ const TETO: Readonly<Record<string, { tokens: number; motivo: string }>> = {
 // +7760 com as 23 ferramentas `crm_amigo_*` (#4227), que só entram no catálogo com
 // o módulo `amigo` instalado. MEDIDO no merge com a main: 39122 = 31362 + 7760
 // (2026-11-16).
-const TETO_TOTAL = 39122;
+const TETO_TOTAL = 39140;
 
 const VARIANTE = "schedule_followup (com negócio)";
 
