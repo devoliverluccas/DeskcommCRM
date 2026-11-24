@@ -1,5 +1,6 @@
 "use client";
-import { useState, type ReactNode, type RefObject } from "react";
+import { useEffect, useState, type ReactNode, type RefObject } from "react";
+import { useHotkeys } from "react-hotkeys-hook";
 import { useT } from "@/hooks/i18n/useT";
 import Link from "next/link";
 import {
@@ -19,6 +20,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { JanelaSelo } from "@/components/inbox/JanelaSelo";
@@ -48,7 +50,8 @@ import { comandoDaConversa, ROTULO_DO_MOTIVO } from "@/lib/inbox/comando-da-conv
 import { ReassignDialog } from "@/components/inbox/ReassignDialog";
 import { SnoozeButton } from "@/components/inbox/SnoozeButton";
 import { DialogoDeConvite, ParticipantesDaConversa } from "@/components/inbox/ParticipantesDaConversa";
-import { DialogoMoverParaFila, ItemMoverParaFila } from "@/components/inbox/MoverParaFila";
+import { DialogoMoverParaFila, ItemMoverParaFila, podeMoverParaFila } from "@/components/inbox/MoverParaFila";
+import { atalhoDo, teclaDo, teclaEmOutraCamada, type IdDoAtalho } from "@/components/inbox/atalhos-da-conversa";
 import { DialButton } from "@/components/voice/DialButton";
 import { VideoCallButton } from "@/components/inbox/VideoCallButton";
 import { ItemReservarServico, ReservarServicoNaConversa } from "@/components/agenda/ReservarServicoNaConversa";
@@ -77,6 +80,25 @@ interface Props {
    * `InboxLayout`; aqui ele só ocupa o fim da barra de ações.
    */
   gatilhoDaFicha?: ReactNode;
+  /**
+   * Navega para outra tela do app (o `router.push` do `InboxLayout`). É por ela
+   * que o atalho "Ver contato" abre a ficha sem recarregar a página; sem ela o
+   * atalho não existe — o item do menu continua sendo um link comum.
+   */
+  onNavegar?: (href: string) => void;
+}
+
+/**
+ * A dica de teclado à direita de um item do menu ⋯. `aria-hidden` porque o
+ * item já anuncia a tecla em `aria-keyshortcuts`, e o texto dela dentro do nome
+ * acessível renomearia o item ("Ver contatoV").
+ */
+function DicaDeTecla({ id }: { id: IdDoAtalho }) {
+  return (
+    <DropdownMenuShortcut aria-hidden data-atalho={id} className="pl-4 font-mono text-[11px] tracking-normal text-text-subtle opacity-100">
+      {atalhoDo(id).exibicao}
+    </DropdownMenuShortcut>
+  );
 }
 
 /**
@@ -112,6 +134,7 @@ export function ConversationHeader({
   buscaAberta,
   botaoBuscaRef,
   gatilhoDaFicha,
+  onNavegar,
 }: Props) {
   const t = useT();
   const { user, activeOrg } = useAuth();
@@ -154,6 +177,10 @@ export function ConversationHeader({
   // menu, pelo mesmo motivo do convite acima.
   const [filaAberta, setFilaAberta] = useState(false);
   const [tarefaAberta, setTarefaAberta] = useState(false);
+  // O menu ⋯ é controlado só para o atalho de "Lembrar" poder abri-lo já com o
+  // foco no item (as durações moram no submenu do `SnoozeButton`).
+  const [menuAberto, setMenuAberto] = useState(false);
+  const [focarLembrar, setFocarLembrar] = useState(false);
 
   const c = conversation.contacts ?? null;
   const podeCriarTarefa = Boolean(
@@ -349,6 +376,80 @@ export function ConversationHeader({
     conversation.assigned_to_user_id !== null &&
     fatosDoComando.force_human !== true &&
     fatosDoComando.is_blocked !== true;
+
+  /**
+   * OS ATALHOS DAS AÇÕES DA CONVERSA (lista em `atalhos-da-conversa.ts`).
+   *
+   * Cada tecla obedece à MESMA condição que desenha o botão ou o item do menu:
+   * a tecla de uma ação que não aparece na tela não faz nada. Ficam ANTES do
+   * retorno de leitura-só (ordem dos hooks) e desligadas nele — quem acompanha
+   * em suporte não age, nem pelo teclado.
+   *
+   * Desligam também com qualquer diálogo deste cabeçalho aberto, e
+   * `teclaEmOutraCamada` cobre os de fora (a ajuda, a ficha, o menu ⋯ aberto):
+   * uma letra apertada num diálogo é do diálogo.
+   */
+  const algumDialogoAberto =
+    reassignOpen ||
+    confirmFecharOpen ||
+    confirmArquivarOpen ||
+    confirmPessoalOpen ||
+    conviteAberto ||
+    reservaAberta ||
+    filaAberta ||
+    tarefaAberta;
+  const atalhosLigados = user.support?.access_mode !== "support_readonly" && !algumDialogoAberto;
+  const podeMoverFila = podeMoverParaFila({
+    papel: activeOrg?.role,
+    modulos: activeOrg?.modulos_ligados ?? [],
+    encerrada,
+    plataformaAdmin: user.is_platform_admin === true && !user.support,
+  });
+  const opcoesDaTecla = (aplica: boolean) => ({
+    enabled: atalhosLigados && aplica,
+    preventDefault: true,
+    ignoreEventWhen: teclaEmOutraCamada,
+  });
+  useHotkeys(teclaDo("transferir"), () => setReassignOpen(true), opcoesDaTecla(!encerrada));
+  useHotkeys(teclaDo("mover-para-fila"), () => setFilaAberta(true), opcoesDaTecla(podeMoverFila));
+  useHotkeys(
+    teclaDo("automatico"),
+    () => {
+      if (podeDevolver) {
+        if (!retomar.isPending) retomar.mutate({ conversation_id: conversation.id });
+      } else if (podePausar && !pausar.isPending) {
+        pausar.mutate({ conversation_id: conversation.id });
+      }
+    },
+    opcoesDaTecla(podeDevolver || podePausar),
+  );
+  useHotkeys(
+    teclaDo("lembrar"),
+    () => {
+      setFocarLembrar(true);
+      setMenuAberto(true);
+    },
+    opcoesDaTecla(!encerrada),
+  );
+  useHotkeys(teclaDo("criar-tarefa"), () => setTarefaAberta(true), opcoesDaTecla(Boolean(c?.id && podeCriarTarefa)));
+  useHotkeys(
+    teclaDo("ver-contato"),
+    () => {
+      if (c?.id && onNavegar) onNavegar(`/app/contacts/${c.id}`);
+    },
+    opcoesDaTecla(Boolean(c?.id && onNavegar)),
+  );
+  // Com o menu aberto pelo atalho, o foco vai para "Lembrar": a seta para a
+  // direita (ou Enter) abre as durações. Um quadro depois da abertura, porque o
+  // Radix põe o foco no conteúdo ao abrir e passaria por cima deste.
+  useEffect(() => {
+    if (!menuAberto || !focarLembrar) return;
+    const quadro = requestAnimationFrame(() => {
+      document.querySelector<HTMLElement>('[data-testid="acao-lembrar"]')?.focus();
+      setFocarLembrar(false);
+    });
+    return () => cancelAnimationFrame(quadro);
+  }, [menuAberto, focarLembrar]);
 
   if (user.support?.access_mode === "support_readonly") return <header className="flex items-center justify-between border-b p-4">
     <strong>{displayName}</strong><span className="text-sm text-muted-foreground">{STATUS_LABEL[status] ?? status} · Somente leitura</span>
@@ -582,17 +683,18 @@ export function ConversationHeader({
             variant="outline"
             disabled={retomar.isPending}
             data-testid="devolver-ao-automatico"
+            aria-keyshortcuts={atalhoDo("automatico").exibicao}
             // O ALCANCE DA VOLTA NÃO É SEMPRE O MESMO, e a tela precisa dizer qual é.
             //
             // `devolverAtendimentoAoAgente` limpa `contacts.force_human`, que é do
             // CLIENTE e não desta conversa: quando foi ela que travou, o clique
             // religa o automático para TODAS as conversas daquela pessoa. Um botão
             // que às vezes faz mais do que o nome promete precisa dizer quando.
-            title={
+            title={`${
               motivo === "contato_travado"
                 ? t("Religa o atendimento automático para este cliente — vale para todas as conversas dele.")
                 : t("Devolve esta conversa ao atendimento automático.")
-            }
+            } (${atalhoDo("automatico").exibicao})`}
             onClick={() => retomar.mutate({ conversation_id: conversation.id })}
           >
             {retomar.isPending ? t("Devolvendo...") : t("Devolver ao automático")}
@@ -603,12 +705,16 @@ export function ConversationHeader({
             size="sm"
             variant="outline"
             data-testid="acao-transferir"
+            aria-keyshortcuts={atalhoDo("transferir").exibicao}
             // GUIA CURTA (#3003): "Transferir" não diz PARA QUEM. A aba Número do
             // diálogo é a outra metade da resposta — mas ela aparece quando a org
             // tem outro número com telefone, inclusive fora do ar (com a opção
             // desabilitada; `outrosNumerosDoContato`), e ela não move esta
             // conversa: continua o atendimento do contato por lá.
-            title={t("Passa esta conversa para outro atendente. Se houver outro número conectado, dá para continuar o atendimento por ele.")}
+            //
+            // A tecla vai no FIM da guia, e não no rótulo: o texto do botão é
+            // contrato ("a guia não renomeou nenhum botão", #3003).
+            title={`${t("Passa esta conversa para outro atendente. Se houver outro número conectado, dá para continuar o atendimento por ele.")} (${atalhoDo("transferir").exibicao})`}
             onClick={() => setReassignOpen(true)}
           >
             {t("Transferir")}
@@ -660,7 +766,7 @@ export function ConversationHeader({
             O nome acessível é "Mais ações", o mesmo da barra de ações em lote.
             No celular o gatilho tem 44px (`w-11`, como a busca ao lado); o
             `lg:w-8` só vale onde há ponteiro fino. */}
-        <DropdownMenu>
+        <DropdownMenu open={menuAberto} onOpenChange={setMenuAberto}>
           <DropdownMenuTrigger asChild>
             <Button
               size="sm"
@@ -687,9 +793,11 @@ export function ConversationHeader({
                   // GUIA CURTA (#3003): o rótulo promete "contato" e entrega uma
                   // página inteira; a guia diz qual.
                   title={t("Abre a ficha completa deste contato.")}
+                  aria-keyshortcuts={onNavegar ? atalhoDo("ver-contato").exibicao : undefined}
                 >
                   <UserCircle size={16} aria-hidden />
-                  {t("Ver contato")}
+                  <span>{t("Ver contato")}</span>
+                  {onNavegar && <DicaDeTecla id="ver-contato" />}
                 </Link>
               </DropdownMenuItem>
             )}
@@ -703,9 +811,11 @@ export function ConversationHeader({
                 data-testid="acao-criar-tarefa"
                 title={t("Cria uma tarefa para este atendimento com prazo e responsável")}
                 onSelect={() => setTarefaAberta(true)}
+                aria-keyshortcuts={atalhoDo("criar-tarefa").exibicao}
               >
                 <CalendarCheck size={16} aria-hidden className="mr-2" />
-                {t("Criar tarefa")}
+                <span>{t("Criar tarefa")}</span>
+                <DicaDeTecla id="criar-tarefa" />
               </DropdownMenuItem>
             )}
             {podeReservar && <ItemReservarServico onSelect={() => setReservaAberta(true)} />}
@@ -744,7 +854,20 @@ export function ConversationHeader({
                 viram dois itens no menu.
                 O separador de cima vem de dentro do item: solto aqui, ele
                 dobraria com o de baixo quando o item não aparece. */}
-            <ItemMoverParaFila encerrada={encerrada} onAbrir={() => setFilaAberta(true)} />
+            {/* A dica da tecla fica POR CIMA do item, e não dentro dele: o item
+                é de `MoverParaFila.tsx`, que traz junto o separador de cima
+                (9px: `my-1` + `h-px`). Só existe quando o item existe — a mesma
+                régua (`podeMoverParaFila`) decide os dois. */}
+            {podeMoverFila ? (
+              <div className="relative">
+                <ItemMoverParaFila encerrada={encerrada} onAbrir={() => setFilaAberta(true)} />
+                <span className="pointer-events-none absolute inset-x-0 bottom-0 top-[9px] flex items-center justify-end pr-2">
+                  <DicaDeTecla id="mover-para-fila" />
+                </span>
+              </div>
+            ) : (
+              <ItemMoverParaFila encerrada={encerrada} onAbrir={() => setFilaAberta(true)} />
+            )}
             <DropdownMenuSeparator />
             {podePausar && (
               <DropdownMenuItem
@@ -755,9 +878,11 @@ export function ConversationHeader({
                 // não faz: com dono, ela só cala, nunca rouba a conversa de quem a tem.
                 title={t("O atendimento automático para nesta conversa. O dono não muda.")}
                 onSelect={() => pausar.mutate({ conversation_id: conversation.id })}
+                aria-keyshortcuts={atalhoDo("automatico").exibicao}
               >
                 <Pause size={16} aria-hidden className="mr-2" />
-                {pausar.isPending ? t("Pausando...") : t("Pausar o automático")}
+                <span>{pausar.isPending ? t("Pausando...") : t("Pausar o automático")}</span>
+                <DicaDeTecla id="automatico" />
               </DropdownMenuItem>
             )}
             {/* #3967 — "IA com o dono": um interruptor, um rótulo, dois estados.
@@ -787,12 +912,19 @@ export function ConversationHeader({
                 {modoLigado && <Check size={16} aria-hidden className="ml-auto" />}
               </DropdownMenuItem>
             )}
+            {/* A dica fica por cima do item, antes da seta do submenu (o item é
+                do `SnoozeButton`). `pr-8` = o recuo do item mais a seta. */}
             {!encerrada && (
-              <SnoozeButton
-                conversationId={conversation.id}
-                snoozeUntil={conversation.snooze_until ?? null}
-                modo="submenu"
-              />
+              <div className="relative">
+                <SnoozeButton
+                  conversationId={conversation.id}
+                  snoozeUntil={conversation.snooze_until ?? null}
+                  modo="submenu"
+                />
+                <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-8">
+                  <DicaDeTecla id="lembrar" />
+                </span>
+              </div>
             )}
             <DropdownMenuSeparator />
             {/* ARQUIVAR (#923): tira da frente sem destruir.

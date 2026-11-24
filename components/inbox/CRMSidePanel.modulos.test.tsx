@@ -60,6 +60,31 @@ const LATERAL_DE_HOJE = [
 ];
 
 /**
+ * A MESMA lateral, como o DOM a desenha desde as abas (item 1.3 do redesign):
+ * os módulos de Perfil, depois os de Tarefas, depois os de Negócios — cada
+ * grupo na ordem de hoje. Escrita à mão pelo mesmo motivo da lista acima: o
+ * agrupamento é contrato de tela, não eco da constante.
+ */
+const LATERAL_DE_HOJE_NAS_ABAS = [
+  "contato",
+  "tags-do-contato",
+  "carteira",
+  "anuncio",
+  "perfil-enriquecido",
+  "tags-da-conversa",
+  "memoria",
+  "roteiros",
+  "acervo",
+  "demandas",
+  "tarefas",
+  "followup",
+  "atividade",
+  "leads",
+  "compras",
+  "pedidos",
+];
+
+/**
  * O "servidor" da preferência: o que a action gravou e o que a próxima carga
  * do Inbox passaria como `modulosIniciais`. Uma variável só, com a MESMA régua
  * de normalização do servidor — é o que faz o "sobrevive a recarregar" ser uma
@@ -182,6 +207,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   h.capturado.onDragEnd = null;
   h.gravado = null;
+  window.localStorage.clear();
 });
 
 /**
@@ -212,6 +238,12 @@ function recarregar(tela: ReturnType<typeof montar>) {
 const modulosNaTela = () =>
   Array.from(document.querySelectorAll("[data-modulo]")).map((el) => el.getAttribute("data-modulo"));
 
+/** Os módulos de UMA aba, na ordem do DOM — é onde a ordem da pessoa vale. */
+const modulosDaAbaNaTela = (aba: string) =>
+  Array.from(document.querySelectorAll(`[data-testid="inbox-painel-da-aba-${aba}"] [data-modulo]`)).map((el) =>
+    el.getAttribute("data-modulo"),
+  );
+
 const abrirDialogo = async () => {
   const u = userEvent.setup();
   await u.click(screen.getByRole("button", { name: "Personalizar lateral" }));
@@ -227,8 +259,11 @@ describe("#3008 — CONTROLE: usuário novo vê a lateral de hoje", () => {
     montar();
     await screen.findByTestId("inbox-demandas");
 
-    expect(modulosNaTela()).toEqual(LATERAL_DE_HOJE);
+    // Agrupados por aba, e dentro de cada aba na ordem de hoje.
+    expect(modulosNaTela()).toEqual(LATERAL_DE_HOJE_NAS_ABAS);
     expect(modulosNaTela()).toHaveLength(MODULOS_DA_LATERAL.length);
+    expect(modulosDaAbaNaTela("negocios")).toEqual(["leads", "compras", "pedidos"]);
+    expect(modulosDaAbaNaTela("tarefas")).toEqual(["demandas", "tarefas", "followup", "atividade"]);
   });
 
   it("os blocos continuam sendo os de antes: contato, demandas, atividade, acervo", async () => {
@@ -318,7 +353,10 @@ describe("#3008 — reordenar persiste", () => {
 
     await screen.findByTestId("inbox-contato");
     const naTela = modulosNaTela();
-    expect(naTela.slice(0, 3)).toEqual(["acervo", "atividade", "pedidos"]);
+    // Cada um sobe para o TOPO da própria aba: a ordem da pessoa vale dentro dela.
+    expect(modulosDaAbaNaTela("perfil")[0]).toBe("acervo");
+    expect(modulosDaAbaNaTela("tarefas")[0]).toBe("atividade");
+    expect(modulosDaAbaNaTela("negocios")[0]).toBe("pedidos");
     // Nada foi perdido na ida e volta pelo metadata.
     expect(naTela).toHaveLength(MODULOS_DA_LATERAL.length);
     expect(new Set(naTela).size).toBe(MODULOS_DA_LATERAL.length);
@@ -387,7 +425,7 @@ describe("#3008 — reordenar persiste", () => {
     await u.click(within(dialogo).getByRole("button", { name: "Cancelar" }));
 
     expect(h.salvar).not.toHaveBeenCalled();
-    expect(modulosNaTela()).toEqual(LATERAL_DE_HOJE);
+    expect(modulosNaTela()).toEqual(LATERAL_DE_HOJE_NAS_ABAS);
     expect(screen.getByTestId("inbox-bloco-acervo")).toBeInTheDocument();
   });
 });
@@ -406,7 +444,7 @@ describe("#3008 — falha de gravação não mente para quem configurou", () => 
     // Nada de otimismo: o módulo continua na lateral, porque o servidor não
     // gravou. Sumir na tela e voltar no próximo carregamento é o defeito.
     expect(screen.getByTestId("inbox-bloco-acervo")).toBeInTheDocument();
-    expect(modulosNaTela()).toEqual(LATERAL_DE_HOJE);
+    expect(modulosNaTela()).toEqual(LATERAL_DE_HOJE_NAS_ABAS);
   });
 });
 
@@ -442,5 +480,140 @@ describe("#3008 — no celular, a faixa da engrenagem não cobre o X do Sheet", 
 
     expect(zIndex(faixa)).toBeGreaterThan(0);
     expect(zIndex(fechar)).toBeGreaterThan(zIndex(faixa));
+  });
+});
+
+/**
+ * AS ABAS DO PAINEL (item 1.3 do redesign) — Perfil, Negócios, Tarefas, Mídias.
+ *
+ * O agrupamento em si é régua pura (`lib/inbox/modulos-da-lateral.test.ts`).
+ * Aqui mede-se a TELA: qual aba abre, que ela é lembrada por pessoa neste
+ * aparelho, que os módulos das abas fechadas continuam no DOM (e por isso os
+ * testids que o resto da suíte procura seguem achando o bloco), e que a galeria
+ * de Mídias só pergunta ao servidor quando a aba é aberta.
+ */
+describe("abas do painel", () => {
+  const CHAVE = "inbox:aba-do-painel:u-eu";
+  const aba = (nome: string) => screen.getByRole("tab", { name: nome });
+  const pediuMidias = () =>
+    h.get.mock.calls.some(([url]) => String(url).includes(`/conversations/${CONVERSA}/media`));
+
+  it("abre em Perfil, com as quatro abas na faixa do alto", async () => {
+    montar();
+    await screen.findByTestId("inbox-contato");
+
+    const faixa = screen.getByTestId("inbox-cabecalho-do-painel");
+    expect(within(faixa).getAllByRole("tab").map((el) => el.textContent)).toEqual([
+      "Perfil",
+      "Tarefas",
+      "Negócios",
+      "Mídias",
+    ]);
+    expect(aba("Perfil")).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByTestId("inbox-painel-da-aba-perfil")).toHaveAttribute("data-state", "active");
+  });
+
+  it("os módulos das abas fechadas continuam montados, no painel inativo", async () => {
+    montar();
+    await screen.findByTestId("inbox-contato");
+
+    const tarefas = screen.getByTestId("inbox-painel-da-aba-tarefas");
+    expect(tarefas).toHaveAttribute("data-state", "inactive");
+    // `hidden` vem do `data-state` (classe), não de desmontar: o bloco existe.
+    expect(tarefas.className).toContain("data-[state=inactive]:hidden");
+    expect(within(tarefas).getByTestId("inbox-demandas")).toBeInTheDocument();
+    expect(within(screen.getByTestId("inbox-painel-da-aba-negocios")).getByTestId("inbox-campos-lead")).toBeInTheDocument();
+  });
+
+  it("trocar de aba ativa o painel dela", async () => {
+    montar();
+    await screen.findByTestId("inbox-contato");
+    const u = userEvent.setup();
+
+    await u.click(aba("Negócios"));
+
+    expect(aba("Negócios")).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByTestId("inbox-painel-da-aba-negocios")).toHaveAttribute("data-state", "active");
+    expect(screen.getByTestId("inbox-painel-da-aba-perfil")).toHaveAttribute("data-state", "inactive");
+  });
+
+  it("a aba escolhida é lembrada neste aparelho, por pessoa, e volta ao recarregar", async () => {
+    const tela = montar();
+    await screen.findByTestId("inbox-contato");
+    const u = userEvent.setup();
+
+    await u.click(aba("Tarefas"));
+    expect(window.localStorage.getItem(CHAVE)).toBe("tarefas");
+
+    recarregar(tela);
+    await waitFor(() => expect(aba("Tarefas")).toHaveAttribute("aria-selected", "true"));
+  });
+
+  it("valor torto guardado abre em Perfil", async () => {
+    window.localStorage.setItem(CHAVE, "aba-que-nao-existe");
+    montar();
+    await screen.findByTestId("inbox-contato");
+    expect(aba("Perfil")).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("a ordem e o esconder da pessoa valem dentro da aba", async () => {
+    h.gravado = normalizarModulos([
+      { id: "pedidos", visivel: true },
+      { id: "compras", visivel: false },
+    ]);
+    montar();
+    await screen.findByTestId("inbox-contato");
+
+    expect(modulosDaAbaNaTela("negocios")).toEqual(["pedidos", "leads"]);
+  });
+
+  it("aba sem módulo visível diz isso, em vez de ficar em branco", async () => {
+    h.gravado = normalizarModulos([
+      { id: "leads", visivel: false },
+      { id: "compras", visivel: false },
+      { id: "pedidos", visivel: false },
+    ]);
+    montar();
+    await screen.findByTestId("inbox-contato");
+
+    expect(
+      within(screen.getByTestId("inbox-painel-da-aba-negocios")).getByText("Nenhum módulo visível nesta aba."),
+    ).toBeInTheDocument();
+  });
+
+  it("Mídias só monta e só pergunta ao servidor quando a aba é aberta", async () => {
+    montar();
+    await screen.findByTestId("inbox-contato");
+    expect(screen.queryByTestId("inbox-midias")).toBeNull();
+    expect(pediuMidias()).toBe(false);
+
+    const u = userEvent.setup();
+    await u.click(aba("Mídias"));
+
+    expect(await screen.findByTestId("inbox-midias")).toBeInTheDocument();
+    await waitFor(() => expect(pediuMidias()).toBe(true));
+    expect(h.get.mock.calls.map(([url]) => String(url))).toContainEqual(
+      expect.stringContaining(`/api/v1/conversations/${CONVERSA}/media?tipo=imagem`),
+    );
+  });
+
+  it("na gaveta do celular as abas também aparecem", async () => {
+    const { Sheet, SheetContent, SheetTitle } = await import("@/components/ui/sheet");
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <Sheet open>
+          <SheetContent side="right" className="w-[min(22rem,90vw)] overflow-y-auto p-0">
+            <SheetTitle className="sr-only">Ficha do contato</SheetTitle>
+            <CRMSidePanel conversation={conversa} />
+          </SheetContent>
+        </Sheet>
+      </QueryClientProvider>,
+    );
+
+    await screen.findByTestId("inbox-cabecalho-do-painel");
+    expect(screen.getAllByRole("tab")).toHaveLength(4);
+    // Sem recolher (o Sheet tem o próprio X), o canto direito fica livre.
+    expect(screen.queryByRole("button", { name: "Recolher painel do contato" })).toBeNull();
   });
 });

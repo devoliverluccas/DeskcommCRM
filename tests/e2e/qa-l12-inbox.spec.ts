@@ -195,7 +195,8 @@ test.describe("Lote 12 — painel do contato no Inbox", () => {
     registra(`#944 · GET /crm-summary = ${rr.status()}`);
 
     // ── #909: o rótulo do botão é o TÍTULO do diálogo que ele abre ─────────
-    const botao = page.getByRole("button", { name: "Novo negócio" });
+    // Escopo no painel: a faixa do negócio no topo da conversa tem o mesmo botão.
+    const botao = page.getByTestId("painel-do-contato").getByRole("button", { name: "Novo negócio" });
     await expect(botao).toBeVisible({ timeout: 30_000 });
     registra(`#909 · rótulo do botão = "${await botao.innerText()}"`);
     await captura(page, "909-01-painel-com-botao-novo-lead");
@@ -210,6 +211,8 @@ test.describe("Lote 12 — painel do contato no Inbox", () => {
     await expect(dialogo).toHaveCount(0);
 
     // ── #944: Funil · Etapa e o desfecho pelas PALAVRAS FIXAS ─────────────
+    // "Negócios recentes" mora na aba Negócios do painel.
+    await page.getByTestId("inbox-aba-negocios").click();
     const secao = page.locator('[data-testid="inbox-campos-lead"]');
     await expect(secao.getByText("Negócios recentes")).toBeVisible();
     const texto = await secao.innerText();

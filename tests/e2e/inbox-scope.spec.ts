@@ -418,7 +418,10 @@ for (const origem of ["contato", "negocio"] as const) {
         await login(page, `cadastro-atendente-${marcador}@invariant.test`);
         await page.goto(origem === "contato" ? "/app/contacts" : `/app/pipelines/${funil}`);
         if (origem === "negocio") {
-          await page.getByRole("button", { name: "Novo negócio", exact: true }).click();
+          await page
+            .getByTestId("painel-do-contato")
+            .getByRole("button", { name: "Novo negócio", exact: true })
+            .click();
           const negocio = page.getByRole("dialog", { name: "Novo negócio", exact: true });
           await negocio.getByLabel("Título", { exact: true }).fill(titulo);
           await negocio.getByLabel("Descrição", { exact: true }).fill(descricao);

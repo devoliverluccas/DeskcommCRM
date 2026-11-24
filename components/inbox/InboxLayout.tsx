@@ -7,10 +7,7 @@ import { useSectors } from "@/hooks/team/useSectors";
 import { roleAtLeast } from "@/lib/auth/types";
 import { useBulkConversations, type AcaoEmLote } from "@/hooks/inbox/useBulkConversations";
 import { useSelecaoEmLote } from "@/hooks/inbox/useSelecaoEmLote";
-import { estadoDaJanela } from "@/lib/channels/janela";
-import { recusaNotaDeVoz } from "@/lib/channels/capabilities";
-import { motivoDaJanelaFechada, motivoDoContato } from "@/lib/inbox/motivo-do-envio-bloqueado";
-import { composerBloqueadoAteAssumir } from "@/lib/inbox/bloqueio-ate-assumir";
+import { estadoDoCompositor } from "@/lib/inbox/estado-do-compositor";
 import { JanelaFechadaAviso } from "@/components/inbox/JanelaFechadaAviso";
 import { NumeroForaDoAr } from "@/components/inbox/NumeroForaDoAr";
 import { useClaimConversation } from "@/hooks/inbox/useClaimConversation";
@@ -31,6 +28,7 @@ import { InboxFilters, type InboxFiltersValue, type InboxTab } from "./InboxFilt
 import { ChatThread } from "./ChatThread";
 import { Composer, type ComposerHandle } from "./Composer";
 import { ConversationHeader } from "./ConversationHeader";
+import { FaixaDoNegocio } from "./FaixaDoNegocio";
 import { BotaoIniciarConversa } from "./PainelIniciarConversa";
 import { RetentionNotice } from "./RetentionNotice";
 import { CRMSidePanel } from "./CRMSidePanel";
@@ -686,20 +684,18 @@ export function InboxLayout({
   // Reusa o `blockedReason` que já existe (contato bloqueado/anonimizado) em vez
   // de um segundo mecanismo de bloqueio: dois caminhos para desabilitar o mesmo
   // composer divergem, e o segundo esquece de cobrir o áudio ou o anexo.
-  const janela = estadoDaJanela(
-    selectedConversation?.channel_sessions?.provider ?? null,
-    selectedConversation?.last_inbound_at ?? null,
-    agoraJanela,
-  );
-  // Os textos moram em lib/inbox/motivo-do-envio-bloqueado.ts: o "Enviar link"
-  // da videochamada desabilita na mesma conversa e mostra o MESMO motivo.
-  const motivoDaJanela = motivoDaJanelaFechada(
-    janela,
-    selectedConversation?.channel_sessions?.provider,
+  // A DECISÃO DE BLOQUEIO DO COMPOSITOR mora em `lib/inbox/estado-do-compositor.ts`
+  // — a mesma função que o dossiê do negócio usa para responder de dentro do card.
+  // Duas cópias desta regra divergiriam; o teste da função compara caso a caso.
+  const compositor = estadoDoCompositor({
+    conversa: selectedConversation,
+    usuario: { id: user.id, support: user.support },
+    bloquearAteAssumir: activeOrg?.interface_settings?.bloquearAteAssumir,
+    participanteAtivo: participaDoAtendimento,
+    agora: agoraJanela,
     t,
-  );
-
-  const blockedReason = motivoDoContato(selectedConversation?.contacts, t);
+  });
+  const motivoDaJanela = compositor.janelaFechada;
 
   /* ─── DIVISÓRIAS ARRASTÁVEIS (#2579) ────────────────────────────────────
    *
@@ -1071,6 +1067,8 @@ export function InboxLayout({
               key={selectedConversation.id}
               conversation={selectedConversation}
               onAbrirConversa={handleSelect}
+              // O atalho "Ver contato" (V) abre a ficha pelo roteador, sem recarregar.
+              onNavegar={(href) => router.push(href)}
               onBuscar={() =>
                 buscaAberta
                   ? fecharBusca()
@@ -1093,6 +1091,14 @@ export function InboxLayout({
                   {t("Ficha")}
                 </Button>
               }
+            />
+            {/* A FAIXA DO NEGÓCIO: irmã do cabeçalho, nunca dentro dele (os
+                testes do cabeçalho o medem como `firstElementChild`). Com
+                `key`, trocar de conversa zera o negócio escolhido e os diálogos. */}
+            <FaixaDoNegocio
+              key={`negocio:${selectedConversation.id}`}
+              conversation={selectedConversation}
+              somenteLeitura={supportReadonly}
             />
             {buscaAberta && (
               <div className="flex items-center gap-2 border-b border-border px-4 py-1.5">
@@ -1164,24 +1170,17 @@ export function InboxLayout({
               key={rascunhoVivo ? `rascunho:${rascunhoVivo.conversationId}` : "composer"}
               ref={composerRef}
               conversationId={selectedConversation.id}
-              agendamentoLigado={
-                Boolean(selectedConversation.contacts?.id && selectedConversation.channel_session_id) && !supportReadonly
-              }
-              blockedReason={supportReadonly ? "Acompanhamento somente leitura" : blockedReason}
-              janelaFechada={motivoDaJanela}
-              disabled={selectedConversation.status === "closed"}
+              agendamentoLigado={compositor.agendamentoLigado}
+              blockedReason={compositor.blockedReason}
+              janelaFechada={compositor.janelaFechada}
+              disabled={compositor.disabled}
               // A CAIXA TRAVADA ATÉ ASSUMIR (#3012) — a opção é da ORGANIZAÇÃO e
               // chega pela mesma preferência que o menu (`interface_settings` em
               // `useAuth`). Desligada (o padrão) ninguém vê diferença: com ela
               // fora, a expressão é `false` em todo estado. Assumir a conversa
               // muda `assigned_to_user_id` e o compositor libera sozinho, porque
               // a decisão é recalculada a cada render sobre a conversa atual.
-              aguardandoAssumir={composerBloqueadoAteAssumir({
-                ligada: activeOrg?.interface_settings?.bloquearAteAssumir === true,
-                donoDaConversa: selectedConversation.assigned_to_user_id,
-                atendenteId: user.id,
-                participanteAtivo: participaDoAtendimento,
-              })}
+              aguardandoAssumir={compositor.aguardandoAssumir}
               contactName={selectedConversation.contacts?.name ?? null}
               contactDisplayName={selectedConversation.contacts?.display_name}
               respondendo={respondendo}
@@ -1197,7 +1196,7 @@ export function InboxLayout({
               onAbrirConversa={handleSelect}
               // O microfone some no canal que recusa a nota de voz que ele grava
               // (Instagram/Facebook): a pergunta é à capability, nunca ao provider.
-              recusaNotaDeVoz={recusaNotaDeVoz(selectedConversation.channel_sessions?.provider)}
+              recusaNotaDeVoz={compositor.recusaNotaDeVoz}
               // O aviso é DA conversa da URL: trocar de conversa dentro da inbox
               // não pode deixar um texto sugerido no campo de outra pessoa.
               rascunho={rascunhoVivo}

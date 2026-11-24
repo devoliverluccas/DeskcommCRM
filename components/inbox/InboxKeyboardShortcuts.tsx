@@ -12,6 +12,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useT } from "@/hooks/i18n/useT";
+import { teclaDo } from "@/components/inbox/atalhos-da-conversa";
 
 interface Props {
   /** Currently visible conversation ids in the list (for j/k nav). */
@@ -53,22 +54,37 @@ export function InboxKeyboardShortcuts({
     if (id) onSelect(id);
   }
 
-  useHotkeys("j", () => step(1), { enabled: ativo, preventDefault: true }, [
+  // A NAVEGAÇÃO mora aqui. As ações da conversa (transferir, fila, automático,
+  // lembrar, tarefa, contato) são registradas pelo `ConversationHeader`, porque
+  // é ele que sabe quando cada uma se aplica — a mesma condição que esconde o
+  // item do menu ⋯ desliga a tecla. As teclas das duas metades saem de
+  // `ATALHOS_DO_INBOX`, a lista que a ajuda (`?`) desenha.
+  useHotkeys(teclaDo("proxima"), () => step(1), { enabled: ativo, preventDefault: true }, [
     visibleIds,
     selectedId,
   ]);
-  useHotkeys("k", () => step(-1), { enabled: ativo, preventDefault: true }, [
+  useHotkeys(teclaDo("anterior"), () => step(-1), { enabled: ativo, preventDefault: true }, [
     visibleIds,
     selectedId,
   ]);
-  useHotkeys("r", () => onFocusReply(), { enabled: ativo, preventDefault: true });
-  useHotkeys("a", () => onClaim(), { enabled: ativo, preventDefault: true });
+  useHotkeys(teclaDo("responder"), () => onFocusReply(), { enabled: ativo, preventDefault: true });
+  useHotkeys(teclaDo("assumir"), () => onClaim(), { enabled: ativo, preventDefault: true });
   useHotkeys(
-    "e",
+    teclaDo("fechar"),
     () => setConfirmFecharOpen(true),
     { enabled: ativo, preventDefault: true },
   );
-  useHotkeys("shift+/", () => onToggleHelp(), { enabled: ativo, preventDefault: true });
+  // A AJUDA ESCUTA O CARACTERE "?", não a tecla física. O hook casa pelo código
+  // da tecla por padrão, e "shift+/" nunca casava: o "?" do teclado ABNT2 fica
+  // noutra tecla, e mesmo no americano o hook não mapeia "/" para "Slash" — a
+  // ajuda nunca abriu pelo teclado (medido no navegador). `ignoreModifiers`
+  // porque o "?" só sai com Shift.
+  useHotkeys(teclaDo("ajuda"), () => onToggleHelp(), {
+    enabled: ativo,
+    preventDefault: true,
+    useKey: true,
+    ignoreModifiers: true,
+  });
 
   return (
     <AlertDialog open={confirmFecharOpen} onOpenChange={setConfirmFecharOpen}>

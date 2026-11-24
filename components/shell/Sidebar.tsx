@@ -11,6 +11,7 @@ import { ConnectionHealthDot } from "@/components/connections/ConnectionHealthDo
 import { ContadorDeCasos } from "@/components/shell/ContadorDeCasos";
 import { ContadorDaFila } from "@/components/shell/ContadorDaFila";
 import { ContadorDeTarefas } from "@/components/shell/ContadorDeTarefas";
+import { SeletorDeStatus } from "@/components/shell/SeletorDeStatus";
 import { VersionFooter } from "@/components/shell/VersionFooter";
 import { LogotipoDoProduto, SimboloDoProduto } from "@/components/branding/MarcaDoProduto";
 import { marcaEhADoProduto } from "@/lib/branding";
@@ -485,7 +486,16 @@ export function SidebarContent({
             {!collapsed && <span className="truncate">{t(ajuda.label)}</span>}
           </Link>
         )}
-        <VersionFooter collapsed={collapsed} onNavigate={onNavigate} />
+        {/* O status de quem atende divide a LINHA da versão em vez de ganhar uma
+            própria: cada linha a mais aqui sai da altura da nav de cima, e o
+            `navegacao.spec.ts` mede essa folga em 1280×900. Recolhido (64px),
+            não cabe lado a lado — a bolinha vai em cima da versão. */}
+        <div className={cn("flex", collapsed ? "flex-col items-stretch" : "items-center")}>
+          <SeletorDeStatus collapsed={collapsed} />
+          <div className="min-w-0 flex-1">
+            <VersionFooter collapsed={collapsed} onNavigate={onNavigate} />
+          </div>
+        </div>
       </div>
     </>
   );

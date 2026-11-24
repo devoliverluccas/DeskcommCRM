@@ -18,10 +18,17 @@ import { describe, expect, it } from "vitest";
 
 import { DICIONARIO } from "@/lib/i18n/dicionario";
 import {
+  ABAS_DA_LATERAL,
+  ABA_DO_MODULO,
+  ABA_PADRAO,
   CHAVE_DOS_MODULOS,
   MODULOS_DA_LATERAL,
+  ROTULO_DA_ABA,
   ROTULO_DO_MODULO,
+  chaveDaAbaLembrada,
+  lerAbaLembrada,
   lerModulosDaLateral,
+  modulosDaAba,
   modulosPadrao,
   moverModulo,
   normalizarModulos,
@@ -226,5 +233,63 @@ describe("#3008 — cada módulo tem nome traduzível", () => {
     expect(ROTULO_DO_MODULO.acervo).toBe("Acervo");
     expect(ROTULO_DO_MODULO.demandas).toBe("Demandas abertas");
     expect(ROTULO_DO_MODULO["tags-da-conversa"]).toBe("Tags da conversa");
+  });
+});
+
+describe("abas do painel — todo módulo mora numa aba", () => {
+  it("nenhum módulo do catálogo fica sem aba (módulo sem aba é módulo que ninguém desenha)", () => {
+    const semAba = MODULOS_DA_LATERAL.filter(
+      (id) => !(ABAS_DA_LATERAL as readonly string[]).includes(ABA_DO_MODULO[id] as string),
+    );
+    expect(semAba).toEqual([]);
+    // E o mapa não carrega id que o catálogo não tem.
+    expect(Object.keys(ABA_DO_MODULO).sort()).toEqual([...MODULOS_DA_LATERAL].sort());
+  });
+
+  it("o agrupamento pedido: Perfil, Tarefas e Negócios; Mídias não recebe módulo", () => {
+    // Tarefas antes de Negócios: o pendente antes do que vale (doutrina cap. 5).
+    expect([...ABAS_DA_LATERAL]).toEqual(["perfil", "tarefas", "negocios", "midias"]);
+    const porAba = (aba: (typeof ABAS_DA_LATERAL)[number]) => ids(modulosDaAba(modulosPadrao(), aba));
+    expect(porAba("perfil")).toEqual([
+      "contato",
+      "tags-do-contato",
+      "carteira",
+      "anuncio",
+      "perfil-enriquecido",
+      "tags-da-conversa",
+      "memoria",
+      "roteiros",
+      "acervo",
+    ]);
+    expect(porAba("negocios")).toEqual(["leads", "compras", "pedidos"]);
+    expect(porAba("tarefas")).toEqual(["demandas", "tarefas", "followup", "atividade"]);
+    expect(porAba("midias")).toEqual([]);
+  });
+
+  it("a ordem e o esconder da pessoa valem DENTRO da aba", () => {
+    const minha = normalizarModulos([
+      { id: "pedidos", visivel: true },
+      { id: "compras", visivel: false },
+      { id: "leads", visivel: true },
+    ]);
+    expect(modulosDaAba(minha, "negocios")).toEqual([
+      { id: "pedidos", visivel: true },
+      { id: "compras", visivel: false },
+      { id: "leads", visivel: true },
+    ]);
+  });
+
+  it("a aba lembrada: valor torto ou ausente abre em Perfil", () => {
+    expect(ABA_PADRAO).toBe("perfil");
+    expect(lerAbaLembrada("midias")).toBe("midias");
+    expect(lerAbaLembrada(null)).toBe("perfil");
+    expect(lerAbaLembrada("aba-que-nao-existe")).toBe("perfil");
+    expect(lerAbaLembrada(3)).toBe("perfil");
+    expect(chaveDaAbaLembrada("u-1")).not.toBe(chaveDaAbaLembrada("u-2"));
+  });
+
+  it("todo rótulo de aba tem espanhol no dicionário", () => {
+    const semEspanhol = ABAS_DA_LATERAL.filter((id) => !DICIONARIO[ROTULO_DA_ABA[id]]?.es);
+    expect(semEspanhol).toEqual([]);
   });
 });

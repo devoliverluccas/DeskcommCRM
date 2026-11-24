@@ -63,6 +63,14 @@ async function insert(table: string, values: Record<string, unknown>) {
  */
 const PRAZO_DA_RECARGA = { timeout: 15_000 };
 
+/**
+ * O painel do contato ganhou abas (Perfil · Tarefas · Negócios · Mídias) e a
+ * escolhida fica lembrada por aparelho: quem procura um módulo abre a aba dele.
+ */
+async function abrirAbaDoPainel(page: Page, aba: "perfil" | "tarefas" | "negocios" | "midias"): Promise<void> {
+  await page.getByTestId(`inbox-aba-${aba}`).click();
+}
+
 async function abrirConversa(page: Page, conversation: string): Promise<void> {
   await page.goto(`/app/inbox/${conversation}`);
   await page.waitForURL(new RegExp(`/app/inbox\\?id=${conversation}`));
@@ -193,15 +201,19 @@ test("fechar canal preserva demanda, desfecho explícito e nova entrada volta à
     await page.getByRole("button", { name: "Entrar", exact: true }).click();
     await page.waitForURL(/\/app(?:\/|$)/);
     await abrirConversa(page, conversation);
+    await abrirAbaDoPainel(page, "tarefas");
     const panel = page.getByTestId("inbox-demandas");
     await expect(panel.getByText("Demanda vigente neste canal")).toBeVisible(PRAZO_DA_RECARGA);
+    await abrirAbaDoPainel(page, "perfil");
     await expect(page.getByTestId("inbox-memoria")).toContainText("Preferência de horário");
     // DoD 12 para a issue #908: o rótulo do botão que CRIA o lead provado pela
     // tela, não só em jsdom. O painel é `flex flex-wrap` e o rótulo ficou mais
     // longo — se ele quebrar a fileira ou sumir, é aqui que aparece. Cabe nesta
     // spec, e não numa nova, porque o painel já está montado neste ponto: spec
     // nova custaria mais um login e mais um seed ao relógio do CI.
-    await expect(page.getByRole("button", { name: "Novo negócio", exact: true })).toBeVisible();
+    await expect(
+      page.getByTestId("painel-do-contato").getByRole("button", { name: "Novo negócio", exact: true }),
+    ).toBeVisible();
     // Fechar não é mais `window.confirm()` (bloqueado em iframe, ignora o
     // tema) — é o `AlertDialog` da casa. O botão que abre e o que confirma
     // têm o MESMO rótulo "Fechar"; o segundo clique escopado ao
@@ -236,7 +248,9 @@ test("fechar canal preserva demanda, desfecho explícito e nova entrada volta à
     await panel.getByLabel("Desfecho da demanda").selectOption("resolvida");
     await panel.getByRole("button", { name: "Confirmar desfecho", exact: true }).click();
     await expect(panel).toContainText("Nenhuma demanda aberta.");
+    await abrirAbaDoPainel(page, "perfil");
     await expect(page.getByTestId("inbox-memoria")).toContainText("Histórico encerrado");
+    await abrirAbaDoPainel(page, "tarefas");
     medidor.marcar("antes_da_entrada_2");
     await inbound("Voltei para novo atendimento");
     // Aqui a tela não navega, só o realtime atualiza. Quando isto falhou (run

@@ -29,6 +29,20 @@ export interface ConversationCounts {
    * mesma razão dos de cima, e vazio quando a organização não usa setores.
    */
   por_fila?: Record<string, number>;
+  /**
+   * Desde quando espera a conversa mais antiga da Fila (ISO-8601), pelo mesmo
+   * predicado de `fila`. `null` com a Fila vazia; opcional pelo cache antigo.
+   */
+  fila_mais_antiga_desde?: string | null;
+  /** As filas com conversa esperando, com o nome, da mais cheia à mais vazia. */
+  setores?: SetorNaFila[];
+}
+
+/** Uma fila (setor) com gente esperando — o que a faixa do topo lista. */
+export interface SetorNaFila {
+  id: string;
+  nome: string;
+  na_fila: number;
 }
 
 /** Os filtros auxiliares ligados na barra, que a contagem tem de aplicar junto. */

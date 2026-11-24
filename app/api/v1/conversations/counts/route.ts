@@ -131,10 +131,22 @@ export async function GET(req: NextRequest): Promise<Response> {
   // Canal desativado nunca entra na inbox: o mesmo corte da lista, para badge
   // e aba nunca divergirem.
   const idsDesativados = await idsDosCanaisDesativados(supabase, org);
-  const countExact = (filtrosDaAba: readonly FiltroDeContagem[] = auxiliares) => {
+  //
+  // `comLinhas` existe para UMA leitura só: a espera mais antiga da Fila, que
+  // precisa da linha (o `awaiting_since`) e não do número. Ela sai da MESMA
+  // fábrica de propósito — organização, canais desligados, filtros, marcador e
+  // contatos pessoais entram igual, e a "mais antiga" nunca é de uma conversa que
+  // o badge não conta.
+  const countExact = (
+    filtrosDaAba: readonly FiltroDeContagem[] = auxiliares,
+    comLinhas = false,
+  ) => {
     let q = supabase
       .from("conversations")
-      .select("id", { count: "exact", head: true })
+      .select(
+        comLinhas ? "id, awaiting_since" : "id",
+        comLinhas ? undefined : { count: "exact", head: true },
+      )
       .eq("organization_id", org);
     if (idsDesativados.length > 0) q = q.not("channel_session_id", "in", `(${idsDesativados.join(",")})`);
     for (const [coluna, valor] of filtrosDaAba) q = q.eq(coluna, valor);
@@ -179,6 +191,34 @@ export async function GET(req: NextRequest): Promise<Response> {
   } catch {
     idsParticipadas = [];
   }
+
+  // ─── A ESPERA MAIS ANTIGA DA FILA ─────────────────────────────────────────
+  //
+  // A faixa do topo diz "mais antigo há 3 d": o MENOR `awaiting_since` entre as
+  // conversas que o número da Fila conta. Mesmo predicado da contagem `fila`
+  // logo abaixo — a fábrica, `comandosFila` e o pré-filtro —, só que pedindo a
+  // linha mais velha em vez do total. Sem `awaiting_since` a linha não tem o que
+  // dizer e fica de fora (é o que um `min()` faria).
+  //
+  // Disparada JUNTO com as contagens, e isolada delas: é um complemento da
+  // faixa, e falhar aqui devolve `null` (a faixa omite o trecho) em vez de
+  // derrubar o badge de todas as abas.
+  const esperaMaisAntiga = (async (): Promise<string | null> => {
+    try {
+      const r = await comPreFiltroDoComando(
+        countExact(auxiliares, true).in("comando_da_conversa", comandosFila),
+        comandosFila,
+      )
+        .not("awaiting_since", "is", null)
+        .order("awaiting_since", { ascending: true })
+        .limit(1);
+      if (r.error) return null;
+      const linha = ((r.data ?? []) as Array<{ awaiting_since?: string | null }>)[0];
+      return linha?.awaiting_since ?? null;
+    } catch {
+      return null;
+    }
+  })();
 
   const [fila, automatico, mine, all, closed, archived] = await Promise.all([
     // A FILA DEIXOU DE SER "sem dono + status de espera".
@@ -257,9 +297,10 @@ export async function GET(req: NextRequest): Promise<Response> {
   const semOFiltroDaTela = auxiliares.filter(([coluna]) => coluna !== "sector_id");
   const { data: filasDaOrg } = await supabase
     .from("attendant_sectors")
-    .select("id")
+    .select("id, name")
     .eq("organization_id", org);
-  const idsDasFilas = ((filasDaOrg ?? []) as Array<{ id: string }>).map((f) => f.id);
+  const filasComNome = (filasDaOrg ?? []) as Array<{ id: string; name?: string | null }>;
+  const idsDasFilas = filasComNome.map((f) => f.id);
   const contagensPorFila = await Promise.all(
     idsDasFilas.map(async (idDaFila) => {
       const r = await countExact([...semOFiltroDaTela, ["sector_id", idDaFila] as const]).in(
@@ -278,6 +319,19 @@ export async function GET(req: NextRequest): Promise<Response> {
   if (firstErr) {
     return fail("internal_error", firstErr.message, 500, { requestId });
   }
+
+  const totalNaFila = fila.count ?? 0;
+  // Com a Fila vazia não há "mais antiga": o campo sai `null` mesmo que a
+  // consulta, por corrida entre as duas leituras, tenha achado uma linha.
+  const maisAntiga = await esperaMaisAntiga;
+  const filaMaisAntigaDesde = totalNaFila > 0 ? maisAntiga : null;
+  // Os setores COM gente esperando, do maior para o menor, com o nome — a faixa
+  // do topo os lista sem uma segunda ida para descobrir como cada um se chama.
+  const nomePorFila = new Map(filasComNome.map((f) => [f.id, f.name ?? ""] as const));
+  const setores = contagensPorFila
+    .filter(([, naFila]) => naFila > 0)
+    .map(([id, naFila]) => ({ id, nome: nomePorFila.get(id) ?? "", na_fila: naFila }))
+    .sort((a, b) => b.na_fila - a.na_fila);
 
   return ok(
     {
@@ -298,6 +352,13 @@ export async function GET(req: NextRequest): Promise<Response> {
        * Inbox lê para mostrar o número ao lado do nome, com a cor da fila.
        */
       por_fila: Object.fromEntries(contagensPorFila) as Record<string, number>,
+      /**
+       * Desde quando espera a conversa mais antiga da Fila (ISO-8601), pelo
+       * mesmo predicado de `fila`. `null` com a Fila vazia.
+       */
+      fila_mais_antiga_desde: filaMaisAntigaDesde,
+      /** As filas com conversa esperando, com o nome, da mais cheia à mais vazia. */
+      setores,
     },
     { requestId },
   );

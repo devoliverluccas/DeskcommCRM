@@ -114,6 +114,8 @@ test.describe("Etapa do negócio pela conversa", () => {
     await abreConversa(page, conversaId);
     await expect(page.getByText(`Cliente Etapa ${SUFIXO}`).first()).toBeVisible({ timeout: 60_000 });
 
+    // O seletor de etapa do painel mora na aba Negócios (o painel ganhou abas).
+    await page.getByTestId("inbox-aba-negocios").click();
     const bloco = page.locator('[data-testid="inbox-etapa-do-negocio"]');
     await expect(bloco).toBeVisible({ timeout: 30_000 });
     const seletor = bloco.getByTestId("inbox-etapa-select");

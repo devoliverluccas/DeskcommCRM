@@ -5,6 +5,7 @@ import { useT } from "@/hooks/i18n/useT";
 import { NAV_DESTINATIONS, NAV_GROUPS } from "@/lib/navigation/registry";
 import { AlertsBell } from "./AlertsBell";
 import { AvisoDePropostaEmDestaque } from "./AvisoDePropostaEmDestaque";
+import { FaixaDaFila } from "./FaixaDaFila";
 import { MobileSidebar } from "./MobileSidebar";
 import { TenantSwitcher } from "./TenantSwitcher";
 import { UserMenu } from "./UserMenu";
@@ -46,6 +47,10 @@ export function TopBar() {
         <MobileSidebar />
         <TenantSwitcher />
         <Trilha />
+        {/* A fila mora NA barra, depois da trilha, e não numa faixa acima: a
+            altura do topo (3.5rem) é contrato de cinco telas que calculam a
+            própria altura, e uma linha a mais deslocaria todas. */}
+        <FaixaDaFila />
       </div>
       <div className="flex shrink-0 items-center gap-2">
         <SearchTrigger />

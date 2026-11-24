@@ -1,8 +1,17 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore, type FormEvent } from "react";
 import { useT } from "@/hooks/i18n/useT";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -27,8 +36,22 @@ import {
   parseAgentOwnerFilter,
   type LeadFilters,
 } from "@/lib/kanban/filters";
-import { SEM_CATEGORIA, categoriaDoMotivo, categoriasDoFunil } from "@/lib/leads/motivos-de-perda-do-funil";
+import {
+  SEM_CATEGORIA,
+  categoriaDoMotivo,
+  categoriasDoFunil,
+} from "@/lib/leads/motivos-de-perda-do-funil";
 import { rotuloDoMotivoDePerda } from "@/lib/schemas/leads";
+import {
+  CHAVE_DOS_FILTROS_SALVOS,
+  TAMANHO_MAXIMO_DO_NOME,
+  apagarFiltroSalvo,
+  filtrosDoSalvo,
+  lerFiltrosSalvos,
+  salvarFiltro,
+  type FiltroSalvo,
+} from "@/lib/kanban/filtros-salvos";
+import { X } from "@/lib/ui/icons";
 import { cn } from "@/lib/utils";
 import { rotuloDoMembro } from "@/lib/users/rotulo-do-atendente";
 
@@ -42,6 +65,46 @@ interface FilterBarProps {
    * de categoria não teria o que oferecer.
    */
   settings?: Record<string, unknown>;
+  /**
+   * O funil dos filtros salvos (fase 1, item 1.6). Ausente, a barra não oferece
+   * salvar: filtro salvo é por funil, e sem o funil não há onde guardá-lo.
+   */
+  pipelineId?: string;
+}
+
+/** O `localStorage` quando ele existe e não está bloqueado; `null` no resto. */
+function armazenamentoLocal(): Storage | null {
+  try {
+    return typeof window === "undefined" ? null : window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A loja externa dos filtros salvos para `useSyncExternalStore`: o retrato é o
+ * texto cru da chave (string compara por valor, então o React só re-renderiza
+ * quando ela muda), e o aviso vem desta aba (`avisarSalvos`, depois de gravar)
+ * ou de outra (evento `storage`).
+ */
+const ouvintesDosSalvos = new Set<() => void>();
+function assinarSalvos(aviso: () => void): () => void {
+  ouvintesDosSalvos.add(aviso);
+  window.addEventListener("storage", aviso);
+  return () => {
+    ouvintesDosSalvos.delete(aviso);
+    window.removeEventListener("storage", aviso);
+  };
+}
+function avisarSalvos(): void {
+  for (const aviso of ouvintesDosSalvos) aviso();
+}
+function lerCruDosSalvos(): string {
+  try {
+    return armazenamentoLocal()?.getItem(CHAVE_DOS_FILTROS_SALVOS) ?? "";
+  } catch {
+    return "";
+  }
 }
 
 const STATUS_OPTIONS: Array<{ value: NonNullable<LeadFilters["status"]>; label: string }> = [
@@ -65,7 +128,7 @@ function chip(ativo: boolean): string {
   );
 }
 
-export function FilterBar({ filters, onChange, leads, settings }: FilterBarProps) {
+export function FilterBar({ filters, onChange, leads, settings, pipelineId }: FilterBarProps) {
   const t = useT();
   const user = useUser();
   const { data: members } = useAssignableMembers(true);
@@ -98,6 +161,36 @@ export function FilterBar({ filters, onChange, leads, settings }: FilterBarProps
   }, [leads]);
 
   const filteredAgentId = parseAgentOwnerFilter(filters.owner);
+
+  /**
+   * OS FILTROS SALVOS (fase 1, item 1.6) — por aparelho e por funil, ver
+   * `lib/kanban/filtros-salvos.ts`. Lidos por `useSyncExternalStore`, e não no
+   * inicializador de um `useState`: o primeiro render é o do servidor, onde
+   * `localStorage` não existe, e o retrato do servidor (`""`) mantém a
+   * hidratação igual. De brinde, outra aba que salve ou apague atualiza esta.
+   */
+  const cruDosSalvos = useSyncExternalStore(assinarSalvos, lerCruDosSalvos, () => "");
+  const salvos = useMemo<FiltroSalvo[]>(
+    () => (pipelineId && cruDosSalvos ? lerFiltrosSalvos(armazenamentoLocal(), pipelineId) : []),
+    [pipelineId, cruDosSalvos],
+  );
+  const [salvarAberto, setSalvarAberto] = useState(false);
+  const [nomeDoFiltro, setNomeDoFiltro] = useState("");
+  const aplicarSalvo = (salvo: FiltroSalvo) => {
+    const proximos = filtrosDoSalvo(salvo);
+    // A busca tem estado próprio (o debounce): sem isto o campo mostraria a
+    // busca velha e, na próxima tecla, devolveria o filtro antigo ao quadro.
+    setSearchInput(proximos.search ?? "");
+    onChange(proximos);
+  };
+  const confirmarSalvar = (e: FormEvent) => {
+    e.preventDefault();
+    if (!pipelineId || !nomeDoFiltro.trim()) return;
+    salvarFiltro(armazenamentoLocal(), pipelineId, nomeDoFiltro, filters);
+    avisarSalvos();
+    setSalvarAberto(false);
+    setNomeDoFiltro("");
+  };
 
   /**
    * Responsáveis atribuíveis numa lista única — humanos e agentes ordenados
@@ -141,8 +234,7 @@ export function FilterBar({ filters, onChange, leads, settings }: FilterBarProps
           ? (agents?.find((a) => a.agent_id === filteredAgentId)?.name ?? t("Agente"))
           : filters.owner === user.id
             ? t("Eu")
-            : (members?.find((m) => m.user_id === filters.owner)?.full_name ??
-              t("Responsável"));
+            : (members?.find((m) => m.user_id === filters.owner)?.full_name ?? t("Responsável"));
 
   const statusLabel = t(
     STATUS_OPTIONS.find((o) => o.value === (filters.status ?? "all"))?.label ?? "Todos",
@@ -222,6 +314,16 @@ export function FilterBar({ filters, onChange, leads, settings }: FilterBarProps
       ? t("Sem categoria")
       : (filters.lostCategory ?? t("Todas"));
 
+  const temFiltro = Boolean(
+    filters.search ||
+    filters.owner ||
+    marcadoresEscolhidos.length > 0 ||
+    filters.overdueOnly ||
+    filters.lostReason ||
+    filters.lostCategory ||
+    (filters.status && filters.status !== "all"),
+  );
+
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       <Input
@@ -268,12 +370,11 @@ export function FilterBar({ filters, onChange, leads, settings }: FilterBarProps
             <>
               <DropdownMenuSeparator />
               {assignees.map((a) => (
-                <DropdownMenuItem key={a.key} onClick={() => onChange({ ...filters, owner: a.owner })}>
-                  <OwnerBadge
-                    ownerKind={a.kind}
-                    ownerName={a.name}
-                    agentVersion={a.version}
-                  />
+                <DropdownMenuItem
+                  key={a.key}
+                  onClick={() => onChange({ ...filters, owner: a.owner })}
+                >
+                  <OwnerBadge ownerKind={a.kind} ownerName={a.name} agentVersion={a.version} />
                 </DropdownMenuItem>
               ))}
             </>
@@ -335,9 +436,7 @@ export function FilterBar({ filters, onChange, leads, settings }: FilterBarProps
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start">
-                <DropdownMenuItem
-                  onClick={() => onChange({ ...filters, lostCategory: undefined })}
-                >
+                <DropdownMenuItem onClick={() => onChange({ ...filters, lostCategory: undefined })}>
                   {t("Todas")}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
@@ -413,7 +512,7 @@ export function FilterBar({ filters, onChange, leads, settings }: FilterBarProps
 
       <label
         className={cn(
-          "inline-flex h-11 cursor-pointer select-none items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium transition-colors hover:border-border-strong lg:h-8",
+          "inline-flex h-11 cursor-pointer items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium transition-colors select-none hover:border-border-strong lg:h-8",
           chip(!!filters.overdueOnly),
         )}
       >
@@ -426,13 +525,64 @@ export function FilterBar({ filters, onChange, leads, settings }: FilterBarProps
         {t("Apenas atrasados")}
       </label>
 
-      {(filters.search ||
-        filters.owner ||
-        marcadoresEscolhidos.length > 0 ||
-        filters.overdueOnly ||
-        filters.lostReason ||
-        filters.lostCategory ||
-        (filters.status && filters.status !== "all")) && (
+      {/*
+        FILTROS SALVOS (fase 1, item 1.6). Um seletor só, para aplicar, apagar
+        e salvar: aparece quando há o que salvar (filtro ativo) ou o que
+        aplicar (algum salvo). Chip neutro — ele não restringe o quadro, quem
+        restringe são os chips que ele liga.
+      */}
+      {pipelineId && (temFiltro || salvos.length > 0) ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              className={chip(false)}
+              data-testid="filtros-salvos"
+            >
+              {t("Filtros salvos")}
+              {salvos.length > 0 ? (
+                <span className="ml-1 text-text-subtle tabular-nums">{salvos.length}</span>
+              ) : null}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="min-w-56">
+            {salvos.map((salvo) => (
+              <div key={salvo.nome} className="flex items-center">
+                <DropdownMenuItem
+                  className="min-w-0 flex-1 max-lg:min-h-11"
+                  onSelect={() => aplicarSalvo(salvo)}
+                  data-testid="filtro-salvo"
+                >
+                  <span className="truncate">{salvo.nome}</span>
+                </DropdownMenuItem>
+                {/* Apagar não fecha o menu: quem limpa a lista costuma apagar
+                    mais de um. */}
+                <DropdownMenuItem
+                  aria-label={`${t("Apagar")}: ${salvo.nome}`}
+                  className="shrink-0 justify-center px-2 text-text-subtle hover:text-text max-lg:min-h-11 max-lg:min-w-11"
+                  onSelect={(e) => {
+                    e.preventDefault();
+                    if (!pipelineId) return;
+                    apagarFiltroSalvo(armazenamentoLocal(), pipelineId, salvo.nome);
+                    avisarSalvos();
+                  }}
+                >
+                  <X size={14} aria-hidden />
+                </DropdownMenuItem>
+              </div>
+            ))}
+            {salvos.length > 0 && temFiltro ? <DropdownMenuSeparator /> : null}
+            {temFiltro ? (
+              <DropdownMenuItem className="max-lg:min-h-11" onSelect={() => setSalvarAberto(true)}>
+                {t("Salvar filtro")}
+              </DropdownMenuItem>
+            ) : null}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : null}
+
+      {temFiltro && (
         <Button
           variant="ghost"
           size="sm"
@@ -445,6 +595,43 @@ export function FilterBar({ filters, onChange, leads, settings }: FilterBarProps
           {t("Limpar filtros")}
         </Button>
       )}
+
+      <Dialog
+        open={salvarAberto}
+        onOpenChange={(aberto) => {
+          setSalvarAberto(aberto);
+          if (!aberto) setNomeDoFiltro("");
+        }}
+      >
+        <DialogContent className="sm:max-w-sm">
+          <form onSubmit={confirmarSalvar} className="flex flex-col gap-4">
+            <DialogHeader>
+              <DialogTitle>{t("Salvar filtro")}</DialogTitle>
+              <DialogDescription>
+                {t("Fica salvo neste aparelho, só para este funil.")}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="nome-do-filtro-salvo">{t("Nome do filtro")}</Label>
+              <Input
+                id="nome-do-filtro-salvo"
+                value={nomeDoFiltro}
+                maxLength={TAMANHO_MAXIMO_DO_NOME}
+                autoFocus
+                onChange={(e) => setNomeDoFiltro(e.target.value)}
+              />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="ghost" onClick={() => setSalvarAberto(false)}>
+                {t("Cancelar")}
+              </Button>
+              <Button type="submit" disabled={!nomeDoFiltro.trim()}>
+                {t("Salvar")}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

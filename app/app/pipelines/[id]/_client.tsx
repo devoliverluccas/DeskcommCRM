@@ -25,6 +25,10 @@ function formatError(err: unknown, t: (texto: string) => string): string {
 import { KanbanBoard } from "@/components/kanban/KanbanBoard";
 import { CalendarioDoFunil } from "@/components/kanban/CalendarioDoFunil";
 import { ListaDoFunil } from "@/components/kanban/ListaDoFunil";
+import { PrevisaoDoFunil } from "@/components/kanban/PrevisaoDoFunil";
+import { AnaliseDoFunil } from "@/components/kanban/AnaliseDoFunil";
+import { totaisDoFunil } from "@/lib/kanban/total-do-funil";
+import { formatSomaPorMoeda, formatValorDoNegocio } from "@/lib/money";
 import { FilterBar } from "@/components/kanban/FilterBar";
 import { BulkActionBar } from "@/components/kanban/BulkActionBar";
 import { NewLeadDialog } from "@/components/kanban/NewLeadDialog";
@@ -51,7 +55,11 @@ import { cn } from "@/lib/utils";
  * Quadro é o padrão — é o que todo mundo já conhece, e a aba nova não pode
  * sequestrar a tela de quem só quer mover card.
  */
-type Visao = "quadro" | "calendario" | "lista";
+/**
+ * Previsão e Análise (fase 1, item 1.6) vêm por último nas abas: as três
+ * primeiras mostram os negócios, as duas últimas mostram números SOBRE eles.
+ */
+type Visao = "quadro" | "calendario" | "lista" | "previsao" | "analise";
 
 /**
  * A VISÃO PEDIDA NA URL (#3172, item 4 do CR).
@@ -60,7 +68,7 @@ type Visao = "quadro" | "calendario" | "lista";
  * colado no chat, o favorito do navegador, o F5. Sem isso, a única porta para
  * a aba seria a leitura cara que ela existe para não pagar.
  *
- * Valor fora das três cai no quadro, como um `modo` de etiqueta fora dos dois
+ * Valor fora das cinco cai no quadro, como um `modo` de etiqueta fora dos dois
  * cai no `e` (`lib/kanban/filters.ts`): a URL é deep-link, e um parâmetro colado
  * à mão não derruba a tela.
  */
@@ -71,7 +79,7 @@ type Visao = "quadro" | "calendario" | "lista";
  */
 function abaDaVisao(ativa: boolean): string {
   return cn(
-    "-ml-px h-11 border border-border px-3 text-xs font-medium transition-colors first:ml-0 first:rounded-l-md last:rounded-r-md lg:h-8",
+    "-ml-px h-11 border border-border px-3 text-xs max-sm:flex-1 max-sm:px-1.5 font-medium transition-colors first:ml-0 first:rounded-l-md last:rounded-r-md lg:h-8",
     ativa
       ? "relative z-10 border-border-strong bg-pressed text-text"
       : "text-text-muted hover:bg-hover hover:text-text",
@@ -79,7 +87,9 @@ function abaDaVisao(ativa: boolean): string {
 }
 
 function visaoDoParam(bruto: string | null): Visao {
-  return bruto === "lista" || bruto === "calendario" ? bruto : "quadro";
+  return bruto === "lista" || bruto === "calendario" || bruto === "previsao" || bruto === "analise"
+    ? bruto
+    : "quadro";
 }
 
 export function PipelinePageClient({
@@ -195,10 +205,7 @@ export function PipelinePageClient({
     setUrlAnterior(urlAtual);
     setPedido(null);
   }
-  const filters = useMemo(
-    () => pedido ?? filtersFromParams(searchParams),
-    [pedido, searchParams],
-  );
+  const filters = useMemo(() => pedido ?? filtersFromParams(searchParams), [pedido, searchParams]);
   const setFilters = useCallback(
     (next: LeadFilters) => {
       const p = new URLSearchParams(filtersToParams(next));
@@ -289,6 +296,12 @@ export function PipelinePageClient({
    */
   const visaoEfetiva: Visao = arquivado ? "quadro" : visao;
   const nomeAtual = data?.pipeline.name ?? initialName;
+  // A conta é a das colunas (`totaisDoFunil`), sobre a MESMA lista filtrada que
+  // o quadro e o calendário desenham: o cabeçalho é a soma do que está na tela.
+  const totais =
+    data && (visaoEfetiva === "quadro" || visaoEfetiva === "calendario")
+      ? totaisDoFunil(filteredLeads, data.stages)
+      : null;
   // Um funil só = nada para trocar: o seletor seria ruído permanente.
   const podeTrocar = funis.length > 1;
 
@@ -348,36 +361,71 @@ export function PipelinePageClient({
           o leitor de tela perde o título da página. Trocar zera a query
           string: filtro de um funil aplicado no outro é resultado fantasma.
         */}
-        <h1
-          className={
-            podeTrocar ? "sr-only" : "min-w-0 truncate text-xl font-semibold tracking-tight"
-          }
-        >
-          {nomeAtual}
-        </h1>
-        {podeTrocar && (
-          <Select
-            value={funis.some((f) => f.id === pipelineId) ? pipelineId : undefined}
-            onValueChange={(id) => {
-              if (id !== pipelineId) router.push(`/app/pipelines/${id}`);
-            }}
+        <div className="flex min-w-0 flex-col gap-0.5 sm:max-w-[60%]">
+          <h1
+            className={
+              podeTrocar ? "sr-only" : "min-w-0 truncate text-xl font-semibold tracking-tight"
+            }
           >
-            <SelectTrigger
-              aria-label={`${t("Trocar de funil")}: ${nomeAtual}`}
-              data-testid="trocar-funil"
-              className="-ml-1.5 h-11 w-auto max-w-full min-w-0 gap-1.5 rounded-md border-0 bg-transparent px-1.5 py-0 text-xl font-semibold tracking-tight shadow-none hover:bg-hover focus:ring-1 focus:ring-ring sm:max-w-[60%] lg:h-8 [&>span]:truncate"
+            {nomeAtual}
+          </h1>
+          {podeTrocar && (
+            <Select
+              value={funis.some((f) => f.id === pipelineId) ? pipelineId : undefined}
+              onValueChange={(id) => {
+                if (id !== pipelineId) router.push(`/app/pipelines/${id}`);
+              }}
             >
-              <SelectValue placeholder={nomeAtual} />
-            </SelectTrigger>
-            <SelectContent>
-              {funis.map((f) => (
-                <SelectItem key={f.id} value={f.id} data-testid={`trocar-funil-opcao-${f.id}`}>
-                  {f.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
+              <SelectTrigger
+                aria-label={`${t("Trocar de funil")}: ${nomeAtual}`}
+                data-testid="trocar-funil"
+                className="-ml-1.5 h-11 w-auto max-w-full min-w-0 gap-1.5 rounded-md border-0 bg-transparent px-1.5 py-0 text-xl font-semibold tracking-tight shadow-none hover:bg-hover focus:ring-1 focus:ring-ring lg:h-8 [&>span]:truncate"
+              >
+                <SelectValue placeholder={nomeAtual} />
+              </SelectTrigger>
+              <SelectContent>
+                {funis.map((f) => (
+                  <SelectItem key={f.id} value={f.id} data-testid={`trocar-funil-opcao-${f.id}`}>
+                    {f.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          {/*
+          O TOTAL DO FUNIL (fase 1, item 1.6): o que a tela mostra, somado.
+          Só no Quadro e no Calendário — as duas olham a MESMA lista filtrada,
+          e é dela que o total sai, então ele acompanha o filtro. A Lista
+          pagina no banco (não há "tudo" na mão para somar) e Previsão e
+          Análise têm os próprios números.
+        */}
+          {totais ? (
+            <p className="text-xs text-text-muted tabular-nums" data-testid="total-do-funil">
+              {totais.negocios} {totais.negocios === 1 ? t("negócio") : t("negócios")}
+              {totais.bruto.size > 0 ? (
+                <>
+                  {" · "}
+                  <span className="font-medium text-text">
+                    {formatSomaPorMoeda(totais.bruto, formatValorDoNegocio, {
+                      primeira: totais.primeira,
+                    })}
+                  </span>
+                </>
+              ) : null}
+              {totais.ponderado.size > 0 ? (
+                <>
+                  {" · "}
+                  {t("ponderado")}{" "}
+                  <span className="font-medium text-text">
+                    {formatSomaPorMoeda(totais.ponderado, formatValorDoNegocio, {
+                      primeira: totais.primeira,
+                    })}
+                  </span>
+                </>
+              ) : null}
+            </p>
+          ) : null}
+        </div>
         {/*
           AS ABAS DO FUNIL (#2770, #3172), ao lado do quadro. O seletor fica no
           cabeçalho e não dentro do conteúdo: quem troca de visão está mudando
@@ -413,7 +461,11 @@ export function PipelinePageClient({
               funil que não recebe mais escrita seria a mesma promessa falsa
               que o "Novo negócio" apagado. Por isso as abas nem aparecem. */}
           {!arquivado && (
-            <div className="flex items-center" role="group" aria-label={t("Visão do funil")}>
+            <div
+              className="flex items-center max-sm:w-full"
+              role="group"
+              aria-label={t("Visão do funil")}
+            >
               <button
                 type="button"
                 data-testid="visao-quadro"
@@ -441,6 +493,24 @@ export function PipelinePageClient({
               >
                 {t("Calendário")}
               </button>
+              <button
+                type="button"
+                data-testid="visao-previsao"
+                aria-pressed={visao === "previsao"}
+                onClick={() => mudarVisao("previsao")}
+                className={abaDaVisao(visao === "previsao")}
+              >
+                {t("Previsão")}
+              </button>
+              <button
+                type="button"
+                data-testid="visao-analise"
+                aria-pressed={visao === "analise"}
+                onClick={() => mudarVisao("analise")}
+                className={abaDaVisao(visao === "analise")}
+              >
+                {t("Análise")}
+              </button>
             </div>
           )}
           {/* O portão do diálogo é a EXISTÊNCIA DE ETAPA, não a de quadro: numa
@@ -466,7 +536,11 @@ export function PipelinePageClient({
           {t(
             "Este funil está arquivado: o quadro abre em leitura, e nada aqui grava até você tirá-lo do arquivo em Funis.",
           )}{" "}
-          <Link href="/app/kanban" className="underline" data-testid="funil-arquivado-ir-para-funis">
+          <Link
+            href="/app/kanban"
+            className="underline"
+            data-testid="funil-arquivado-ir-para-funis"
+          >
             {t("Funis")}
           </Link>
         </p>
@@ -490,12 +564,18 @@ export function PipelinePageClient({
           settings={data?.pipeline.settings ?? funilInicial.settings}
         />
       )}
-      <FilterBar
-        filters={filters}
-        onChange={setFilters}
-        leads={data?.leads ?? []}
-        settings={data?.pipeline.settings}
-      />
+      {/* Previsão e Análise não recebem o filtro (ver os cabeçalhos delas): a
+          barra some ali em vez de ficar oferecendo um recorte que não vale. O
+          filtro continua na URL e volta inteiro com o Quadro. */}
+      {visaoEfetiva !== "previsao" && visaoEfetiva !== "analise" && (
+        <FilterBar
+          filters={filters}
+          onChange={setFilters}
+          leads={data?.leads ?? []}
+          settings={data?.pipeline.settings}
+          pipelineId={pipelineId}
+        />
+      )}
       {visaoEfetiva === "lista" ? (
         /**
          * ⭐ A LISTA NÃO ESPERA O QUADRO (#3172, item 4 do CR) — e é por isso
@@ -530,6 +610,18 @@ export function PipelinePageClient({
         <div className="flex flex-1 animate-pulse items-center justify-center text-sm text-text-muted">
           {t("Carregando…")}
         </div>
+      ) : visaoEfetiva === "previsao" ? (
+        // O quadro SEM filtro: a tabela por mês vem da rota de previsão, que
+        // não recebe filtro, e a por etapa tem de falar do mesmo universo.
+        <PrevisaoDoFunil pipelineId={pipelineId} stages={data.stages} leads={data.leads} />
+      ) : visaoEfetiva === "analise" ? (
+        <AnaliseDoFunil
+          pipelineId={pipelineId}
+          stages={data.stages}
+          leads={data.leads}
+          settings={data.pipeline.settings}
+          truncado={data.truncado === true}
+        />
       ) : visaoEfetiva === "calendario" ? (
         // A MESMA lista filtrada do quadro: as duas abas olham o mesmo funil,
         // e discordar sobre quem está nele seria pior do que não ter filtro.

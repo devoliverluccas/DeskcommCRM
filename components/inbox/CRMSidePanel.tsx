@@ -10,6 +10,7 @@ import { UltimasComprasDoContato } from "@/components/contacts/UltimasCompras";
 import type { ProspectEnrichment } from "@/lib/prospecting/schema";
 import type { PersonalizacaoProspeccao } from "@/lib/prospecting/personalizar";
 import type { SituacaoDaRecusaDeOfertas } from "@/lib/lgpd/sem-interesse";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/auth/AuthProvider";
 import { roleAtLeast } from "@/lib/auth/types";
 import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
@@ -17,7 +18,7 @@ import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
 import type { Locale } from "date-fns";
 import Link from "next/link";
 import { useT } from "@/hooks/i18n/useT";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { format } from "date-fns";
 import { ChipDeEtiqueta } from "@/components/tags/ChipDeEtiqueta";
 import { Badge } from "@/components/ui/badge";
@@ -39,8 +40,16 @@ import { TarefasDaDemanda } from "./TarefasDaDemanda";
 import { NovaTarefaDaConversa } from "./NovaTarefaDaConversa";
 import { FollowupDoContato } from "./FollowupDoContato";
 import { DialogoDosModulos } from "./DialogoDosModulos";
+import { MidiasDaConversa } from "./MidiasDaConversa";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  ABAS_DA_LATERAL,
+  ROTULO_DA_ABA,
+  chaveDaAbaLembrada,
+  lerAbaLembrada,
+  modulosDaAba,
   modulosPadrao,
+  type IdAbaDaLateral,
   type IdModuloDaLateral,
   type ModuloDaLateral,
 } from "@/lib/inbox/modulos-da-lateral";
@@ -880,6 +889,17 @@ function CamposDoFunil({
   );
 }
 
+/** A aba lembrada não muda por fora desta tela: não há o que assinar. */
+const semAssinatura = () => () => {};
+
+function lerDoArmazenamento(chave: string): string | null {
+  try {
+    return window.localStorage.getItem(chave);
+  } catch {
+    return null;
+  }
+}
+
 /**
  * O CONTROLE DE RECOLHER O PAINEL INTEIRO (issue #3004).
  *
@@ -910,10 +930,9 @@ function BotaoDeRecolherDoPainel({
       type="button"
       onClick={onAlternar}
       // Vocabulário e ícone iguais aos do menu da esquerda (`BotaoDeRecolher`).
-      className={cn(
-        "flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-hover hover:text-foreground",
-        recolhido && "justify-center",
-      )}
+      // Só o ícone (redesign v2, abas no alto): o verbo continua no
+      // `aria-label` e no `title`, e a faixa ganha a largura das abas.
+      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-text-muted hover:bg-hover hover:text-text focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
       aria-label={rotulo}
       aria-expanded={!recolhido}
       title={rotulo}
@@ -924,7 +943,6 @@ function BotaoDeRecolherDoPainel({
       ) : (
         <CaretDoubleLeft size={14} aria-hidden />
       )}
-      {!recolhido && <span>{t("Recolher")}</span>}
     </button>
   );
 }
@@ -1018,6 +1036,34 @@ export function CRMSidePanel({
    * clique ter efeito imediato sem esperar a próxima carga do Inbox.
    */
   const [modulos, setModulos] = useState<ModuloDaLateral[]>(() => modulosIniciais ?? modulosPadrao());
+
+  /**
+   * A ABA ABERTA, lembrada por pessoa NESTE aparelho (localStorage). Lida por
+   * `useSyncExternalStore` com o retrato do SERVIDOR vazio: o servidor não
+   * enxerga o localStorage, então o primeiro paint (e a hidratação) sai em
+   * Perfil e o navegador troca para a aba guardada logo depois — sem desenhar
+   * uma aba no servidor e outra no navegador. O getter do `localStorage` lança
+   * quando o navegador bloqueia o armazenamento: aí a aba só não é lembrada.
+   */
+  const abaGuardada = useSyncExternalStore(
+    semAssinatura,
+    () => lerDoArmazenamento(chaveDaAbaLembrada(user.id)),
+    () => null,
+  );
+  const [abaEscolhida, setAbaEscolhida] = useState<IdAbaDaLateral | null>(null);
+  const aba: IdAbaDaLateral = abaEscolhida ?? lerAbaLembrada(abaGuardada);
+  const escolherAba = useCallback(
+    (valor: string) => {
+      const escolhida = lerAbaLembrada(valor);
+      setAbaEscolhida(escolhida);
+      try {
+        window.localStorage.setItem(chaveDaAbaLembrada(user.id), escolhida);
+      } catch {
+        // sem armazenamento: a troca vale até recarregar
+      }
+    },
+    [user.id],
+  );
 
   const [tagEditorOpen, setTagEditorOpen] = useState(false);
   const [leadDialogOpen, setLeadDialogOpen] = useState(false);
@@ -1137,6 +1183,23 @@ export function CRMSidePanel({
   // que falhou depois — e escrita que parece ter dado certo é o defeito que
   // esta tela inteira combate.
   const recarregar = useCallback(() => setTentativa((n) => n + 1), []);
+
+  // A FAIXA DO NEGÓCIO (topo da conversa) lê a mesma rota por react-query, na
+  // chave `["crm-summary", contactId]`, e a INVALIDA depois de mover etapa,
+  // ganhar ou perder. Este painel não usa react-query, então escuta essa
+  // invalidação e recarrega pelo mesmo caminho do "Tentar de novo". Sem isto, a
+  // faixa mostrava a etapa nova e o painel ao lado seguia com a antiga.
+  // `invalidate` e não `success`: a leitura da montagem não invalida nada, e
+  // contar leituras dependeria de quem montou primeiro.
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    if (!contactId) return;
+    return queryClient.getQueryCache().subscribe((evento) => {
+      if (evento.type !== "updated" || evento.action.type !== "invalidate") return;
+      const chave = evento.query.queryKey;
+      if (chave[0] === "crm-summary" && chave[1] === contactId) recarregar();
+    });
+  }, [contactId, queryClient, recarregar]);
 
   /**
    * A troca de funil recarrega pelo MESMO caminho do "Tentar de novo" — este
@@ -1639,77 +1702,124 @@ export function CRMSidePanel({
   };
 
   return (
-    <aside className="flex h-full flex-col overflow-y-auto border-l border-border bg-background">
-      {/* A FAIXA DO ALTO (#3004/#3008): o recolher do painel, no mesmo lugar do
-          recolher do menu da esquerda, e o botão que abre a personalização da
-          lateral. `sticky` para não rolar para fora com o conteúdo.
+    <aside data-testid="painel-do-contato" className="flex h-full flex-col overflow-y-auto border-l border-border bg-background">
+      <Tabs value={aba} onValueChange={escolherAba} className="flex min-h-0 flex-col">
+        {/* A FAIXA DO ALTO (#3004/#3008, abas no redesign v2): as ABAS do
+            painel, o botão que abre a personalização da lateral e o recolher
+            do painel, no mesmo lugar do recolher do menu da esquerda. `sticky`
+            para não rolar para fora com o conteúdo.
 
-          A faixa existe MESMO sem `onAlternarRecolhido` (o `Sheet` do celular,
-          que já tem o próprio gesto de fechar): é por ela que o painel do
-          celular chega à personalização. Sem o controle de recolher, o espaço
-          dele fica com um vazio — o botão de módulos não muda de lugar. */}
-      <div
-        className="sticky top-0 z-10 flex shrink-0 items-center justify-between gap-2 border-b border-border bg-background px-4 py-1"
-        data-testid="inbox-cabecalho-do-painel"
-      >
-        <DialogoDosModulos modulos={modulos} onSalvos={setModulos} />
-        {onAlternarRecolhido ? (
-          <BotaoDeRecolherDoPainel recolhido={false} onAlternar={onAlternarRecolhido} />
-        ) : (
-          <span aria-hidden />
+            A faixa existe MESMO sem `onAlternarRecolhido` (o `Sheet` do
+            celular, que já tem o próprio gesto de fechar): é por ela que o
+            painel do celular chega às abas e à personalização. Sem o controle
+            de recolher, o canto direito fica VAZIO de propósito — é onde o X
+            do `Sheet` mora, acima desta faixa (ver o teste de z-index). */}
+        <div
+          className="sticky top-0 z-10 flex shrink-0 items-center gap-1 border-b border-border bg-background py-1 pr-2 pl-3"
+          data-testid="inbox-cabecalho-do-painel"
+        >
+          {/* Abas sem trilho nem pílula (redesign v2): a selecionada ganha o
+              neutro de "item atual" (`bg-pressed`), a marca não entra. */}
+          <TabsList className="h-auto min-w-0 flex-1 justify-start gap-0.5 bg-transparent p-0">
+            {ABAS_DA_LATERAL.map((id) => (
+              <TabsTrigger
+                key={id}
+                value={id}
+                data-testid={`inbox-aba-${id}`}
+                className="px-1.5 text-xs text-text-muted hover:bg-hover hover:text-text data-[state=active]:bg-pressed data-[state=active]:text-text data-[state=active]:shadow-none"
+              >
+                {t(ROTULO_DA_ABA[id])}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+          <DialogoDosModulos modulos={modulos} onSalvos={setModulos} />
+          {onAlternarRecolhido ? (
+            <BotaoDeRecolherDoPainel recolhido={false} onAlternar={onAlternarRecolhido} />
+          ) : (
+            <span aria-hidden className="w-11 shrink-0" />
+          )}
+        </div>
+
+        {/* Montado sempre, fora da ordem: o botão que o abre mora no módulo
+            Contato, e ele não pode depender de outro módulo estar visível. */}
+        {contactId && defaultPipeline.data && (
+          <NewLeadDialog
+            open={leadDialogOpen}
+            onOpenChange={setLeadDialogOpen}
+            pipelineId={defaultPipeline.data.pipeline.id}
+            stages={defaultPipeline.data.stages}
+            // #3038: mesmo recorte do funil — os campos exigidos pela etapa vão
+            // no `settings` do funil padrão que este painel já carregou.
+            settings={defaultPipeline.data.pipeline.settings}
+            contactId={contactId}
+            onCreated={() => {
+              setLeadAtivoId(null);
+              recarregar();
+            }}
+          />
         )}
-      </div>
 
-      {/* Montado sempre, fora da ordem: o botão que o abre mora no módulo
-          Contato, e ele não pode depender de outro módulo estar visível. */}
-      {contactId && defaultPipeline.data && (
-        <NewLeadDialog
-          open={leadDialogOpen}
-          onOpenChange={setLeadDialogOpen}
-          pipelineId={defaultPipeline.data.pipeline.id}
-          stages={defaultPipeline.data.stages}
-          // #3038: mesmo recorte do funil — os campos exigidos pela etapa vão
-          // no `settings` do funil padrão que este painel já carregou.
-          settings={defaultPipeline.data.pipeline.settings}
-          contactId={contactId}
-          onCreated={() => {
-            setLeadAtivoId(null);
-            recarregar();
-          }}
-        />
-      )}
+        {contactId && tarefaDialogOpen && (
+          <NovaTarefaDaConversa
+            contactId={contactId}
+            leadId={negocioAtivoId ?? null}
+            demandaId={demandas?.find((d) => d.id === conversation.current_demanda_id)?.id ?? null}
+            responsavelPadrao={user.id}
+            aoFechar={() => setTarefaDialogOpen(false)}
+          />
+        )}
 
-      {contactId && tarefaDialogOpen && (
-        <NovaTarefaDaConversa
-          contactId={contactId}
-          leadId={negocioAtivoId ?? null}
-          demandaId={demandas?.find((d) => d.id === conversation.current_demanda_id)?.id ?? null}
-          responsavelPadrao={user.id}
-          aoFechar={() => setTarefaDialogOpen(false)}
-        />
-      )}
+        {/* AS ABAS COM MÓDULOS ficam MONTADAS mesmo fechadas (`forceMount` +
+            `hidden` pelo `data-state`). Três motivos: cada módulo busca o
+            próprio dado ao montar, e trocar de aba não pode refazer a leitura
+            nem perder o que a pessoa digitava; os blocos e os `data-testid`
+            continuam no DOM para quem os procura; e o resumo do contato é UM
+            pedido só, que alimenta as três abas de uma vez.
 
-      {/* A ORDEM E A VISIBILIDADE ESCOLHIDAS (#3008); o `data-modulo` deixa a
-          tela e os testes nomearem o bloco.
+            Dentro de cada aba vale a ORDEM e a VISIBILIDADE escolhidas
+            (#3008); o `data-modulo` deixa a tela e os testes nomearem o bloco.
 
-          CADA MÓDULO É UMA SEÇÃO (redesign v2): o divisor é do invólucro, não
-          um `<Separator />` que cada módulo lembrava (ou não) de pôr — por isso
-          havia traço entre uns e não entre outros. `empty:hidden` some com o
-          módulo que não desenhou nada (sem dado, sem permissão, auto-oculto),
-          e com ele o traço: nada de divisória separando o nada do nada. O
-          título de toda seção sai do mesmo seletor, inclusive o dos módulos
-          que moram em `components/contacts`. */}
-      {modulos
-        .filter((modulo) => modulo.visivel)
-        .map((modulo) => (
-          <div
-            key={modulo.id}
-            data-modulo={modulo.id}
-            className="border-b border-border px-4 py-4 empty:hidden [&_h3]:text-xs [&_h3]:font-medium [&_h3]:text-text-muted"
-          >
-            {conteudo[modulo.id]}
-          </div>
-        ))}
+            CADA MÓDULO É UMA SEÇÃO (redesign v2): o divisor é do invólucro, não
+            um `<Separator />` que cada módulo lembrava (ou não) de pôr.
+            `empty:hidden` some com o módulo que não desenhou nada (sem dado,
+            sem permissão, auto-oculto), e com ele o traço. O título de toda
+            seção sai do mesmo seletor, inclusive o dos módulos que moram em
+            `components/contacts`. */}
+        {ABAS_DA_LATERAL.filter((id) => id !== "midias").map((id) => {
+          const visiveis = modulosDaAba(modulos, id).filter((modulo) => modulo.visivel);
+          return (
+            <TabsContent
+              key={id}
+              value={id}
+              forceMount
+              data-testid={`inbox-painel-da-aba-${id}`}
+              className="mt-0 data-[state=inactive]:hidden"
+            >
+              {visiveis.length === 0 ? (
+                <p className="px-4 py-6 text-center text-xs text-text-muted">
+                  {t("Nenhum módulo visível nesta aba.")}
+                </p>
+              ) : (
+                visiveis.map((modulo) => (
+                  <div
+                    key={modulo.id}
+                    data-modulo={modulo.id}
+                    className="border-b border-border px-4 py-4 empty:hidden [&_h3]:text-xs [&_h3]:font-medium [&_h3]:text-text-muted"
+                  >
+                    {conteudo[modulo.id]}
+                  </div>
+                ))
+              )}
+            </TabsContent>
+          );
+        })}
+
+        {/* MÍDIAS só monta aberta: a galeria pergunta ao servidor ao montar, e
+            quem nunca abre a aba não paga essa leitura a cada conversa. */}
+        <TabsContent value="midias" className="mt-0 px-4 py-4" data-testid="inbox-painel-da-aba-midias">
+          <MidiasDaConversa conversationId={conversation.id} ativo={aba === "midias"} />
+        </TabsContent>
+      </Tabs>
     </aside>
   );
 }

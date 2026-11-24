@@ -1,8 +1,13 @@
 import { requireSupportWrite } from "@/lib/impersonate/support";
 /**
- * POST /api/v1/conversations/[id]/media — upload outbound (multipart).
+ * /api/v1/conversations/[id]/media
+ *
+ * POST — upload outbound (multipart).
  * Storage-first: sobe pro bucket whatsapp-media; o envio da mensagem
  * referencia o storage_path (o WAHA recebe signed URL, nunca base64).
+ *
+ * GET — a GALERIA da conversa: as mensagens com mídia, mais novas primeiro,
+ * paginadas por cursor (ver `GET` abaixo).
  */
 import { randomUUID } from "node:crypto";
 import { type NextRequest } from "next/server";
@@ -11,18 +16,219 @@ import { z } from "zod";
 import { fail, ok } from "@/lib/api/wrappers";
 import { lerCorpoComTeto } from "@/lib/api/corpo-com-teto";
 import { resolveAuthDual, tetoDeEscritaDoToken } from "@/lib/api/auth-dual";
+import { requireRole } from "@/lib/auth/require-role";
 import { IDIOMA_PADRAO } from "@/lib/i18n/idiomas";
 import { extFromMime, MAX_MEDIA_BYTES } from "@/lib/messaging/media/types";
-import { nomeDeArquivoLimpo } from "@/lib/messaging/media/nome-de-arquivo";
+import { nomeDeArquivoLimpo, nomeOriginalDaMensagem } from "@/lib/messaging/media/nome-de-arquivo";
 import { validateOutboundMedia } from "@/lib/messaging/media/upload-validation";
 import { transcodificarNotaDeVoz } from "@/lib/messaging/media/voice-transcode";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 import { traduzir } from "@/lib/i18n/dicionario";
 
 export const dynamic = "force-dynamic";
 
 interface RouteCtx {
   params: Promise<{ id: string }>;
+}
+
+// ---------------------------------------------------------------------------
+// GET — galeria de mídias da conversa
+// ---------------------------------------------------------------------------
+
+/**
+ * O filtro da tela → o `messages.type` do banco. Figurinha fica de fora de
+ * propósito: é reação, não arquivo que alguém volta para procurar.
+ */
+const TIPO_DO_FILTRO = {
+  imagem: "image",
+  video: "video",
+  documento: "document",
+  audio: "audio",
+} as const;
+
+const consultaDaGaleria = z.object({
+  tipo: z.enum(["imagem", "video", "documento", "audio"]).optional(),
+  cursor: z.string().max(512).optional(),
+  limit: z.coerce.number().int().min(1).max(60).default(30),
+});
+
+/**
+ * O item da galeria. A mídia em si é servida por `GET /api/v1/messages/[id]/media`.
+ * Espelho no cliente: `MidiaDaConversa` em `hooks/inbox/useMidiasDaConversa.ts`.
+ */
+interface MidiaDaConversa {
+  id: string;
+  type: string;
+  direction: "inbound" | "outbound";
+  media_mime: string | null;
+  media_size_bytes: number | null;
+  /** Só para a extensão do documento (`DocumentCard`); nunca é URL. */
+  media_storage_path: string | null;
+  /** Nome original do arquivo, quando a ingestão o guardou (#2613). */
+  nome: string | null;
+  sent_at: string;
+}
+
+const COLUNAS_DA_GALERIA =
+  "id, type, direction, media_mime, media_size_bytes, media_storage_path, metadata, sent_at, created_at";
+
+/**
+ * O cursor tem a MESMA forma do de `GET .../messages` (sent_at, created_at,
+ * id) — o desempate pela chegada vale aqui pelo mesmo motivo: três fotos no
+ * mesmo segundo. Os valores entram por interpolação no `.or()`, então só passa
+ * o formato que o servidor emite (UUID e instante ISO-8601).
+ */
+const UUID_DO_CURSOR = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const INSTANTE_DO_CURSOR = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|[+-]\d{2}:\d{2})$/;
+
+interface CursorDaGaleria {
+  sent_at: string;
+  created_at: string;
+  id: string;
+}
+
+function codificarCursor(c: CursorDaGaleria): string {
+  return Buffer.from(JSON.stringify(c), "utf8").toString("base64url");
+}
+
+function decodificarCursor(cru: string): CursorDaGaleria | null {
+  try {
+    const c = JSON.parse(Buffer.from(cru, "base64url").toString("utf8")) as Partial<CursorDaGaleria>;
+    if (typeof c.id !== "string" || !UUID_DO_CURSOR.test(c.id)) return null;
+    if (typeof c.sent_at !== "string" || !INSTANTE_DO_CURSOR.test(c.sent_at)) return null;
+    if (typeof c.created_at !== "string" || !INSTANTE_DO_CURSOR.test(c.created_at)) return null;
+    return { id: c.id, sent_at: c.sent_at, created_at: c.created_at };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * GET /api/v1/conversations/[id]/media?tipo=imagem|video|documento|audio&cursor=&limit=
+ *
+ * QUEM VÊ: `viewer`+ (quem lê a conversa lê os anexos dela). A rota está em
+ * `PUBLIC_PATHS` por causa do upload por token, então o proxy NÃO decide aqui:
+ * quem decide é o `requireRole` abaixo, que só reconhece sessão.
+ *
+ * A CONVERSA PRECISA SER VISÍVEL A ESTA PESSOA: a leitura é com o client da
+ * SESSÃO (a RLS de `conversations` e de `messages` decide) e ainda filtra a
+ * organização ATIVA explicitamente. Conversa de contato PESSOAL dá o mesmo 404
+ * mudo do histórico (`listMessagesHandler`) — a galeria não pode ser a porta
+ * lateral para o que o histórico recusa.
+ *
+ * O QUE ENTRA: mensagem do tipo pedido com arquivo (guardado ou ainda no canal
+ * — o mesmo `hasMedia` do balão), fora a apagada pelo autor e a oculta no CRM,
+ * que o balão também não oferece para baixar. Sem URL assinada: o arquivo sai
+ * por `GET /api/v1/messages/[id]/media`, que confere o acesso de novo.
+ *
+ * Só leitura ⇒ sem auditoria.
+ */
+export async function GET(req: NextRequest, ctx: RouteCtx): Promise<Response> {
+  const requestId = randomUUID();
+  const authz = await requireRole("viewer", { requestId, resource: "conversation_media" });
+  if (!authz.ok) return authz.response;
+  const t = (texto: string) => traduzir(texto, authz.user.idioma);
+  const orgId = authz.org.orgId;
+
+  const { id: conversationId } = await ctx.params;
+  if (!z.uuid().safeParse(conversationId).success) {
+    return fail("not_found", t("Conversa não encontrada."), 404, { requestId });
+  }
+
+  const params = new URL(req.url).searchParams;
+  const consulta = consultaDaGaleria.safeParse({
+    tipo: params.get("tipo") ?? undefined,
+    cursor: params.get("cursor") ?? undefined,
+    limit: params.get("limit") ?? undefined,
+  });
+  if (!consulta.success) {
+    return fail("validation_failed", t("Query inválida."), 422, {
+      details: consulta.error.flatten().fieldErrors as Record<string, unknown>,
+      requestId,
+    });
+  }
+  const { tipo, cursor, limit } = consulta.data;
+  const cursorLido = cursor ? decodificarCursor(cursor) : null;
+  if (cursor && !cursorLido) {
+    return fail("invalid_cursor", t("Cursor inválido."), 400, { requestId });
+  }
+
+  const supabase = await createClient();
+
+  const { data: conversa, error: erroDaConversa } = await supabase
+    .from("conversations")
+    .select("id, contact_id")
+    .eq("id", conversationId)
+    .eq("organization_id", orgId)
+    .maybeSingle();
+  if (erroDaConversa) return fail("internal_error", t("Erro ao validar conversa."), 500, { requestId });
+  if (!conversa) return fail("not_found", t("Conversa não encontrada."), 404, { requestId });
+
+  const contatoId = (conversa as { contact_id?: string | null }).contact_id ?? null;
+  if (contatoId) {
+    const { data: contato } = await supabase
+      .from("contacts")
+      .select("is_personal")
+      .eq("id", contatoId)
+      .eq("organization_id", orgId)
+      .maybeSingle();
+    if ((contato as { is_personal?: boolean } | null)?.is_personal === true) {
+      return fail("not_found", t("Conversa não encontrada."), 404, { requestId });
+    }
+  }
+
+  const tipos = tipo ? [TIPO_DO_FILTRO[tipo]] : Object.values(TIPO_DO_FILTRO);
+  let query = supabase
+    .from("messages")
+    .select(COLUNAS_DA_GALERIA)
+    .eq("conversation_id", conversationId)
+    .eq("organization_id", orgId)
+    .in("type", tipos)
+    .or("media_storage_path.not.is.null,media_url.not.is.null")
+    .is("revoked_at", null)
+    .is("metadata->crm_hidden_at", null)
+    .order("sent_at", { ascending: false })
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(limit + 1);
+
+  if (cursorLido) {
+    const c = cursorLido;
+    query = query.or(
+      `sent_at.lt.${c.sent_at},` +
+        `and(sent_at.eq.${c.sent_at},created_at.lt.${c.created_at}),` +
+        `and(sent_at.eq.${c.sent_at},created_at.eq.${c.created_at},id.lt.${c.id})`,
+    );
+  }
+
+  const { data, error } = await query;
+  if (error) {
+    return fail("internal_error", t("Não foi possível carregar as mídias."), 500, { requestId });
+  }
+
+  type Linha = MidiaDaConversa & { metadata: unknown; created_at: string };
+  const linhas = (data ?? []) as unknown as Linha[];
+  const temMais = linhas.length > limit;
+  const pagina = temMais ? linhas.slice(0, limit) : linhas;
+  const ultima = pagina[pagina.length - 1];
+  const proximo =
+    temMais && ultima
+      ? codificarCursor({ sent_at: ultima.sent_at, created_at: ultima.created_at, id: ultima.id })
+      : null;
+
+  const itens: MidiaDaConversa[] = pagina.map((m) => ({
+    id: m.id,
+    type: m.type,
+    direction: m.direction,
+    media_mime: m.media_mime,
+    media_size_bytes: m.media_size_bytes,
+    media_storage_path: m.media_storage_path,
+    nome: nomeOriginalDaMensagem(m.metadata),
+    sent_at: m.sent_at,
+  }));
+
+  return ok(itens, { requestId, meta: { cursor: proximo, has_more: temMais } });
 }
 
 export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {

@@ -18,6 +18,7 @@ import { NiveisDaOrigem } from "@/components/contacts/NiveisDaOrigem";
 import { origemDoContato } from "@/lib/leads/origem-do-contato";
 import { AtalhosDoNegocio } from "./AtalhosDoCard";
 import { ConversaNoDossie } from "./ConversaNoDossie";
+import { ConversaNoDossieAoVivo } from "./ConversaNoDossieAoVivo";
 import { ConversasDosNumeros } from "./ConversasDosNumeros";
 import { LeadFieldsForm, type ControleDosCamposDoNegocio } from "./LeadFieldsForm";
 import { RevisaoDoDocumento } from "./RevisaoDoDocumento";
@@ -31,6 +32,7 @@ import { SecaoDoDossie, useSecoesRecolhidas } from "./SecaoDoDossie";
 import { resolveLeadOwner } from "@/lib/kanban/owner";
 import type { AtalhoDoCard } from "@/lib/leads/atalhos-do-card";
 import { formatValorDoNegocio, MOEDA_PADRAO } from "@/lib/money";
+import { cn } from "@/lib/utils";
 import type { CustomFieldDef } from "@/components/contacts/CustomFieldsEditor";
 
 interface Props {
@@ -330,7 +332,19 @@ export function LeadDossier({
     <AtalhosDoNegocio atalhos={atalhosDoCard} lead={lead} contactId={lead.contact_id} />
   );
 
-  const conversa = (
+  /* A CONVERSA (item 1.4): com conversa, ela vem AO VIVO — o fio e a caixa
+     de resposta do inbox, para responder sem sair do negócio. Sem conversa,
+     o bloco de sempre: a ação "Abrir conversa" (#1993) ou nada. A altura é
+     da moldura: na gaveta larga ela ocupa a coluna da direita inteira; na
+     estreita e na página, uma janela fixa com rolagem própria. */
+  const temConversaAoVivo = Boolean(lead.conversa);
+  const conversa = lead.conversa ? (
+    <ConversaNoDossieAoVivo
+      conversa={lead.conversa}
+      ativo={emFoco}
+      className={naPagina ? "h-[36rem]" : "h-[min(36rem,75dvh)] lg:h-full"}
+    />
+  ) : (
     <ConversaNoDossie
       conversa={lead.conversa}
       contactId={lead.contact_id}
@@ -523,7 +537,8 @@ export function LeadDossier({
         </header>
 
         {atalhosDoNegocio}
-        {conversa}
+        {/* Sem conversa ao vivo, o bloco de sempre fica onde sempre esteve. */}
+        {!temConversaAoVivo && conversa}
 
         <div className="grid grid-cols-1 gap-x-6 gap-y-4 lg:grid-cols-2" data-testid="negocio-colunas">
           {/* O que se lê e se preenche. */}
@@ -532,8 +547,10 @@ export function LeadDossier({
             {numeros}
             {dadosDoNegocio}
           </div>
-          {/* O que se acompanha. */}
+          {/* O que se acompanha — e a conversa abre a coluna: é o que mais
+              se acompanha. */}
           <div className="flex min-w-0 flex-col gap-4">
+            {temConversaAoVivo && conversa}
             {tarefas}
             {linhaDoTempo}
             {propostas}
@@ -547,7 +564,12 @@ export function LeadDossier({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="flex w-full flex-col gap-0 overflow-y-auto sm:max-w-md"
+        className={cn(
+          "flex w-full flex-col gap-0 overflow-y-auto sm:max-w-md",
+          // Com a conversa ao vivo a gaveta alarga no desktop para caber as
+          // duas colunas; quem rola passa a ser cada coluna, não a gaveta.
+          temConversaAoVivo && "lg:max-w-[min(76rem,calc(100vw-4rem))] lg:overflow-hidden",
+        )}
         // Observável pelo mesmo motivo do board: "a assinatura morreu" e "nada
         // aconteceu" têm a mesma aparência, que é silêncio.
         data-realtime-status={timeline.realtimeStatus.toLowerCase()}
@@ -584,13 +606,42 @@ export function LeadDossier({
         {cabecalhoVivo}
         {carimboDoScore}
         {atalhosDoNegocio}
-        {conversa}
-        {contato}
-        {numeros}
-        {dadosDoNegocio}
-        {tarefas}
-        {linhaDoTempo}
-        {propostas}
+        {temConversaAoVivo ? (
+          /* DUAS COLUNAS a partir de `lg` (item 1.4): os detalhes à esquerda,
+             com rolagem própria, e a conversa à direita, da altura da gaveta.
+             Abaixo de `lg` a grade some e a conversa vem DEPOIS dos detalhes,
+             numa janela de altura fixa — a gaveta inteira rola. A ordem do
+             DOM é a mesma nos dois casos; só a moldura muda. */
+          <div
+            data-testid="dossie-colunas"
+            className="flex flex-col gap-4 pt-3 lg:grid lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] lg:grid-rows-[minmax(0,1fr)] lg:gap-6"
+          >
+            <div
+              data-testid="dossie-detalhes"
+              className="flex min-w-0 flex-col lg:min-h-0 lg:overflow-y-auto lg:pr-2"
+            >
+              {contato}
+              {numeros}
+              {dadosDoNegocio}
+              {tarefas}
+              {linhaDoTempo}
+              {propostas}
+            </div>
+            <div className="flex min-w-0 flex-col border-t border-border pt-4 lg:min-h-0 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-6">
+              {conversa}
+            </div>
+          </div>
+        ) : (
+          <>
+            {conversa}
+            {contato}
+            {numeros}
+            {dadosDoNegocio}
+            {tarefas}
+            {linhaDoTempo}
+            {propostas}
+          </>
+        )}
       </SheetContent>
     </Sheet>
   );

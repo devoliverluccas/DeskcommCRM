@@ -1,26 +1,18 @@
 "use client";
 import { useT } from "@/hooks/i18n/useT";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ATALHOS_DO_INBOX } from "@/components/inbox/atalhos-da-conversa";
 
 interface Props {
   open: boolean;
   onOpenChange: (v: boolean) => void;
 }
 
-const BINDINGS: { keys: string; description: string }[] = [
-  { keys: "j", description: "Próxima conversa" },
-  { keys: "k", description: "Conversa anterior" },
-  { keys: "r", description: "Focar resposta" },
-  // O atalho mais usado do inbox não estava aqui — vivia só no placeholder do
-  // composer, que some no instante em que você começa a escrever, ou seja,
-  // exatamente quando ia precisar dele para quebrar linha.
-  { keys: "Enter", description: "Enviar a mensagem" },
-  { keys: "Shift + Enter", description: "Quebrar linha sem enviar" },
-  { keys: "a", description: "Assumir conversa" },
-  { keys: "e", description: "Fechar conversa" },
-  { keys: "?", description: "Mostrar atalhos" },
-];
-
+/**
+ * A AJUDA DO `?` — desenhada a partir de `ATALHOS_DO_INBOX`, a mesma lista que
+ * registra as teclas e que põe a dica à direita dos itens do menu ⋯. Uma lista
+ * estática aqui ensinaria uma tecla que o hook já não escuta.
+ */
 export function ShortcutsHelpDialog({ open, onOpenChange }: Props) {
   const t = useT();
   return (
@@ -29,12 +21,12 @@ export function ShortcutsHelpDialog({ open, onOpenChange }: Props) {
         <DialogHeader>
           <DialogTitle>{t("Atalhos de teclado")}</DialogTitle>
         </DialogHeader>
-        <ul className="space-y-2 text-sm">
-          {BINDINGS.map((b) => (
-            <li key={b.keys} className="flex items-center justify-between">
-              <span className="text-muted-foreground">{t(b.description)}</span>
-              <kbd className="rounded-md border border-border bg-muted px-2 py-0.5 font-mono text-xs">
-                {b.keys}
+        <ul className="divide-y divide-border text-sm" data-testid="lista-de-atalhos">
+          {ATALHOS_DO_INBOX.map((a) => (
+            <li key={a.id} className="flex items-center justify-between gap-4 py-1.5">
+              <span className="text-text-muted">{t(a.descricao)}</span>
+              <kbd className="shrink-0 rounded-sm border border-border bg-surface-elevated px-1.5 py-0.5 font-mono text-xs text-text">
+                {a.exibicao}
               </kbd>
             </li>
           ))}

@@ -116,6 +116,95 @@ export interface ModuloDaLateral {
 }
 
 /**
+ * AS ABAS DO PAINEL — a pilha de dezesseis blocos agrupada pelo que a pessoa
+ * veio fazer: saber QUEM é (Perfil), o que ainda FALTA fazer (Tarefas), o
+ * que está em JOGO (Negócios) e o que foi TROCADO (Mídias).
+ *
+ * As abas agrupam; não reordenam nem escondem. A ordem e o "esconder" de cada
+ * pessoa (`ModuloDaLateral[]`) continuam valendo DENTRO de cada aba — por isso
+ * o agrupamento é um filtro estável sobre a lista dela (`modulosDaAba`), e não
+ * uma segunda ordem gravada em outro lugar.
+ *
+ * "Mídias" não tem módulo do catálogo: é a galeria da conversa, conteúdo fixo
+ * da aba, e não entra no diálogo de personalização.
+ *
+ * TAREFAS ANTES DE NEGÓCIOS, de propósito (doutrina cap. 5, a mesma razão de
+ * "demandas" vir antes de "leads" no catálogo): quem abre a conversa está
+ * atendendo alguém que pediu alguma coisa, e a primeira pergunta é o que
+ * ainda está pendente, não quanto vale. Medido em
+ * `tests/unit/inbox-demandas-abertas.test.tsx` (a demanda vem antes do negócio).
+ */
+export const ABAS_DA_LATERAL = ["perfil", "tarefas", "negocios", "midias"] as const;
+
+export type IdAbaDaLateral = (typeof ABAS_DA_LATERAL)[number];
+
+/** As abas que recebem módulos do catálogo. */
+export type AbaComModulos = Exclude<IdAbaDaLateral, "midias">;
+
+export const ABA_PADRAO: IdAbaDaLateral = "perfil";
+
+export const ROTULO_DA_ABA: Record<IdAbaDaLateral, string> = {
+  perfil: "Perfil",
+  negocios: "Negócios",
+  tarefas: "Tarefas",
+  midias: "Mídias",
+};
+
+/**
+ * Em que aba mora cada módulo. É um `Record` sobre o catálogo inteiro: módulo
+ * novo em `MODULOS_DA_LATERAL` sem aba aqui é erro de tipo, e o teste de
+ * `modulos-da-lateral.test.ts` reprova de novo em tempo de execução — módulo
+ * sem aba seria módulo que nenhuma aba desenha.
+ */
+export const ABA_DO_MODULO: Record<IdModuloDaLateral, AbaComModulos> = {
+  contato: "perfil",
+  "tags-do-contato": "perfil",
+  carteira: "perfil",
+  anuncio: "perfil",
+  "perfil-enriquecido": "perfil",
+  "tags-da-conversa": "perfil",
+  memoria: "perfil",
+  roteiros: "perfil",
+  acervo: "perfil",
+  leads: "negocios",
+  compras: "negocios",
+  pedidos: "negocios",
+  demandas: "tarefas",
+  tarefas: "tarefas",
+  followup: "tarefas",
+  atividade: "tarefas",
+};
+
+export function ehIdDeAba(valor: unknown): valor is IdAbaDaLateral {
+  return typeof valor === "string" && (ABAS_DA_LATERAL as readonly string[]).includes(valor);
+}
+
+/**
+ * Os módulos de UMA aba, na ordem e com a visibilidade que a pessoa escolheu.
+ * Filtro estável: não reordena, não tira o escondido (quem desenha decide).
+ */
+export function modulosDaAba(
+  modulos: readonly ModuloDaLateral[],
+  aba: IdAbaDaLateral,
+): ModuloDaLateral[] {
+  return modulos.filter((m) => ABA_DO_MODULO[m.id] === aba);
+}
+
+/**
+ * A aba lembrada é preferência de APARELHO (localStorage), por pessoa: o mesmo
+ * navegador com dois atendentes não divide a escolha. Não vai ao metadata
+ * porque é estado de navegação, não decisão sobre o que a lateral mostra.
+ */
+export function chaveDaAbaLembrada(userId: string): string {
+  return `inbox:aba-do-painel:${userId}`;
+}
+
+/** O que estava guardado, ou a aba padrão — valor torto nunca vira aba fantasma. */
+export function lerAbaLembrada(guardado: unknown): IdAbaDaLateral {
+  return ehIdDeAba(guardado) ? guardado : ABA_PADRAO;
+}
+
+/**
  * O padrão do produto: todos os módulos, na ordem de `MODULOS_DA_LATERAL`.
  *
  * Devolve cópias, e não a constante: quem chama ordena e desliga à vontade, e

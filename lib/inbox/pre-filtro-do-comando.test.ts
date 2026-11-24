@@ -100,6 +100,14 @@ const TRES_PONTOS = [
   },
   {
     arquivo: "app/api/v1/conversations/counts/route.ts",
+    // A espera mais antiga da Fila (barra de fila no topo): o MESMO predicado da
+    // contagem da Fila, então o mesmo pré-filtro — é ele que casa com o índice
+    // parcial `idx_conversations_fila_espera`. Sem ele, a consulta que roda a cada
+    // 30 s avaliaria a função em todas as conversas da organização (#4325).
+    pedido: /comPreFiltroDoComando\(\s*countExact\(auxiliares, true\)\.in\("comando_da_conversa", comandosFila\),\s*comandosFila,?\s*\)/,
+  },
+  {
+    arquivo: "app/api/v1/conversations/counts/route.ts",
     // Contagem do Automático: um comando só, sempre dentro do conjunto.
     pedido: /comPreFiltroDoComando\(\s*countExact\(\)\.eq\("comando_da_conversa", "automatico"\),\s*"automatico",?\s*\)/,
   },
@@ -143,12 +151,12 @@ describe("o pré-filtro do comando", () => {
     for (const ponto of TRES_PONTOS) {
       expect(fonte(ponto.arquivo), `${ponto.arquivo}: pré-filtro ausente`).toMatch(ponto.pedido);
     }
-    // Duas contagens, dois pedidos: se um deles sumir, o `toMatch` acima já cai —
-    // esta linha só garante que são DOIS pedidos no arquivo das contagens.
+    // Duas contagens e a espera mais antiga, três pedidos: se um deles sumir, o
+    // `toMatch` acima já cai — esta linha garante que não há um QUARTO sem régua.
     const ocorrencias = fonte("app/api/v1/conversations/counts/route.ts").match(
       /comPreFiltroDoComando\(/g,
     );
-    expect(ocorrencias).toHaveLength(2);
+    expect(ocorrencias).toHaveLength(3);
   });
 
   it.each([
