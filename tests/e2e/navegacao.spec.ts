@@ -14,6 +14,7 @@ import * as path from "node:path";
 import { test, expect, type Page } from "./helpers/test";
 
 import { lerCreds, loginComoAdmin, loginComoDono } from "./helpers/login-admin";
+import { abrirFiltrosDoInbox, escolherVisaoDoInbox } from "./helpers/visao-do-inbox";
 import { afirmarAdminDeTenantPuro, afirmarDonoDoServidor } from "./utils/precondicao";
 
 let creds = lerCreds();
@@ -318,7 +319,9 @@ test.describe("navegação agrupada", () => {
         new URL(r.url()).pathname === "/api/v1/team/assignable" && r.request().method() === "GET",
     );
     await page.goto("/app/inbox");
-    await page.getByRole("tab", { name: /^Todas/ }).click();
+    // O filtro de atendente mora no modal de Filtros (topo minimalista do Inbox).
+    await escolherVisaoDoInbox(page, /^Todas/);
+    await abrirFiltrosDoInbox(page);
     await expect(page.getByLabel("Filtrar por atendente")).toBeVisible();
     const resposta = await equipeRecebida;
     expect(resposta.ok()).toBe(true);

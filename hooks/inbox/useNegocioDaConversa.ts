@@ -222,7 +222,8 @@ export function useNegocioDaConversa(contactId: string | null) {
     onCamposFaltando: setRecusa,
     onRetomada: setRetomada,
   });
-  const ganhar = useWinLead(pipelineId);
+  // O diálogo de campos abre aqui (onError do `marcarGanho`): sem toast em dobro.
+  const ganhar = useWinLead(pipelineId, { camposPeloChamador: true });
 
   const mover = useCallback(
     (args: MoveArgs) => {

@@ -34,6 +34,7 @@ import { createClient } from "@supabase/supabase-js";
 import { carregarEnvLocal } from "../../scripts/lib/env-de-teste";
 import { lerCreds, loginComoAdmin } from "./helpers/login-admin";
 import { expect, test, type Page } from "./helpers/test";
+import { abrirFiltrosDoInbox } from "./helpers/visao-do-inbox";
 
 const env = carregarEnvLocal();
 const admin = createClient(env.NEXT_PUBLIC_SUPABASE_URL!, env.SUPABASE_SERVICE_ROLE_KEY!, {
@@ -281,9 +282,13 @@ test.describe("contadores do menu", () => {
 
     // O número da aba Fila entra no nome acessível ("Fila 3"); sem número, a aba
     // é só "Fila".
-    const abaFila = page.getByRole("tab", { name: /^Fila/ }).first();
+    // A Fila é uma visão do modal de Filtros (topo minimalista): o número dela
+    // entra no nome acessível do rádio, como entrava na aba.
+    const filtros = await abrirFiltrosDoInbox(page);
+    const abaFila = filtros.getByRole("radio", { name: /^Fila/ });
     await expect(abaFila).toHaveText(/^Fila\s*\d+$/, { timeout: ESPERA });
     const naAba = Number((await abaFila.textContent())!.replace(/\D/g, ""));
+    await page.keyboard.press("Escape");
     expect(naAba, "a conversa escalada semeada está na Fila").toBeGreaterThan(0);
 
     const seloDaFila = itemDoMenu(page, "/app/inbox").getByTestId("contador-da-fila");

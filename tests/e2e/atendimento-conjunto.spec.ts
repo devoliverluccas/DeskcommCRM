@@ -10,6 +10,7 @@ import { createServer } from "node:http";
 import { createClient } from "@supabase/supabase-js";
 
 import { esperarARevelacaoNasCargas, test, expect, esperarARevelacao, type Page, type BrowserContext } from "./helpers/test";
+import { escolherVisaoDoInbox, seloDaVisaoDoInbox } from "./helpers/visao-do-inbox";
 
 function ambienteSintetico(appUrl: string | undefined) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -134,10 +135,10 @@ test("convite chega em Minhas, permite resposta e revogação retira o acesso se
     }
     await navegar(gestor.page, `/app/inbox?id=${principal.id}`);
     await navegar(convidada.page, "/app/inbox");
-    await convidada.page.getByRole("tab", { name: /Minhas/ }).click();
+    await escolherVisaoDoInbox(convidada.page, /Minhas/);
     // O zero vem da API real; a UX canônica omite o badge quando ele é zero.
     await esperarContagemMinhas(0);
-    await expect(convidada.page.getByRole("tab", { name: /Minhas/ })).toHaveText("Minhas");
+    await expect(seloDaVisaoDoInbox(convidada.page)).toHaveText(/^Minhas$/);
     await expect(convidada.page.getByText(nome, { exact: true })).toHaveCount(0);
     expect((await convidada.page.request.get(`/api/v1/conversations/${principal.id}`)).status()).toBe(404);
 
@@ -158,7 +159,7 @@ test("convite chega em Minhas, permite resposta e revogação retira o acesso se
     const linhaConvidada = convidada.page.locator(`[data-conversation-id="${principal.id}"]`);
     await expect(linhaConvidada).toBeVisible({ timeout: 15_000 });
     await esperarContagemMinhas(1);
-    await expect(convidada.page.getByRole("tab", { name: /Minhas/ })).toContainText("1");
+    await expect(seloDaVisaoDoInbox(convidada.page)).toContainText("1");
     await linhaConvidada.click();
     await expect(convidada.page.getByText(`Contexto sintético ${prefixo}`, { exact: true })).toBeVisible();
     const caixa = convidada.page.getByPlaceholder("Escreva uma mensagem…", { exact: true });
@@ -178,7 +179,7 @@ test("convite chega em Minhas, permite resposta e revogação retira o acesso se
     await captura(convidada.page, "01-convidada-responde-sem-assumir");
 
     await navegar(semConvite.page, "/app/inbox");
-    await semConvite.page.getByRole("tab", { name: /Minhas/ }).click();
+    await escolherVisaoDoInbox(semConvite.page, /Minhas/);
     await expect(semConvite.page.getByText(nome, { exact: true })).toHaveCount(0);
     expect((await semConvite.page.request.get(`/api/v1/conversations/${principal.id}`)).status()).toBe(404);
     expect((await semConvite.page.request.post("/api/v1/messages", { data: { conversation_id: principal.id, type: "text", body: "Sem convite não envia" } })).status()).toBe(404);
@@ -204,7 +205,7 @@ test("convite chega em Minhas, permite resposta e revogação retira o acesso se
     await gestor.page.getByRole("menuitem", { name: "Remover participante", exact: true }).click();
     await expect(linhaConvidada).toHaveCount(0, { timeout: 15_000 });
     await esperarContagemMinhas(0);
-    await expect(convidada.page.getByRole("tab", { name: /Minhas/ })).toHaveText("Minhas");
+    await expect(seloDaVisaoDoInbox(convidada.page)).toHaveText(/^Minhas$/);
     await expect(convidada.page.getByText("Conversa não encontrada ou fora do seu acesso.", { exact: true })).toBeVisible();
     expect((await convidada.page.request.get(`/api/v1/conversations/${principal.id}`)).status()).toBe(404);
     expect((await convidada.page.request.post("/api/v1/messages", { data: { conversation_id: principal.id, type: "text", body: "Convite revogado não envia" } })).status()).toBe(404);

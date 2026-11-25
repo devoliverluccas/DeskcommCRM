@@ -32,7 +32,7 @@ export function ItemReservarServico({ onSelect }: { onSelect: () => void }) {
   // NÃO manda mensagem ao contato nem comprova publicação no Google — é o que
   // a própria folha avisa depois do clique, e agora antes dele.
   return <DropdownMenuItem data-testid="acao-reservar-servico" title={t("Marca um horário na agenda para este contato, sem enviar mensagem a ele.")} onSelect={onSelect}>
-    <CalendarBlank size={16} aria-hidden className="mr-2" />{t("Reservar serviço")}
+    <CalendarBlank size={16} aria-hidden />{t("Reservar serviço")}
   </DropdownMenuItem>;
 }
 

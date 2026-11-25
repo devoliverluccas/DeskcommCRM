@@ -168,7 +168,7 @@ function ItemIgnorarSla({ conversationId, ignorado }: { conversationId: string; 
       }
       onSelect={() => ignorar.mutate(!ignorado)}
     >
-      <ClockCountdown size={16} aria-hidden className="mr-2" />
+      <ClockCountdown size={16} aria-hidden />
       {ignorado ? t("Retomar SLA") : t("Ignorar SLA")}
     </DropdownMenuItem>
   );
@@ -987,7 +987,7 @@ export function ConversationHeader({
                 onSelect={() => setTarefaAberta(true)}
                 aria-keyshortcuts={atalhoDo("criar-tarefa").exibicao}
               >
-                <CalendarCheck size={16} aria-hidden className="mr-2" />
+                <CalendarCheck size={16} aria-hidden />
                 <span>{t("Criar tarefa")}</span>
                 <DicaDeTecla id="criar-tarefa" />
               </DropdownMenuItem>
@@ -999,7 +999,7 @@ export function ConversationHeader({
                 title={t("Monta um orçamento com os produtos do catálogo e envia ao cliente nesta conversa.")}
                 onSelect={() => setOrcamentoAberto(true)}
               >
-                <Receipt size={16} aria-hidden className="mr-2" />
+                <Receipt size={16} aria-hidden />
                 <span>{t("Orçamento")}</span>
               </DropdownMenuItem>
             )}
@@ -1023,7 +1023,7 @@ export function ConversationHeader({
                 title={t("Convida um colega para atender junto — o responsável pela conversa não muda.")}
                 onSelect={() => setConviteAberto(true)}
               >
-                <UsersThree size={16} aria-hidden className="mr-2" />
+                <UsersThree size={16} aria-hidden />
                 {t("Convidar")}
               </DropdownMenuItem>
             )}
@@ -1064,7 +1064,7 @@ export function ConversationHeader({
                 onSelect={() => pausar.mutate({ conversation_id: conversation.id })}
                 aria-keyshortcuts={atalhoDo("automatico").exibicao}
               >
-                <Pause size={16} aria-hidden className="mr-2" />
+                <Pause size={16} aria-hidden />
                 <span>{pausar.isPending ? t("Pausando...") : t("Pausar o automático")}</span>
                 <DicaDeTecla id="automatico" />
               </DropdownMenuItem>
@@ -1091,7 +1091,7 @@ export function ConversationHeader({
                   iaComDono.mutate({ conversation_id: conversation.id, ligado: !modoLigado })
                 }
               >
-                <Robot size={16} aria-hidden className="mr-2" />
+                <Robot size={16} aria-hidden />
                 {iaComDono.isPending ? t("Salvando...") : t("IA com o dono")}
                 {modoLigado && <Check size={16} aria-hidden className="ml-auto" />}
               </DropdownMenuItem>
@@ -1127,7 +1127,7 @@ export function ConversationHeader({
                   void pendente.executar({ conversation_id: conversation.id, pendente: !estaPendente })
                 }
               >
-                <Flag size={16} aria-hidden className="mr-2" weight={estaPendente ? "fill" : "regular"} />
+                <Flag size={16} aria-hidden weight={estaPendente ? "fill" : "regular"} />
                 <span>{estaPendente ? t("Tirar de pendente") : t("Marcar como pendente")}</span>
                 <DicaDeTecla id="pendente" />
               </DropdownMenuItem>
@@ -1147,9 +1147,9 @@ export function ConversationHeader({
                 onSelect={() => void privada.executar({ conversation_id: conversation.id, privada: !ehPrivada })}
               >
                 {ehPrivada ? (
-                  <LockOpen size={16} aria-hidden className="mr-2" />
+                  <LockOpen size={16} aria-hidden />
                 ) : (
-                  <Lock size={16} aria-hidden className="mr-2" />
+                  <Lock size={16} aria-hidden />
                 )}
                 {ehPrivada ? t("Tornar pública") : t("Tornar privada")}
               </DropdownMenuItem>
@@ -1181,7 +1181,7 @@ export function ConversationHeader({
                 title={t("Guarda a conversa na aba Arquivadas. Se ainda estiver aberta, o atendimento é encerrado.")}
                 onSelect={() => setConfirmArquivarOpen(true)}
               >
-                <Archive size={16} aria-hidden className="mr-2" />
+                <Archive size={16} aria-hidden />
                 {arquivar.isPending ? t("Arquivando...") : t("Arquivar")}
               </DropdownMenuItem>
             )}
@@ -1195,7 +1195,7 @@ export function ConversationHeader({
                 title={t("Tira este contato da operação: a conversa sai do inbox.")}
                 onSelect={() => setConfirmPessoalOpen(true)}
               >
-                <EyeSlash size={16} aria-hidden className="mr-2" />
+                <EyeSlash size={16} aria-hidden />
                 {t("Marcar como pessoal")}
               </DropdownMenuItem>
             )}
@@ -1206,7 +1206,7 @@ export function ConversationHeader({
                 title={t("Devolve este contato à operação: a conversa volta ao inbox.")}
                 onSelect={() => desmarcarPessoal.mutate()}
               >
-                <EyeSlash size={16} aria-hidden className="mr-2" />
+                <EyeSlash size={16} aria-hidden />
                 {desmarcarPessoal.isPending ? t("Desmarcando...") : t("Desmarcar pessoal")}
               </DropdownMenuItem>
             )}
@@ -1224,7 +1224,7 @@ export function ConversationHeader({
                   setConfirmBloquearOpen(true);
                 }}
               >
-                <XCircle size={16} aria-hidden className="mr-2" />
+                <XCircle size={16} aria-hidden />
                 {t("Bloquear contato")}
               </DropdownMenuItem>
             )}

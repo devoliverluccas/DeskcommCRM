@@ -27,6 +27,7 @@
 import { randomInt } from "node:crypto";
 
 import { test, type Page } from "./helpers/test";
+import { seloDaVisaoDoInbox } from "./helpers/visao-do-inbox";
 
 import { admin, captura, creds, expect, login, type Creds } from "./qa-l12-comum";
 
@@ -134,10 +135,8 @@ test.describe("Relatórios › Por etiqueta, pela tela (#1891)", () => {
     // ── O clique: Inbox na aba Todas, filtrado, com as TRÊS. ───────────────
     await link.click();
     await page.waitForURL(new RegExp(`/app/inbox\\?filter=all&tag=${TAG}`), { timeout: 30_000 });
-    await expect(page.getByRole("tab", { name: /Todas/i })).toHaveAttribute(
-      "aria-selected",
-      "true",
-    );
+    // "Todas" é visão do modal: o selo ao lado das três abas diz onde se está.
+    await expect(seloDaVisaoDoInbox(page)).toContainText("Todas");
     for (const id of [aberta, comDono, resolvida]) {
       await expect(itemDaLista(page, id)).toBeVisible({ timeout: 30_000 });
     }
@@ -147,7 +146,7 @@ test.describe("Relatórios › Por etiqueta, pela tela (#1891)", () => {
     await expect(itemDaLista(page, controle), "a sem etiqueta fica fora").toHaveCount(0);
     await captura(page, "relatorio-por-etiqueta-02-inbox-todas");
 
-    // ── CONTROLE: o link sem `filter=all` (o Inbox abre na Fila). ──────────
+    // ── CONTROLE: a mesma etiqueta na FILA (`filter=unassigned`). ───────────
     // Espera a lista DA FILA (é ela que pede `comando=`) e filtrada chegar
     // antes de contar zero; sem isso o zero mediria a tela ainda carregando.
     const listaDaFila = page.waitForResponse(
@@ -158,17 +157,14 @@ test.describe("Relatórios › Por etiqueta, pela tela (#1891)", () => {
         r.status() === 200,
       { timeout: 30_000 },
     );
-    await page.goto(`/app/inbox?tag=${encodeURIComponent(TAG)}`);
+    await page.goto(`/app/inbox?filter=unassigned&tag=${encodeURIComponent(TAG)}`);
     // O que a Fila RECEBEU, além do que desenhou: um zero só na tela poderia
     // ser render atrasado.
     const { data: daFila } = (await (await listaDaFila).json()) as { data: Array<{ id: string }> };
     const idsDaFila = daFila.map((cv) => cv.id);
     expect(idsDaFila).not.toContain(resolvida);
     expect(idsDaFila).not.toContain(comDono);
-    await expect(page.getByRole("tab", { name: /Fila/i }).first()).toHaveAttribute(
-      "aria-selected",
-      "true",
-    );
+    await expect(seloDaVisaoDoInbox(page)).toContainText("Fila");
     await expect(itemDaLista(page, resolvida), "a Fila esconde a resolvida").toHaveCount(0);
     await expect(itemDaLista(page, comDono), "a Fila esconde a que tem dono").toHaveCount(0);
   });

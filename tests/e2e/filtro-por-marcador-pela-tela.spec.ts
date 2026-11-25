@@ -24,6 +24,7 @@
 import { randomInt, randomUUID } from "node:crypto";
 
 import { test, type Page } from "./helpers/test";
+import { abrirFiltrosDoInbox, escolherVisaoDoInbox } from "./helpers/visao-do-inbox";
 
 import {
   abreConversa,
@@ -206,7 +207,7 @@ test.describe("filtro por marcador, pela tela", () => {
 
     await login(page, c.users.manager!.email, c.password);
     await abreConversa(page, a.conversa);
-    await page.getByRole("tab", { name: /^Todas/ }).click();
+    await escolherVisaoDoInbox(page, /^Todas/);
 
     // 1. Caixa da CONVERSA, pelo editor da conversa.
     await marcar(page, "Adicionar tag à conversa", `/conversations/${a.conversa}`, tagDaConversa);
@@ -217,6 +218,8 @@ test.describe("filtro por marcador, pela tela", () => {
     await marcar(page, "Adicionar tag ao contato", "/contacts/", tagDoContato);
 
     // 3. O seletor oferece a UNIÃO dos dois vocabulários.
+    // O seletor de etiquetas mora no modal de Filtros (topo minimalista).
+    await abrirFiltrosDoInbox(page);
     const seletor = page.getByRole("button", { name: "Filtrar por tag" });
     await seletor.click();
     await expect(page.getByRole("menuitemcheckbox", { name: tagDaConversa, exact: true })).toBeVisible({
@@ -377,7 +380,7 @@ test.describe("filtro por marcador, pela tela", () => {
 
     await login(page, c.users.manager!.email, c.password);
     await abreConversa(page, a.conversa);
-    await page.getByRole("tab", { name: /^Todas/ }).click();
+    await escolherVisaoDoInbox(page, /^Todas/);
 
     // 1. Caixa da CONVERSA, pelo editor da conversa.
     await marcar(page, "Adicionar tag à conversa", `/conversations/${a.conversa}`, tagDaConversa);
@@ -388,6 +391,8 @@ test.describe("filtro por marcador, pela tela", () => {
     await marcar(page, "Adicionar tag ao contato", "/contacts/", tagDoContato);
 
     // 3. O seletor oferece a UNIÃO dos dois vocabulários.
+    // O seletor de etiquetas mora no modal de Filtros (topo minimalista).
+    await abrirFiltrosDoInbox(page);
     const seletor = page.getByRole("button", { name: "Filtrar por tag" });
     await seletor.click();
     await expect(page.getByRole("menuitemcheckbox", { name: tagDaConversa, exact: true })).toBeVisible({

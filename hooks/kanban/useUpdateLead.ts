@@ -7,6 +7,7 @@ import { showApiError } from "@/components/feedback/ApiErrorToast";
 import type { Lead } from "@/lib/types/leads";
 import type { BoardData } from "@/lib/kanban/types";
 import type { UpdateLeadInput } from "@/lib/schemas/leads";
+import { ApiError } from "@/lib/api/types";
 
 /**
  * O CARIMBO DA RESPOSTA VOLTA PARA O CACHE (issue #916).
@@ -48,7 +49,13 @@ interface LoseArgs {
   lostReason: string;
 }
 
-export function useWinLead(pipelineId: string) {
+/**
+ * `camposPeloChamador`: quem chama abre o diálogo de campos obrigatórios
+ * quando o `/win` recusa por `faltando` (a faixa do negócio no Inbox). Aí o
+ * toast genérico seria o MESMO aviso duas vezes — um toast e um diálogo — e ele
+ * é calado só para essa recusa; qualquer outro erro continua no toast.
+ */
+export function useWinLead(pipelineId: string, opcoes: { camposPeloChamador?: boolean } = {}) {
   const qc = useQueryClient();
   const queryKey = ["board", pipelineId] as const;
   return useMutation({
@@ -59,7 +66,10 @@ export function useWinLead(pipelineId: string) {
     onSuccess: (res, { leadId }) => {
       gravaLeadNoQuadro(qc, queryKey, leadId, res?.data);
     },
-    onError: showApiError,
+    onError: (err) => {
+      if (opcoes.camposPeloChamador && recusaPorCampos(err)) return;
+      showApiError(err);
+    },
     onSettled: (_data, _err, { leadId }) => {
       liberarEcoLocal(leadId);
       qc.invalidateQueries({ queryKey });
@@ -161,4 +171,11 @@ export function useEditLead(pipelineId: string) {
       qc.invalidateQueries({ queryKey });
     },
   });
+}
+
+/** A recusa do `/win` que lista o que falta (422 com `details.faltando`). */
+export function recusaPorCampos(err: unknown): boolean {
+  if (!(err instanceof ApiError) || err.status !== 422) return false;
+  const faltando = err.details?.faltando;
+  return Array.isArray(faltando) && faltando.length > 0;
 }
