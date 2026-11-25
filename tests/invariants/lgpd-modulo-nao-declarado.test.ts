@@ -119,6 +119,11 @@ const ALLOWLIST: Record<string, string> = {
     "quantidade, reason em vocabulário do programa e idempotency_key são dado " +
     "do programa de fidelidade, e a pessoa por trás já está anônima na cascata " +
     "(contact_id vira contato anonimizado, não contato legível).",
+  "lojas.lojas":
+    "Cadastro do PONTO DE VENDA da organização (item 5.4, migration 9495): nome, endereço e " +
+    "telefone são da LOJA, não de uma pessoa, e a tabela não tem ligação com contacts. A régua " +
+    "cai pelas palavras `nome`/`endereco`/`telefone`; declarar seção faria a anonimização de um " +
+    "titular apagar as lojas da organização inteira.",
   "ouvidoria.ouvidoria_manifestacoes":
     "Decisão escrita no catálogo LGPD (#3611, fatia 1): a manifestação é o " +
     "documento da ouvidoria que a empresa tem de responder, e redigir o texto " +

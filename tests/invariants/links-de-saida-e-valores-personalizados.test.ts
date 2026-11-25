@@ -16,8 +16,9 @@ import { motivoDoErro } from "./psql-transporte";
  *      código é único na instalação, o destino é http/https, e a FK composta
  *      recusa contato de outra organização;
  *   3. `fn_registrar_clique_de_saida` só aceita o link DA organização passada,
- *      grava o fato `link.clicked` já `done` (registro sem consumidor) só para
- *      gente, e o resumo não conta o robô de prévia;
+ *      grava o fato `link.clicked` só para gente — `pending` quando o link tem
+ *      contato (a pontuação por regra o consome, migration 9499) e `done` sem
+ *      contato (registro) —, e o resumo não conta o robô de prévia;
  *   4. LGPD: anonimizar o contato desvincula o link, corta o destino na origem,
  *      tira `ip_hash`/`navegador` dos cliques e a rota deixa de achar o link;
  *   5. `valores_personalizados`: chave no formato, única por organização, valor
@@ -123,7 +124,7 @@ describe("o link — idempotente, único e seguro", () => {
 });
 
 describe("o clique", () => {
-  it("só o link DA organização passada; gente vira `link.clicked` já done; robô não conta", () => {
+  it("só o link DA organização passada; gente com contato vira `link.clicked` pending; robô não conta", () => {
     expect(sql(`select coalesce(public.fn_registrar_clique_de_saida('${ORG_B}', '${LINK_A}', 'celular', null, null)::text, 'nulo');`).trim()).toBe(
       "nulo",
     );
@@ -133,6 +134,21 @@ describe("o clique", () => {
     expect(
       sql(`select count(*) || '|' || string_agg(distinct status, ',') from public.event_log
             where organization_id = '${ORG_A}' and event_type = 'link.clicked' and entity_id = '${LINK_A}';`).trim(),
+    ).toBe("1|pending");
+    // O payload leva o que o consumidor da pontuação precisa, sem ir ao link.
+    expect(
+      sql(`select (payload->>'contact_id') || '|' || (payload->>'rotulo') from public.event_log
+            where organization_id = '${ORG_A}' and event_type = 'link.clicked' and entity_id = '${LINK_A}';`).trim(),
+    ).toBe(`${CT_A}|bf`);
+
+    // Link SEM contato: ninguém a pontuar, o fato continua registro (`done`).
+    const LINK_SEM = "9490aaaa-5555-4000-8000-0000000000ff";
+    sql(`insert into public.links_de_saida (id, organization_id, codigo, destino_url)
+           values ('${LINK_SEM}', '${ORG_A}', 'L9490SSSSS', 'https://loja.exemplo/geral') on conflict (id) do nothing;`);
+    sql(`select public.fn_registrar_clique_de_saida('${ORG_A}', '${LINK_SEM}', 'computador', null, null);`);
+    expect(
+      sql(`select count(*) || '|' || string_agg(distinct status, ',') from public.event_log
+            where organization_id = '${ORG_A}' and event_type = 'link.clicked' and entity_id = '${LINK_SEM}';`).trim(),
     ).toBe("1|done");
     expect(sql(`select cliques from public.fn_links_de_saida_resumo('${ORG_A}') where id = '${LINK_A}';`).trim()).toBe("1");
     expect(sql(`select count(*) from public.cliques_de_links_de_saida where link_id = '${LINK_A}';`).trim()).toBe("2");

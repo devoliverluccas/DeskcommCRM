@@ -14,6 +14,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { env } from "@/lib/env";
 import type { AuditAction } from "./actions";
+import { ehAcaoDeAcesso } from "./acessos";
 
 export function isServiceRoleConfigured(): boolean {
   const key = env.SUPABASE_SERVICE_ROLE_KEY.trim();
@@ -48,13 +49,29 @@ interface AuditEntry {
   actingAsPlatformAdmin?: boolean;
 }
 
-export async function audit(entry: AuditEntry): Promise<void> {
+export async function audit(input: AuditEntry): Promise<void> {
+  let entry = input;
   try {
     // Prefer service-role admin (bypasses RLS, works for unauthenticated audit
     // events like login_failed). Fall back to user-scoped client when service
     // role is missing in dev — RLS policy `audit_log_insert_tenant_member` has
     // null qual so authenticated users can insert their own audit rows.
     const client = isServiceRoleConfigured() ? createAdminClient() : await createClient();
+    // Registro de acessos (item 5.2): login, saída, segundo fator e senha chegam
+    // sem organização — o emissor não tem uma. Com a PESSOA identificada, a linha
+    // vai para a empresa que a sessão abre (`orgDaSessaoDoAcesso`), e a tela de
+    // auditoria da empresa passa a vê-la. `null` explícito do emissor é respeitado,
+    // e quem não foi identificado (senha errada, teto) segue sem empresa: ver
+    // `lib/audit/org-do-acesso.ts` para o porquê.
+    if (
+      entry.organizationId === undefined &&
+      entry.actorUserId &&
+      !entry.actorApiTokenId &&
+      ehAcaoDeAcesso(entry.action)
+    ) {
+      const { orgDaSessaoDoAcesso } = await import("./org-do-acesso");
+      entry = { ...entry, organizationId: await orgDaSessaoDoAcesso(entry.actorUserId) };
+    }
     let supportMetadata: Record<string, unknown> = {};
     try {
       if (

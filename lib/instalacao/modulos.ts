@@ -52,7 +52,7 @@ import { logger } from "@/lib/logger";
 
 /**
  * `banco_externo`, `fluxos_atendimento`, `propostas`, `crm_b2b`, `cobranca`, `login_codex`, `setores`, `avisos`, `conferir_whatsapp`, `mcp_por_agente`, `cold_call`, `status_whatsapp`, `painel_atendimento`, `reservas_de_lugar`, `link_de_pagamento`, `canal_bot`, `campanha_por_email`, `revisao_por_km`, `agencias` e `catalogo_por_feed` ligam/desligam por uma linha em `platform_config`
- * (ver o resto deste arquivo). `honorarios`, `financeiro`, `lista_de_espera`, `cadencias`, `ouvidoria`, `amigo` e `catalogo_servicos` são MÓDULOS DE TABELA (ADR-0002): a fonte da
+ * (ver o resto deste arquivo). `honorarios`, `financeiro`, `lista_de_espera`, `cadencias`, `ouvidoria`, `amigo`, `catalogo_servicos` e `lojas` são MÓDULOS DE TABELA (ADR-0002): a fonte da
  * verdade é `modulos_instalados`, escrita só por `fn_modulo_instalar` (`lib/modulos/service.ts`),
  * nunca por esta tela. Os dois mecanismos convivem na mesma lista porque é isso que
  * `deModuloDesligado` (catálogo de tools MCP) precisa: "este módulo, seja qual for o mecanismo
@@ -107,12 +107,16 @@ export const MODULOS_OPCIONAIS = [
   "agencias",
   "catalogo_por_feed",
   "amigo",
+  // Item 5.4: lojas e filiais — módulo de TABELA (ADR-0002). As quatro tabelas
+  // nascem em `fn_lojas_provisionar` só onde o módulo é instalado, e a empresa
+  // ainda liga o uso em Configurações › Lojas (`settings.lojas.enabled`).
+  "lojas",
 ] as const;
 export type ModuloOpcional = (typeof MODULOS_OPCIONAIS)[number];
 
 /** Os módulos de tabela do ADR-0002 dentro de `MODULOS_OPCIONAIS` — resolvidos por
  * `modulos_instalados.estado = 'ativo'`, nunca por `platform_config`. */
-const MODULOS_DE_TABELA = ["honorarios", "financeiro", "lista_de_espera", "cadencias", "ouvidoria", "amigo", "catalogo_servicos"] as const satisfies readonly ModuloOpcional[];
+const MODULOS_DE_TABELA = ["honorarios", "financeiro", "lista_de_espera", "cadencias", "ouvidoria", "amigo", "catalogo_servicos", "lojas"] as const satisfies readonly ModuloOpcional[];
 
 /**
  * Só os módulos por FLAG — os que a tela `/admin/sistema` liga e desliga via

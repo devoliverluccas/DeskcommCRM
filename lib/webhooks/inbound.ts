@@ -75,6 +75,15 @@ export const CHAVES_DE_PLATAFORMA = new Set([
  * `rdstation.ts`, `respondi.ts`), que só mudam ONDE procurar a chave — cada um
  * na forma do seu fornecedor — e entregam em `source_metadata` do mesmo jeito.
  * Fornecedor novo entra por aqui, não com uma lista própria.
+ *
+ * ─── `ttclid`, `_ga` e `ga_client_id` (plataformas de análise) ──────────────
+ *
+ * O clique do TikTok (`ttclid`) e o visitante do GA4 (o cookie `_ga`, ou o
+ * `client_id` já extraído em `ga_client_id`) seguem o MESMO caminho até
+ * `source_metadata`, de onde `lib/conversoes/analitica.handler.ts` os lê. Eles
+ * NÃO decidem a atribuição principal: `extrairAtribuicaoDoInbound` continua
+ * escolhendo a plataforma só por `fbclid`/`fbc`/`gclid` — o GA4 recebe toda
+ * venda, e o TikTok a de quem tem `ttclid`, sem disputar com a Meta e o Google.
  */
 export const CHAVES_DE_ANUNCIO: ReadonlySet<string> = new Set([
   "fbclid",
@@ -84,6 +93,9 @@ export const CHAVES_DE_ANUNCIO: ReadonlySet<string> = new Set([
   "ad_id",
   "adset_id",
   "campaign_id",
+  "ttclid",
+  "_ga",
+  "ga_client_id",
 ]);
 
 export interface MappedLead {

@@ -216,6 +216,19 @@ describe("chaves de anúncio do Elementor", () => {
     expect(doGenerico!.identidadeDoNavegador!.fbc).toMatch(/^fb\.1\.\d+\.IwAR1abc$/);
   });
 
+  it("`ttclid` e `_ga` vão para source_metadata e não decidem a plataforma", () => {
+    const m = mapElementorPayload({
+      ...elementoComAnuncio("ttclid", "TT_CLIQUE"),
+      "fields[_ga][id]": "_ga",
+      "fields[_ga][type]": "hidden",
+      "fields[_ga][value]": "GA1.1.111.222",
+    });
+    expect(m.source_metadata.ttclid).toBe("TT_CLIQUE");
+    expect(m.source_metadata._ga).toBe("GA1.1.111.222");
+    expect(m.custom_fields.ttclid).toBeUndefined();
+    expect(extrairAtribuicaoDoInbound(m.source_metadata)).toBeNull();
+  });
+
   it("CONTROLE: sem chave de anúncio, nenhuma atribuição é inventada", () => {
     const m = mapElementorPayload(envio());
     expect(extrairAtribuicaoDoInbound(m.source_metadata)).toBeNull();

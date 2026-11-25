@@ -123,6 +123,18 @@ describe("signOut (Sair)", () => {
     );
   });
 
+  it("audita a saída ANTES de apagar o active_org: é por ele que a linha cai na empresa certa", async () => {
+    m.audit.mockImplementation(async () => {
+      ordem.push("auditou");
+    });
+    m.deleteCookie.mockImplementation(() => {
+      ordem.push("apagou_cookie");
+    });
+    await sair();
+    expect(ordem.indexOf("auditou")).toBeGreaterThanOrEqual(0);
+    expect(ordem.indexOf("auditou")).toBeLessThan(ordem.indexOf("apagou_cookie"));
+  });
+
   it("falha ao apagar → registra e sai do mesmo jeito", async () => {
     responderDelete({ data: null, error: { message: "fora" } });
     await sair();

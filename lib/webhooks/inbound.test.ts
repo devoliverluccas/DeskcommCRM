@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { mapInboundPayload, normalizePhoneBR, verifyInboundSignature } from "@/lib/webhooks/inbound";
+import {
+  extrairAtribuicaoDoInbound,
+  mapInboundPayload,
+  normalizePhoneBR,
+  verifyInboundSignature,
+} from "@/lib/webhooks/inbound";
 import { createHmac } from "node:crypto";
 
 describe("normalizePhoneBR", () => {
@@ -78,4 +83,33 @@ describe("verifyInboundSignature", () => {
   it("header ausente", () => expect(verifyInboundSignature(body, null, secret)).toBe(false));
   it("header com tamanho diferente não lança (timingSafeEqual exige mesmo length)", () =>
     expect(verifyInboundSignature(body, "abc", secret)).toBe(false));
+});
+
+describe("chaves das plataformas de análise (ttclid, _ga, ga_client_id)", () => {
+  it("vão para source_metadata, não para o card", () => {
+    const m = mapInboundPayload({
+      nome: "Ana",
+      telefone: "11988887777",
+      ttclid: "TT_CLIQUE",
+      _ga: "GA1.1.111.222",
+      GA_CLIENT_ID: "333.444",
+    });
+    expect(m.source_metadata).toMatchObject({
+      ttclid: "TT_CLIQUE",
+      _ga: "GA1.1.111.222",
+      ga_client_id: "333.444",
+    });
+    expect(m.custom_fields).not.toHaveProperty("ttclid");
+    expect(m.custom_fields).not.toHaveProperty("_ga");
+    expect(m.custom_fields).not.toHaveProperty("GA_CLIENT_ID");
+  });
+
+  it("sozinhas não criam atribuição: a plataforma principal segue sendo Meta ou Google", () => {
+    expect(extrairAtribuicaoDoInbound({ ttclid: "TT", _ga: "GA1.1.1.2" })).toBeNull();
+    const comMeta = extrairAtribuicaoDoInbound({ fbclid: "IwAR", ttclid: "TT" });
+    expect(comMeta?.plataforma).toBe("meta_ads");
+    expect(comMeta?.sourceId).toBe("IwAR");
+    const comGoogle = extrairAtribuicaoDoInbound({ gclid: "G1", ttclid: "TT" });
+    expect(comGoogle?.plataforma).toBe("google_ads");
+  });
 });

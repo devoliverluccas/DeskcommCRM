@@ -100,14 +100,14 @@ function TabelaDeRecorte<L extends LinhaDeRecorte>({
   );
 }
 
-export function AbaAtendimentos({ periodo }: { periodo: Periodo }) {
+export function AbaAtendimentos({ periodo, loja = null }: { periodo: Periodo; loja?: string | null }) {
   const t = useT();
   const tag = useTagDeIdioma();
   const consulta = useQuery({
-    queryKey: ["relatorios", "atendimentos", periodo.de, periodo.ate],
+    queryKey: ["relatorios", "atendimentos", periodo.de, periodo.ate, loja],
     queryFn: () =>
       apiClient.get<{ data: RelatorioDeAtendimentos & { janela: JanelaDaResposta } }>(
-        `/api/v1/relatorios/atendimentos?de=${periodo.de}&ate=${periodo.ate}`,
+        `/api/v1/relatorios/atendimentos?de=${periodo.de}&ate=${periodo.ate}${loja ? `&loja=${loja}` : ""}`,
       ),
   });
 

@@ -28,6 +28,7 @@ import { z } from "zod";
 
 import { warmupCapFor } from "@/lib/agent-engine/pacing/engine";
 import { effectiveKnobs, idadeEmDias, type ChannelKnobsRow } from "@/lib/ai/pacing-knobs";
+import { conversasDoLimite, normalizarLimite } from "@/lib/channels/meta/saude-do-numero";
 
 import { preverAudiencia, type ModeloPreparado } from "./preparacao";
 import { RAJADA } from "./rajada";
@@ -144,7 +145,13 @@ export interface ResumoDoEnvio {
     /** O limite do dia de UM número: o menor entre o aquecimento e o teto do CRM. */
     limiteDoDia: number | null;
     /** Quem decide o limite, para a frase da tela. */
-    origemDoLimite: "aquecimento" | "teto_do_numero" | null;
+    origemDoLimite: OrigemDoLimite;
+    /**
+     * O limite REAL de conversas por 24h que a Meta deu ao número oficial
+     * (item 5.5, `channel_sessions.meta_messaging_limit_tier`). `null` = número
+     * sem essa leitura (QR, ou oficial ainda não lido). `conversas: null` = sem limite.
+     */
+    limiteDaMeta: { tier: string; conversas: number | null } | null;
     idadeEmDias: number;
     janela: { inicio: number; fim: number; horas: number };
     fuso: string;
@@ -155,19 +162,36 @@ export interface ResumoDoEnvio {
   duracao: EstimativaDeDuracao | null;
 }
 
-/** O limite de UM número hoje, pela mesma conta de `decidePacing`. */
+export type OrigemDoLimite = "aquecimento" | "teto_do_numero" | "limite_da_meta" | null;
+
+/**
+ * O limite de UM número hoje, pela mesma conta de `decidePacing` — e, quando o
+ * número é oficial e a Meta já disse o degrau dele (item 5.5), o limite REAL de
+ * conversas por 24h entra na conta: a lista que passa dele não sai no mesmo dia,
+ * por mais folgado que esteja o teto do CRM. `limiteDaMeta` ausente/`null` =
+ * sem leitura, e a conta é a de sempre.
+ */
 export function limiteDoNumeroHoje(
   knobsRow: ChannelKnobsRow | null,
   tetoDoCrm: number | null,
   agora: Date,
   fusoDaOrg: string | null,
-): { limite: number | null; origem: "aquecimento" | "teto_do_numero" | null; idade: number } {
+  limiteDaMeta: number | null = null,
+): { limite: number | null; origem: OrigemDoLimite; idade: number } {
   const knobs = effectiveKnobs(knobsRow, fusoDaOrg);
   const idade = idadeEmDias(knobsRow, agora);
   const doAquecimento = warmupCapFor(idade, knobs.warmupDailyCaps);
-  const limite = Math.min(doAquecimento ?? Infinity, tetoDoCrm ?? Infinity);
+  const daMeta = limiteDaMeta ?? Infinity;
+  const limite = Math.min(doAquecimento ?? Infinity, tetoDoCrm ?? Infinity, daMeta);
   if (!Number.isFinite(limite)) return { limite: null, origem: null, idade };
-  const origem = doAquecimento !== null && doAquecimento <= (tetoDoCrm ?? Infinity) ? "aquecimento" : "teto_do_numero";
+  // Empate fica com quem já explicava o limite antes (aquecimento, depois teto):
+  // a Meta só assume a frase quando é ela que aperta.
+  const origem: OrigemDoLimite =
+    doAquecimento !== null && doAquecimento <= Math.min(tetoDoCrm ?? Infinity, daMeta)
+      ? "aquecimento"
+      : tetoDoCrm !== null && tetoDoCrm <= daMeta
+        ? "teto_do_numero"
+        : "limite_da_meta";
   return { limite, origem, idade };
 }
 
@@ -207,13 +231,25 @@ export async function resumirEnvio(
     return { audiencia: { ...audiencia, legenda: TEXTO_DA_EXCLUSAO }, modelo, custo: null, numero: null, velocidade, duracao: null };
   }
 
-  const [sessao, knobs, org] = await Promise.all([
-    admin
+  // O degrau da Meta (migration 9496) vem junto. Clone que ainda não aplicou a
+  // migration não tem a coluna: a leitura cai na de sempre em vez de derrubar o resumo.
+  const lerSessao = async () => {
+    const comMeta = await admin
+      .from("channel_sessions")
+      .select("daily_message_limit, meta_messaging_limit_tier")
+      .eq("organization_id", organizationId)
+      .eq("id", sessionId)
+      .maybeSingle();
+    if (!comMeta.error || comMeta.error.code !== "42703") return comMeta;
+    return admin
       .from("channel_sessions")
       .select("daily_message_limit")
       .eq("organization_id", organizationId)
       .eq("id", sessionId)
-      .maybeSingle(),
+      .maybeSingle();
+  };
+  const [sessao, knobs, org] = await Promise.all([
+    lerSessao(),
     admin
       .from("channel_knobs")
       .select("*")
@@ -230,8 +266,12 @@ export async function resumirEnvio(
   const knobsRow = (knobs.data ?? null) as ChannelKnobsRow | null;
   const fusoDaOrg = (org.data as { timezone?: string | null } | null)?.timezone ?? null;
   const efetivos = effectiveKnobs(knobsRow, fusoDaOrg);
-  const tetoDoCrm = (sessao.data as { daily_message_limit: number | null }).daily_message_limit ?? null;
-  const limite = limiteDoNumeroHoje(knobsRow, tetoDoCrm, agora, fusoDaOrg);
+  const linhaDaSessao = sessao.data as { daily_message_limit: number | null; meta_messaging_limit_tier?: string | null };
+  const tetoDoCrm = linhaDaSessao.daily_message_limit ?? null;
+  const tier = normalizarLimite(linhaDaSessao.meta_messaging_limit_tier ?? null);
+  const conversasDaMeta = conversasDoLimite(tier);
+  const limiteDaMeta = tier && conversasDaMeta !== undefined ? { tier, conversas: conversasDaMeta } : null;
+  const limite = limiteDoNumeroHoje(knobsRow, tetoDoCrm, agora, fusoDaOrg, limiteDaMeta?.conversas ?? null);
   const janela = janelaEfetiva(
     { inicio: efetivos.windowStartHour, fim: efetivos.windowEndHour },
     { inicio: pedido.janela_inicio_hora, fim: pedido.janela_fim_hora },
@@ -246,6 +286,7 @@ export async function resumirEnvio(
     numero: {
       limiteDoDia: limite.limite,
       origemDoLimite: limite.origem,
+      limiteDaMeta,
       idadeEmDias: limite.idade,
       janela,
       fuso: efetivos.timezone,

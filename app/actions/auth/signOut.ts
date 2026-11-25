@@ -40,10 +40,9 @@ export async function signOut(): Promise<void> {
   if (user) invalidarUsuario(user.id);
   if (sessao) invalidarSessao(sessao.chave);
 
-  // Clear active_org cookie too.
-  const store = await cookies();
-  store.delete("active_org");
-
+  // A auditoria ANTES de apagar o `active_org`: é por ele que `audit()` sabe em
+  // qual empresa a sessão estava (registro de acessos, `lib/audit/org-do-acesso.ts`).
+  // Apagado antes, a saída de quem tem duas empresas cairia na primeira delas.
   if (user) {
     await audit({
       action: "auth.logout",
@@ -54,6 +53,10 @@ export async function signOut(): Promise<void> {
       metadata: { scope: "global" },
     });
   }
+
+  // Clear active_org cookie too.
+  const store = await cookies();
+  store.delete("active_org");
 
   redirect("/login");
 }

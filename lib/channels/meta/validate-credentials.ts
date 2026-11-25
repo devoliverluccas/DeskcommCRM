@@ -15,7 +15,14 @@ import { graphVersion } from "@/lib/graph-version";
 import { graphBaseUrl } from "./graph-base";
 
 export type ValidacaoCredencial =
-  | { ok: true; displayPhoneNumber: string | null; verifiedName: string | null; qualityRating: string | null }
+  | {
+      ok: true;
+      displayPhoneNumber: string | null;
+      verifiedName: string | null;
+      qualityRating: string | null;
+      /** O degrau de conversas por 24h (`TIER_1K`…) — a saúde do número (item 5.5). */
+      messagingLimitTier?: string | null;
+    }
   | { ok: false; motivo: string };
 
 export async function validateMetaCredentials(input: {
@@ -33,13 +40,14 @@ export async function validateMetaCredentials(input: {
   try {
     const res = await fetch(
       `${graphBaseUrl(version)}/${input.phoneNumberId}` +
-        `?fields=display_phone_number,verified_name,quality_rating`,
+        `?fields=display_phone_number,verified_name,quality_rating,messaging_limit_tier`,
       { headers: { Authorization: `Bearer ${input.token}` } },
     );
     const body = (await res.json().catch(() => ({}))) as {
       display_phone_number?: string;
       verified_name?: string;
       quality_rating?: string;
+      messaging_limit_tier?: string;
       error?: { message?: string; error_data?: { details?: string } };
     };
 
@@ -74,6 +82,7 @@ export async function validateMetaCredentials(input: {
       displayPhoneNumber: body.display_phone_number ?? null,
       verifiedName: body.verified_name ?? null,
       qualityRating: body.quality_rating ?? null,
+      messagingLimitTier: body.messaging_limit_tier ?? null,
     };
   } catch (err) {
     // Rede caída não é credencial ruim — o motivo precisa dizer isso, senão o

@@ -17,6 +17,7 @@ import {
 import type { Produto } from "@/lib/schemas/produtos";
 
 import { CatalogProductAiPresentation } from "./_apresentacao-ia";
+import { EstoquePorLoja } from "./_estoque-por-loja";
 
 /**
  * O FORMULÁRIO DE EDIÇÃO — o que a tela nunca teve.
@@ -38,12 +39,15 @@ export function EdicaoDoProduto({
   urlsDasFotos,
   apresentacaoLigada = false,
   capacidadeLigada = false,
+  lojasLigadas = false,
   aoFechar,
 }: {
   produto: Produto;
   urlsDasFotos: Record<string, string>;
   apresentacaoLigada?: boolean;
   capacidadeLigada?: boolean;
+  /** Módulo `lojas` ligado (item 5.4): a quantidade de cada loja, gravada à parte. */
+  lojasLigadas?: boolean;
   aoFechar: () => void;
 }) {
   const t = useT();
@@ -216,6 +220,9 @@ export function EdicaoDoProduto({
           />
         </label>
       ) : null}
+
+      {/* A sincronização da origem não toca o estoque por loja: ele segue editável. */}
+      {lojasLigadas ? <EstoquePorLoja productId={produto.id} somenteLeitura={false} /> : null}
 
       {apresentacaoLigada ? <CatalogProductAiPresentation product={produto} photoUrls={urlsDasFotos} /> : null}
 

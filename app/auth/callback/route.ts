@@ -13,6 +13,7 @@ import { invalidarUsuario } from "@/lib/auth/cache-curto";
 import { audit } from "@/lib/audit";
 import { marcaDaSaida } from "@/lib/branding/saida";
 import { env } from "@/lib/env";
+import { ipDoCliente } from "@/lib/http/ip-do-cliente";
 
 /**
  * GET /auth/callback — a VOLTA da entrada com Google (issue #1388).
@@ -78,6 +79,13 @@ export async function GET(request: NextRequest) {
   const next = url.searchParams.get("next");
   const convite = url.searchParams.get("convite");
   const requestId = request.headers.get("x-request-id");
+  // Endereço e navegador de quem volta do Google — o mesmo par que o login por
+  // senha grava (`signInWithPassword`). Só entram nas linhas DEPOIS do gate:
+  // os dois ramos anônimos acima do `code` continuam sem escrever nada.
+  const origem = {
+    ip: ipDoCliente(request.headers),
+    userAgent: request.headers.get("user-agent")?.slice(0, 1000) ?? null,
+  };
 
   // NUNCA usar url.origin aqui: é derivado do header Host, que o proxy/container
   // pode entregar como o bind interno (ex.: 0.0.0.0:3000) em vez do domínio
@@ -135,6 +143,7 @@ export async function GET(request: NextRequest) {
         reason: (error?.message ?? "no_user").slice(0, 200),
       },
       requestId,
+      ...origem,
     });
     return redirectTo("/login?error=entrada_com_google");
   }
@@ -187,6 +196,7 @@ export async function GET(request: NextRequest) {
         reason: e instanceof Error ? e.message.slice(0, 200) : "erro_desconhecido",
       },
       requestId,
+      ...origem,
     });
     return redirectTo("/login?error=entrada_com_google");
   }
@@ -197,6 +207,7 @@ export async function GET(request: NextRequest) {
       actorUserId: usuario.id,
       metadata: { provider: "google" },
       requestId,
+      ...origem,
     });
     // ENTRADA: o destino é `/app` (ou o `next` pedido) — tela COM sessão, logo
     // ponte e não 302 (issue #1646).
@@ -222,6 +233,7 @@ export async function GET(request: NextRequest) {
       actorUserId: usuario.id,
       metadata: { motivo: "acesso_revogado", provider: "google" },
       requestId,
+      ...origem,
     });
     return redirectTo("/login?error=acesso_revogado");
   }
@@ -237,6 +249,7 @@ export async function GET(request: NextRequest) {
       actorUserId: usuario.id,
       metadata: { motivo: decisao.motivo, provider: "google" },
       requestId,
+      ...origem,
     });
     return redirectTo("/login?error=convite_invalido");
   }
@@ -265,6 +278,7 @@ export async function GET(request: NextRequest) {
       actorUserId: usuario.id,
       metadata: { motivo: "somente_convite", provider: "google" },
       requestId,
+      ...origem,
     });
     return redirectTo("/login?error=cadastro_por_convite");
   }
@@ -295,6 +309,7 @@ export async function GET(request: NextRequest) {
       actorUserId: usuario.id,
       metadata: { reason: e instanceof Error ? e.message : String(e), provider: "google" },
       requestId,
+      ...origem,
     });
     // A sessão JÁ está firmada. Mandar para `/login` deixava a pessoa logada e
     // sem organização, sem caminho de volta — ver `recoverOrganization.ts`.
@@ -306,6 +321,7 @@ export async function GET(request: NextRequest) {
     actorUserId: usuario.id,
     metadata: { provider: "google" },
     requestId,
+    ...origem,
   });
 
   return await paraTelaAutenticada("/onboarding/welcome");

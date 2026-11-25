@@ -79,6 +79,7 @@ interface Excecao {
  * linhas da OUTRA organização, não uma leitura como superusuário.
  */
 const PROVA_PROPRIA: readonly Excecao[] = [
+  { tabela: "perfis_de_tela", razao: "tests/invariants/perfis-de-tela-isolamento.test.ts (migration 9497) — dois tenants por JWT authenticated: cada organização lê só os próprios perfis (controle positivo), a sessão não cria nem altera (escrita só do servidor, admin conferido na rota) e a FK composta recusa perfil de outra organização no vínculo." },
   ...["regras_de_pontuacao", "pontuacao_extrato"].map((tabela) => ({ tabela, razao: "tests/invariants/pontuacao-por-regra-isolamento.test.ts (migration 9492) — dois tenants por JWT authenticated: a sessão de ORG2 não vê regra, extrato nem soma de ORG1 (controle positivo da própria org); a sessão só lê — INSERT direto e a porta fn_pontuacao_registrar recusados; regra de ORG1 não pontua contato de ORG2." })),
   { tabela: "demanda_protocolo_contadores", razao: "tests/invariants/protocolo-e-motivos-de-encerramento.test.ts (migration 9482) — contador exclusivo do servidor: a sessão autenticada não lê nem grava; o protocolo é gerado pelo gatilho e ignorado quando vem de fora." },
   { tabela: "google_ads_reporting_accounts", razao: "tests/invariants/contas-de-relatorio-do-google-ads.test.ts — o servidor lê as contas das duas organizações. Em ambas as direções, o administrador autenticado identifica a própria organização por JWT e recebe 42501 ao ler as credenciais tanto dela quanto da vizinha." },

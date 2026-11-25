@@ -251,13 +251,41 @@ export interface ReactionEvent {
   sentAt: Date;
 }
 
+/**
+ * A nota ou o limite do NÚMERO mudou (`phone_number_quality_update`, item 5.5).
+ *
+ * O evento fala do número pelo `display_phone_number`, não pelo id: quem grava
+ * (`gravarSaudeDoNumero`) confere com o número da conexão. `event` é o que a
+ * Meta chamou a mudança (`FLAGGED`, `UNFLAGGED`, `UPGRADE`, `DOWNGRADE`…);
+ * `currentLimit` é o degrau novo (`TIER_1K`…); `quality` só vem quando a Meta
+ * a manda explícita — na maior parte das entregas a nota se deduz do `event`.
+ */
+export interface NumberQualityEvent {
+  kind: "number_quality";
+  wabaId: string;
+  displayPhoneNumber: string | null;
+  event: string | null;
+  currentLimit: string | null;
+  quality: string | null;
+}
+
+/** A CONTA do WhatsApp Business mudou de situação (`account_update`, item 5.5). */
+export interface AccountUpdateEvent {
+  kind: "account_update";
+  wabaId: string;
+  event: string;
+  phoneNumber: string | null;
+}
+
 export type MetaWebhookEvent =
   | TemplateStatusEvent
   | MessageStatusEvent
   | InboundMessageEvent
   | OutboundEchoEvent
   | AppContactSyncEvent
-  | ReactionEvent;
+  | ReactionEvent
+  | NumberQualityEvent
+  | AccountUpdateEvent;
 
 /**
  * O formato do fio mora em `./envelope.ts`, onde é um schema Zod — e o tipo
@@ -356,6 +384,29 @@ export function parseMetaWebhook(envelope: MetaWebhookEnvelope): MetaWebhookEven
     for (const change of entry.changes ?? []) {
       const v = change.value ?? {};
 
+      // Saúde do número (item 5.5). Payload capenga (sem evento nem limite) não
+      // vira linha: não há o que gravar.
+      if (change.field === "phone_number_quality_update") {
+        const event = str(v.event);
+        const currentLimit = str(v.current_limit) ?? str(v.max_daily_conversations_per_business);
+        const quality = str(v.quality_rating) ?? str(v.current_quality_rating);
+        if (!event && !currentLimit && !quality) continue;
+        out.push({
+          kind: "number_quality",
+          wabaId,
+          displayPhoneNumber: str(v.display_phone_number),
+          event,
+          currentLimit,
+          quality,
+        });
+        continue;
+      }
+      if (change.field === "account_update") {
+        const event = str(v.event);
+        if (!event) continue;
+        out.push({ kind: "account_update", wabaId, event, phoneNumber: str(v.phone_number) });
+        continue;
+      }
       if (change.field === "message_template_status_update") {
         const name = str(v.message_template_name);
         const language = str(v.message_template_language);

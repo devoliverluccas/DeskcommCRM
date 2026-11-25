@@ -24,6 +24,7 @@ import { traduzir } from "@/lib/i18n/dicionario";
 import { moduloLigado } from "@/lib/instalacao/modulos";
 import { logger } from "@/lib/logger";
 import { capacidadesDaOrganizacao } from "@/lib/organizacao/capacidades";
+import { lojasLigadas } from "@/lib/lojas/modulo";
 import { COLUNAS_DO_PRODUTO, type Produto } from "@/lib/schemas/produtos";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -182,6 +183,7 @@ export default async function ProdutosPage({
       podeEditar={podeEditar}
       capacidadeLigada={capacidadeLigada}
       apresentacaoLigada={await apresentacaoDoCatalogoLigada(createAdminClient(), activeOrg.orgId)}
+      lojasLigadas={await lojasLigadas(createAdminClient(), activeOrg.orgId)}
       fonteDoFeed={fonteDoFeed}
       categorias={categorias}
       filtros={filtros}

@@ -172,7 +172,9 @@ export function ResumoDoEnvio({ pedido }: { pedido: Record<string, unknown> | nu
                         ·{" "}
                         {n.origemDoLimite === "aquecimento"
                           ? t("aquecimento: número com {n} dia(s) de uso").replace("{n}", String(n.idadeEmDias))
-                          : t("teto diário do número")}
+                          : n.origemDoLimite === "limite_da_meta"
+                            ? t("limite de conversas da Meta")
+                            : t("teto diário do número")}
                       </span>
                     </>
                   )}

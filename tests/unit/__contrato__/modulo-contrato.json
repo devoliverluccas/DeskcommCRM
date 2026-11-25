@@ -89,6 +89,7 @@
       "GET /api/v1/ai/followup-flows",
       "GET /api/v1/ai/followup-flows/[id]",
       "GET /api/v1/ai/followup-flows/[id]/export",
+      "GET /api/v1/ai/followup-flows/[id]/webhook-secret",
       "GET /api/v1/ai/followup-flows/modelos-aprovados",
       "GET /api/v1/ai/followups/enrollments",
       "GET /api/v1/ai/followups/enrollments/[id]",
@@ -219,6 +220,7 @@
       "GET /api/v1/attendants/sectors",
       "GET /api/v1/settings/atendimento",
       "GET /api/v1/settings/campanhas",
+      "GET /api/v1/settings/encerrar-inativas",
       "GET /api/v1/settings/links-de-contato",
       "GET /api/v1/settings/proposal-templates",
       "GET /api/v1/settings/proposal-templates/[id]",
@@ -226,6 +228,7 @@
       "GET /api/v1/settings/prospeccao",
       "GET /api/v1/settings/routing",
       "GET /api/v1/settings/routing/channels",
+      "GET /api/v1/settings/sla",
       "GET /api/v1/settings/sons",
       "GET /api/v1/settings/task-plans",
       "GET /api/v1/team/assignable",
@@ -234,12 +237,14 @@
       "PATCH /api/v1/settings/atendimento",
       "PATCH /api/v1/settings/campanhas",
       "PATCH /api/v1/settings/catalogo",
+      "PATCH /api/v1/settings/encerrar-inativas",
       "PATCH /api/v1/settings/links-de-contato",
       "PATCH /api/v1/settings/proposal-templates/[id]",
       "PATCH /api/v1/settings/proposals",
       "PATCH /api/v1/settings/prospeccao",
       "PATCH /api/v1/settings/routing",
       "PATCH /api/v1/settings/routing/channels",
+      "PATCH /api/v1/settings/sla",
       "PATCH /api/v1/settings/task-plans",
       "POST /api/v1/settings/proposal-templates",
       "POST /api/v1/settings/proposal-templates/importar",
@@ -283,6 +288,7 @@
       "POST /api/v1/companies/[id]/enrich",
       "POST /api/v1/contacts",
       "POST /api/v1/contacts/[id]/always-human",
+      "POST /api/v1/contacts/[id]/bloquear",
       "POST /api/v1/contacts/[id]/empresa-da-prospeccao",
       "POST /api/v1/contacts/[id]/personal",
       "POST /api/v1/contacts/[id]/phones",
@@ -303,6 +309,7 @@
       "DELETE /api/v1/messages/[id]/hide",
       "GET /api/v1/conversations",
       "GET /api/v1/conversations/[id]",
+      "GET /api/v1/conversations/[id]/media",
       "GET /api/v1/conversations/[id]/messages",
       "GET /api/v1/conversations/[id]/notes",
       "GET /api/v1/conversations/[id]/notes/[id]/media",
@@ -324,8 +331,11 @@
       "POST /api/v1/conversations/[id]/pagamentos",
       "POST /api/v1/conversations/[id]/participants",
       "POST /api/v1/conversations/[id]/pause-ai",
+      "POST /api/v1/conversations/[id]/pendente",
+      "POST /api/v1/conversations/[id]/privada",
       "POST /api/v1/conversations/[id]/reactivate-bot",
       "POST /api/v1/conversations/[id]/reopen",
+      "POST /api/v1/conversations/[id]/sla",
       "POST /api/v1/conversations/[id]/snooze",
       "POST /api/v1/conversations/[id]/transfer",
       "POST /api/v1/conversations/[id]/transferir-agente",
@@ -408,6 +418,7 @@
       "POST /api/v1/proposals/[id]/assistant",
       "POST /api/v1/proposals/[id]/assistant/apply",
       "POST /api/v1/proposals/[id]/decide",
+      "POST /api/v1/proposals/[id]/link",
       "POST /api/v1/proposals/[id]/preencher-com-conversa",
       "POST /api/v1/proposals/[id]/revise"
     ]
@@ -1098,7 +1109,7 @@
         {
           "nome": "createAutomationRuleSchema",
           "origem": "@/lib/schemas",
-          "hash": "7f5ae4be2ea70bf9"
+          "hash": "bbcde9d327f61bc5"
         }
       ],
       "resposta": []
@@ -1158,7 +1169,7 @@
         {
           "nome": "listConversationsQuerySchema",
           "origem": "@/lib/schemas",
-          "hash": "92d560e6e1b357dd"
+          "hash": "d81970ebb1a7042a"
         }
       ],
       "resposta": []
@@ -1189,6 +1200,16 @@
           "nome": "corpoSchema",
           "origem": "local",
           "hash": "93671da7b5102b7f"
+        }
+      ],
+      "resposta": []
+    },
+    "/api/v1/conversations/[id]/sla": {
+      "corpo": [
+        {
+          "nome": "corpoSchema",
+          "origem": "local",
+          "hash": "e10d93d3c52c5331"
         }
       ],
       "resposta": []
@@ -1508,7 +1529,7 @@
         {
           "nome": "produtoCreateSchema",
           "origem": "@/lib/schemas/produtos",
-          "hash": "dab7c7cea14866a9"
+          "hash": "95d02385d4e6b7e2"
         }
       ],
       "resposta": []
@@ -1518,7 +1539,7 @@
         {
           "nome": "produtoPatchSchema",
           "origem": "@/lib/schemas/produtos",
-          "hash": "2a43c49119d035d4"
+          "hash": "e86259d3ccbec2b6"
         }
       ],
       "resposta": []
@@ -1576,9 +1597,9 @@
     "/api/v1/proposals": {
       "corpo": [
         {
-          "nome": "propostaCreateSchema",
-          "origem": "@/lib/schemas/propostas",
-          "hash": "22c49429fa0aaa14"
+          "nome": "criacaoSchema",
+          "origem": "local",
+          "hash": "0769bd77629c1440"
         }
       ],
       "resposta": []
@@ -1593,7 +1614,7 @@
         {
           "nome": "patchSchema",
           "origem": "local",
-          "hash": "f96f1fd3753832e3"
+          "hash": "663c79cd684e5fc3"
         }
       ],
       "resposta": []
@@ -1634,6 +1655,16 @@
           "nome": "patchSchema",
           "origem": "local",
           "hash": "52a8432bec24d73b"
+        }
+      ],
+      "resposta": []
+    },
+    "/api/v1/proposals/[id]/link": {
+      "corpo": [
+        {
+          "nome": "paramsSchema",
+          "origem": "local",
+          "hash": "28b5b12598b47ac7"
         }
       ],
       "resposta": []
@@ -1733,7 +1764,7 @@
         {
           "nome": "patchSchema",
           "origem": "local",
-          "hash": "3a7ede4288bb864b"
+          "hash": "70ff47298f4b14f2"
         }
       ],
       "resposta": []
@@ -1824,6 +1855,16 @@
           "nome": "channelRoutingPatchSchema",
           "origem": "@/lib/schemas/routing",
           "hash": "42fba74672aad920"
+        }
+      ],
+      "resposta": []
+    },
+    "/api/v1/settings/sla": {
+      "corpo": [
+        {
+          "nome": "slaWriteSchema",
+          "origem": "@/lib/schemas/settings",
+          "hash": "5367b0bec3ae461d"
         }
       ],
       "resposta": []

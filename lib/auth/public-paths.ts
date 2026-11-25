@@ -261,6 +261,14 @@ export const PUBLIC_PATHS: RegExp[] = [
   // HMAC `X-Module-*`, conferida DENTRO da rota (`app/api/v1/extensions/events/route.ts`), mais a
   // autorização do par organização × instalação pelo banco. Só este caminho exato, pelo mesmo motivo.
   /^\/api\/v1\/extensions\/events$/,
+  // Chat do site (fase 5, item 5.3): o script e as três rotas que ele chama de
+  // OUTRO domínio, sem cookie. Quem decide é `abrirPedidoDoChat`
+  // (`lib/channels/webchat/publico.ts`): chave → conexão ativa e ligada →
+  // Origin na lista de domínios → limite por IP; ler e escrever exigem ainda o
+  // token do visitante no cabeçalho. O `.js` já escapa do matcher do proxy; a
+  // linha fica para a lista dizer a verdade.
+  /^\/webchat\.js$/,
+  /^\/api\/v1\/webchat\/[A-Za-z0-9_-]{32,64}\/(config|sessao|mensagens)$/,
   // AS ROTAS DAS FATIAS R DA SPEC 33 (configuração, operação, leitura). Mesma
   // dualidade das linhas acima: sessão OU Bearer `dsk_…`, resolvidos por
   // `lib/api/auth-dual.ts` DENTRO de cada rota, com a organização saindo da

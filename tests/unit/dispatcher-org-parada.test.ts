@@ -34,6 +34,7 @@ import { conversaoDeQualificacaoHandler } from "@/lib/conversoes/qualificacao.ha
 import { conversaoDeEtapaMetaHandler } from "@/lib/conversoes/etapa-meta.handler";
 import { conversaoDeNascimentoMetaHandler } from "@/lib/conversoes/nascimento-meta.handler";
 import { conversaoDeCliqueMetaHandler } from "@/lib/conversoes/clique-meta.handler";
+import { conversaoAnaliticaHandler } from "@/lib/conversoes/analitica.handler";
 import { avisoDeAgendamentoNoWhatsAppHandler } from "@/lib/agenda/aviso-de-agendamento.handler";
 import { avisoDeCasoAoSuporteHandler } from "@/lib/escalacao/aviso-ao-suporte.handler";
 import { avisoDeHandoffHandler } from "@/lib/escalacao/aviso-de-handoff.handler";
@@ -105,6 +106,8 @@ const PULA: EventHandler[] = [
   conversaoDeEtapaMetaHandler,
   conversaoDeNascimentoMetaHandler,
   conversaoDeCliqueMetaHandler,
+  // GA4 e TikTok: sai por rede de terceiro.
+  conversaoAnaliticaHandler,
   pinoReintentoHandler,
   // Reenviar a mensagem que o canal mandou desacelerar é falar com o cliente.
   reenvioDesaceleradoHandler,

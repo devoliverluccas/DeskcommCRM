@@ -25,6 +25,7 @@ import {
   type OrigemDaConexaoOficial,
 } from "@/lib/channels/meta/origem-da-conexao";
 import { validateMetaCredentials } from "@/lib/channels/meta/validate-credentials";
+import { gravarSaudeDoNumero, normalizarLimite, normalizarQualidade } from "@/lib/channels/meta/saude-do-numero";
 import { registrarWebhookDaSessao } from "@/lib/channels/meta/webhook-da-sessao";
 import { reactivateChannelSession } from "@/lib/channels/reactivate";
 import { traduzirLimiteDoPlano } from "@/lib/cobranca/limites";
@@ -174,6 +175,20 @@ export async function gravarCanalOficial(input: {
           origem,
         })
       : null;
+
+  // A SAÚDE do número (item 5.5) já veio na validação: a nota e o limite entram
+  // agora, sem outra chamada à Graph. Best-effort e sem lançar — a conexão não
+  // depende disso, e a tela relê pela Graph quando a leitura envelhece.
+  if (idDaSessao !== null) {
+    await gravarSaudeDoNumero(
+      admin,
+      { organizationId: orgId, channelSessionId: idDaSessao },
+      {
+        qualidade: normalizarQualidade(validacao.qualityRating),
+        limite: normalizarLimite(validacao.messagingLimitTier ?? null),
+      },
+    );
+  }
 
   // O webhook DESTE número, registrado pela própria instalação. DEPOIS de gravar:
   // o GET de verificação da Meta chega no instante do registro e procura a sessão

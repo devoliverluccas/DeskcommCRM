@@ -51,6 +51,9 @@ const FONTE: Record<ProviderDeMensagem, FonteDeTemplates | null> = {
   // não existe definição aprovada a listar, e um seletor ali ofereceria solução
   // para um problema que este canal não tem.
   telegram: null,
+  // Chat do site: texto livre enquanto o visitante está na página; não há
+  // plataforma que aprove definição.
+  webchat: null,
 };
 
 /** `null` quando este canal não trabalha com definições aprovadas. */

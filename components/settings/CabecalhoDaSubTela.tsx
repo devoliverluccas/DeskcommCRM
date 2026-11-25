@@ -25,6 +25,14 @@ import type { Idioma } from "@/lib/i18n/idiomas";
  *
  * O rótulo sai do dicionário: texto solto no JSX continuaria em português para
  * quem escolheu espanhol.
+ *
+ * ─── Dentro do layout de Configurações o link fica escondido ───────────────
+ *
+ * `app/app/settings/layout.tsx` põe o menu de seções ao lado de toda subtela, e
+ * o menu já é o caminho de volta. A casca esconde o link pelo `data-testid`
+ * abaixo (`PainelDasConfiguracoes`), em vez de cada página deixar de usá-lo: o
+ * link continua sendo a rede da tela que rodar fora da casca. Trocar o
+ * `data-testid` aqui faz o link reaparecer em dobro com o menu.
  */
 export function CabecalhoDaSubTela({
   titulo,

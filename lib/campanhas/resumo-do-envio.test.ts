@@ -55,6 +55,15 @@ describe("limiteDoNumeroHoje — a conta de decidePacing", () => {
     const aquecido = { number_activated_at: "2026-01-01T00:00:00Z" } as never;
     expect(limiteDoNumeroHoje(aquecido, null, AGORA, null)).toMatchObject({ limite: null, origem: null });
   });
+  // Item 5.5: o limite REAL de conversas que a Meta deu ao número oficial.
+  it("o limite da Meta menor que o resto decide, e diz que é dela", () => {
+    const aquecido = { number_activated_at: "2026-01-01T00:00:00Z" } as never;
+    expect(limiteDoNumeroHoje(aquecido, 5000, AGORA, null, 1000)).toMatchObject({ limite: 1000, origem: "limite_da_meta" });
+  });
+  it("limite da Meta folgado não muda a conta de sempre", () => {
+    expect(limiteDoNumeroHoje(null, 10, AGORA, null, 1000)).toMatchObject({ limite: 10, origem: "teto_do_numero" });
+    expect(limiteDoNumeroHoje(null, null, AGORA, null, 1000)).toMatchObject({ limite: 20, origem: "aquecimento" });
+  });
 });
 
 describe("estimarDuracao", () => {
@@ -158,6 +167,28 @@ describe("resumirEnvio", () => {
     expect(r.numero).toMatchObject({ limiteDoDia: 20, origemDoLimite: "aquecimento", janela: { inicio: 7, fim: 22 } });
     expect(r.velocidade).toBe("gradual");
     expect(r.duracao).toEqual({ porDia: 20, minutos: 10, dias: 1 });
+  });
+
+  it("número oficial com degrau lido: o resumo usa o limite real da Meta", async () => {
+    const { admin } = adminFalso({
+      channel_sessions: { daily_message_limit: null, meta_messaging_limit_tier: "TIER_1K" },
+      channel_knobs: { number_activated_at: "2026-01-01T00:00:00Z" },
+    });
+    const r = await resumirEnvio(admin as never, { organizationId: ORG, pedido, agora: AGORA });
+    expect(r.numero).toMatchObject({
+      limiteDoDia: 1000,
+      origemDoLimite: "limite_da_meta",
+      limiteDaMeta: { tier: "TIER_1K", conversas: 1000 },
+    });
+  });
+
+  it("degrau sem limite: nada aperta pela Meta, e a leitura aparece", async () => {
+    const { admin } = adminFalso({
+      channel_sessions: { daily_message_limit: null, meta_messaging_limit_tier: "TIER_UNLIMITED" },
+      channel_knobs: { number_activated_at: "2026-01-01T00:00:00Z" },
+    });
+    const r = await resumirEnvio(admin as never, { organizationId: ORG, pedido, agora: AGORA });
+    expect(r.numero).toMatchObject({ limiteDoDia: null, limiteDaMeta: { tier: "TIER_UNLIMITED", conversas: null } });
   });
 
   it("número de outra organização: erro, nada de resumo pela metade", async () => {

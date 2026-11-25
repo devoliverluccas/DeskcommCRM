@@ -5553,6 +5553,10 @@ export type Database = {
           meta_webhook_override_em: string | null;
           meta_webhook_override_erro: string | null;
           meta_webhook_override_uri: string | null;
+          meta_account_event: string | null;
+          meta_messaging_limit_tier: string | null;
+          meta_quality_rating: string | null;
+          meta_saude_atualizada_em: string | null;
           metadata: NonNullable<Json>;
           organization_id: string;
           phone_number: string | null;
@@ -5599,6 +5603,10 @@ export type Database = {
           meta_webhook_override_em?: string | null;
           meta_webhook_override_erro?: string | null;
           meta_webhook_override_uri?: string | null;
+          meta_account_event?: string | null;
+          meta_messaging_limit_tier?: string | null;
+          meta_quality_rating?: string | null;
+          meta_saude_atualizada_em?: string | null;
           metadata?: NonNullable<Json>;
           organization_id: string;
           phone_number?: string | null;
@@ -5644,6 +5652,10 @@ export type Database = {
           meta_webhook_override_em?: string | null;
           meta_webhook_override_erro?: string | null;
           meta_webhook_override_uri?: string | null;
+          meta_account_event?: string | null;
+          meta_messaging_limit_tier?: string | null;
+          meta_quality_rating?: string | null;
+          meta_saude_atualizada_em?: string | null;
           metadata?: NonNullable<Json>;
           organization_id?: string;
           phone_number?: string | null;
@@ -12994,6 +13006,45 @@ export type Database = {
           },
         ];
       };
+      perfis_de_tela: {
+        Row: {
+          created_at: string;
+          created_by: string | null;
+          destinos: string[];
+          id: string;
+          nome: string;
+          organization_id: string;
+          updated_at: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          created_at?: string;
+          created_by?: string | null;
+          destinos?: string[];
+          id?: string;
+          nome: string;
+          organization_id: string;
+          updated_at?: string;
+        };
+        Update: {
+          created_at?: string;
+          created_by?: string | null;
+          destinos?: string[];
+          id?: string;
+          nome?: string;
+          organization_id?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "perfis_de_tela_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       platform_admins: {
         Row: {
           granted_at: string;
@@ -14679,6 +14730,8 @@ export type Database = {
           invited_at: string | null;
           invited_by: string | null;
           organization_id: string;
+          /** Perfil de tela (item 5.6, migration 9497). Null = tudo que o papel permite. */
+          perfil_de_tela_id: string | null;
           provisional_until_handover: boolean;
           revoked_at: string | null;
           role: string;
@@ -14699,6 +14752,7 @@ export type Database = {
           invited_at?: string | null;
           invited_by?: string | null;
           organization_id: string;
+          perfil_de_tela_id?: string | null;
           provisional_until_handover?: boolean;
           revoked_at?: string | null;
           role: string;
@@ -14716,6 +14770,7 @@ export type Database = {
           invited_at?: string | null;
           invited_by?: string | null;
           organization_id?: string;
+          perfil_de_tela_id?: string | null;
           provisional_until_handover?: boolean;
           revoked_at?: string | null;
           role?: string;
@@ -14725,6 +14780,13 @@ export type Database = {
           whatsapp_e164?: string | null;
         };
         Relationships: [
+          {
+            foreignKeyName: "user_organizations_perfil_de_tela_fk";
+            columns: ["organization_id", "perfil_de_tela_id"];
+            isOneToOne: false;
+            referencedRelation: "perfis_de_tela";
+            referencedColumns: ["organization_id", "id"];
+          },
           {
             foreignKeyName: "user_organizations_organization_id_fkey";
             columns: ["organization_id"];

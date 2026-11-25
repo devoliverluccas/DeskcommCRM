@@ -9,6 +9,7 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { lerChaveAnalitica } from "./analitica";
 import { listarRegrasGoogle, type RegraDeConversaoGoogle } from "./regras-google";
 
 export const PERIODOS = ["hoje", "24h", "7d", "30d", "tudo"] as const;
@@ -198,6 +199,10 @@ export function rotuloDoEvento(
 ): string {
   if (evento === "Purchase") return "Compra";
   if (evento === "LeadSubmitted") return "Nascimento por anúncio";
+  // As plataformas de análise (`ga4:Purchase`…): a plataforma já aparece ao
+  // lado, o rótulo diz só o acontecimento.
+  const analitica = lerChaveAnalitica(evento);
+  if (analitica) return analitica.evento === "Purchase" ? "Compra" : "Lead novo";
   const regra = regras.find((r) => r.eventName === evento);
   if (regra) return regra.label;
   return evento === "QualifiedLead" ? "Lead qualificado" : "Etapa do funil";

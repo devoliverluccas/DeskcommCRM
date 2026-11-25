@@ -33,7 +33,14 @@ function ordenarParaRevisao(lista: PropostaResumo[]): PropostaResumo[] {
   return [...lista.filter(aguardaRevisao), ...lista.filter((p) => !aguardaRevisao(p))];
 }
 
-export function ProposalsClient({ podeCriar }: { podeCriar: boolean }) {
+export function ProposalsClient({
+  podeCriar,
+  lojas = [],
+}: {
+  podeCriar: boolean;
+  /** As lojas do filtro (item 5.4). Vazia sem o módulo `lojas`: o filtro não aparece. */
+  lojas?: Array<{ id: string; nome: string }>;
+}) {
   const t = useT();
   const statusLabels: Record<ProposalStatus, string> = {
     rascunho: t("Rascunho"),
@@ -49,6 +56,31 @@ export function ProposalsClient({ podeCriar }: { podeCriar: boolean }) {
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState(false);
   const [tentativa, setTentativa] = useState(0);
+  const [lojaFiltro, setLojaFiltro] = useState("");
+  const [lojaDaProposta, setLojaDaProposta] = useState<Map<string, string> | null>(null);
+  const comLojas = lojas.length > 0;
+
+  useEffect(() => {
+    if (!comLojas) return;
+    const controller = new AbortController();
+    apiClient
+      .get<ApiSuccess<Array<{ proposal_id: string; loja_id: string }>>>("/api/v1/lojas/propostas", {
+        signal: controller.signal,
+      })
+      .then((res) => {
+        if (!controller.signal.aborted) setLojaDaProposta(new Map(res.data.map((v) => [v.proposal_id, v.loja_id])));
+      })
+      .catch(() => {
+        // Sem o mapa o filtro some; a lista continua inteira.
+        if (!controller.signal.aborted) setLojaDaProposta(null);
+      });
+    return () => controller.abort();
+  }, [comLojas, tentativa]);
+
+  const visiveis =
+    lojaFiltro === "" || lojaDaProposta === null
+      ? propostas
+      : propostas.filter((p) => lojaDaProposta.get(p.id) === lojaFiltro);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -76,11 +108,31 @@ export function ProposalsClient({ podeCriar }: { podeCriar: boolean }) {
     <div className="mx-auto w-full max-w-5xl space-y-4 md:p-2">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-semibold">{t("Propostas")}</h1>
-        {podeCriar ? (
-          <Button asChild>
-            <Link href="/app/proposals/novo">{t("Nova proposta")}</Link>
-          </Button>
-        ) : null}
+        <div className="flex flex-wrap items-center gap-2">
+          {comLojas && lojaDaProposta !== null ? (
+            <label className="flex items-center gap-2 text-sm">
+              <span className="text-text-muted">{t("Loja")}</span>
+              <select
+                value={lojaFiltro}
+                onChange={(e) => setLojaFiltro(e.target.value)}
+                className="h-11 rounded-md border border-border bg-surface px-2.5 text-sm lg:h-9"
+                data-testid="propostas-filtro-loja"
+              >
+                <option value="">{t("Todas as lojas")}</option>
+                {lojas.map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.nome}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+          {podeCriar ? (
+            <Button asChild>
+              <Link href="/app/proposals/novo">{t("Nova proposta")}</Link>
+            </Button>
+          ) : null}
+        </div>
       </header>
 
       {carregando ? (
@@ -101,6 +153,10 @@ export function ProposalsClient({ podeCriar }: { podeCriar: boolean }) {
             {t("Tentar novamente")}
           </Button>
         </div>
+      ) : visiveis.length === 0 && propostas.length > 0 ? (
+        <p className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+          {t("Nenhuma proposta desta loja.")}
+        </p>
       ) : propostas.length === 0 ? (
         <p className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
           {t("Nenhuma proposta cadastrada ainda.")}
@@ -117,7 +173,7 @@ export function ProposalsClient({ podeCriar }: { podeCriar: boolean }) {
               </tr>
             </thead>
             <tbody className="divide-y max-md:block">
-              {propostas.map((p) => (
+              {visiveis.map((p) => (
                 <tr
                   key={p.id}
                   className="max-md:flex max-md:flex-wrap max-md:items-center max-md:gap-x-3 max-md:px-3 max-md:py-2"

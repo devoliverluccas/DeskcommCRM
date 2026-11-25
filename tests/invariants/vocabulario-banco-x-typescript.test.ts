@@ -578,6 +578,25 @@ const PARES: Array<{
     arquivo: "lib/external-db/types.ts",
     simbolo: "TipoBanco",
   },
+  {
+    tabela: "regras_de_pontuacao",
+    coluna: "evento",
+    // lib/leads/pontuacao-por-regra.ts → EVENTOS_DE_PONTUACAO (tupla `as const`).
+    // Migrations 9492 e 9499 (`link_clicado`). Um evento só no TypeScript vira
+    // `23514` no POST da regra; só no CHECK, regra que a tela não sabe rotular e
+    // que nenhum consumidor escuta.
+    arquivo: "lib/leads/pontuacao-por-regra.ts",
+    simbolo: "EVENTOS_DE_PONTUACAO",
+  },
+  {
+    tabela: "channel_sessions",
+    coluna: "meta_quality_rating",
+    // lib/channels/meta/saude-do-numero.ts → QUALIDADES_DO_NUMERO (migration
+    // 9496). `normalizarQualidade` converte tudo para esta lista antes de
+    // gravar; uma nota só no TypeScript seria `23514` dentro do webhook.
+    arquivo: "lib/channels/meta/saude-do-numero.ts",
+    simbolo: "QUALIDADES_DO_NUMERO",
+  },
 ];
 
 /** Tira um nível de parênteses externos, se ele envolver a expressão inteira. */

@@ -9590,15 +9590,21 @@ alter table public.channel_sessions
   add column if not exists telegram_bot_id text,
   add column if not exists telegram_token_encrypted bytea;
 
+-- webchat (migration 9494, chat do site) — as colunas do provider novo
+-- nascem ANTES das constraints abaixo, que as referenciam.
+alter table public.channel_sessions
+  add column if not exists webchat_public_key text,
+  add column if not exists webchat_config jsonb;
+
 alter table public.channel_sessions
   drop constraint if exists channel_sessions_provider_check;
 
 alter table public.channel_sessions
   add constraint channel_sessions_provider_check
-  -- 'wacalls' (0233), 'zernio_social' (0368), 'datafy' (0387) e 'telegram'
-  -- (9342) somados AQUI — UM bloco só por constraint (não duplicar drop+add
+  -- 'wacalls' (0233), 'zernio_social' (0368), 'datafy' (0387), 'telegram'
+  -- (9342) e 'webchat' (9494) somados AQUI — UM bloco só por constraint (não duplicar drop+add
   -- por migration).
-  check (provider = any (array['waha'::text, 'meta_cloud'::text, 'zernio'::text, 'wacalls'::text, 'zernio_social'::text, 'datafy'::text, 'telegram'::text]));
+  check (provider = any (array['waha'::text, 'meta_cloud'::text, 'zernio'::text, 'wacalls'::text, 'zernio_social'::text, 'datafy'::text, 'telegram'::text, 'webchat'::text]));
 
 alter table public.channel_sessions
   drop constraint if exists channel_sessions_provider_ref_check;
@@ -9613,7 +9619,9 @@ alter table public.channel_sessions
     (provider = 'wacalls'    and wacalls_session_id    is not null) or
     (provider = 'datafy'     and datafy_phone_number_id is not null) or
     -- Bot do Telegram (migration 9342): endereça pelo id do robô.
-    (provider = 'telegram'   and telegram_bot_id      is not null)
+    (provider = 'telegram'   and telegram_bot_id      is not null) or
+    -- Chat do site (migration 9494): endereça pela chave pública.
+    (provider = 'webchat'    and webchat_public_key   is not null)
   );
 
 comment on column public.channel_sessions.zernio_account_id is
@@ -35712,7 +35720,7 @@ comment on column public.contacts.social_identity is
 -- primeira conexão de rede social.
 alter table public.conversations drop constraint if exists conversations_channel_check;
 alter table public.conversations add constraint conversations_channel_check
-  check (channel in ('whatsapp', 'instagram', 'facebook', 'telegram'));
+  check (channel in ('whatsapp', 'instagram', 'facebook', 'telegram', 'webchat'));
 
 
 -- APÊNDICE 20260921030100_0369_prospeccao_nativa.sql
@@ -86313,7 +86321,9 @@ alter table public.regras_de_pontuacao drop constraint if exists regras_de_pontu
 alter table public.regras_de_pontuacao add constraint regras_de_pontuacao_evento_check
   check (evento in (
     'mensagem_recebida', 'respondeu_followup', 'agendamento_marcado',
-    'orcamento_enviado', 'orcamento_aceito', 'etapa_alcancada', 'tag_aplicada'
+    'orcamento_enviado', 'orcamento_aceito', 'etapa_alcancada', 'tag_aplicada',
+    -- 'link_clicado' (9499): o clique num link rastreado pontua.
+    'link_clicado'
   ));
 alter table public.regras_de_pontuacao drop constraint if exists regras_de_pontuacao_condicao_objeto;
 alter table public.regras_de_pontuacao add constraint regras_de_pontuacao_condicao_objeto
@@ -86509,6 +86519,631 @@ create trigger trg_crm_lead_activities_fato_de_proposta
   when (new.type in ('proposal_sent', 'proposal_accepted'))
   execute function public.fn_crm_lead_activities_fato_de_proposta();
 
+
+-- ---- chat do site: chave pública, configuração e índice (migration 9494) ----
+-- Espelho de supabase/migrations/20261125100100_9494_canal_chat_do_site.sql.
+-- O vocabulário (`provider`, `provider_ref_check`, `conversations.channel`) e as
+-- colunas entram nos blocos ÚNICOS lá em cima; este bloco só acrescenta a forma,
+-- o índice e os comentários. O visitante NÃO tem tabela: é contato sem telefone
+-- (`contacts.social_identity = webchat:<sessão>:<sha256 do token>`).
+alter table public.channel_sessions
+  add column if not exists webchat_public_key text,
+  add column if not exists webchat_config jsonb;
+
+do $webchat_forma$
+begin
+  alter table public.channel_sessions drop constraint if exists channel_sessions_webchat_forma_check;
+  alter table public.channel_sessions add constraint channel_sessions_webchat_forma_check check (
+    (webchat_public_key is null or webchat_public_key ~ '^[A-Za-z0-9_-]{32,64}$')
+    and (webchat_config is null or jsonb_typeof(webchat_config) = 'object')
+  );
+end
+$webchat_forma$;
+
+create unique index if not exists channel_sessions_webchat_public_key_unique
+  on public.channel_sessions (webchat_public_key)
+  where webchat_public_key is not null;
+
+do $canal_chat_do_site$
+begin
+  if to_regclass('public.channel_sessions') is not null then
+    comment on column public.channel_sessions.webchat_public_key is
+      'Chave PÚBLICA do chat do site (vai no data-chave do snippet). Só identifica a conexão; a proteção é Origin conferido + limite por IP/visitante. Lida por lib/channels/webchat/sessao.ts.';
+    comment on column public.channel_sessions.webchat_config is
+      'Configuração do chat do site (nome, saudação, cor, posição, domínios permitidos, ligado). Schema central em lib/channels/webchat/config.ts; ninguém lê path solto.';
+  end if;
+end
+$canal_chat_do_site$;
+
+notify pgrst, 'reload schema';
+
+-- ---- lojas e filiais como módulo oficial de tabela (migration 9495) ----
+--
+-- Espelho idempotente da migration 9495: cria só FUNÇÕES (ADR-0002, D2/D7). As
+-- tabelas `lojas`, `estoque_por_loja`, `loja_do_numero` e `proposta_da_loja`
+-- nascem em `fn_modulo_instalar('lojas', …)`, e quem já instalou recebe as versões
+-- novas por `fn_reaplicar_modulos_instalados()` (D6). Depende de `organizations`,
+-- `catalog_products` (+ índice `catalog_products_org_id_key`), `channel_sessions`
+-- (+ `channel_sessions_org_id_unique`), `crm_proposals`, `conversations`,
+-- `messages`, `demandas`, `motivos_de_encerramento`, `attendant_sectors`,
+-- `fn_user_org_ids()` e `fn_proteger_modulo_provisionado()` — só referenciados
+-- ao EXECUTAR (PL/pgSQL), nunca ao criar.
+-- ⚠️ ENTRA ANTES DO BLOCO DA VARREDURA anon e ANTES da chamada final a
+-- `fn_reaplicar_modulos_instalados()`: cria função, e as revogações já são explícitas.
+-- O porquê de cada peça está no cabeçalho da migration.
+-- ─── 1 · a proposta é da mesma organização ─────────────────────────────────
+-- `crm_proposals` não tem chave (organization_id, id), e a provisionadora não
+-- pode acrescentá-la ao núcleo (D4). A conferência é gatilho na tabela do módulo.
+create or replace function public.fn_lojas_conferir_proposta()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $f$
+begin
+  if tg_op = 'UPDATE' and row(new.organization_id, new.proposal_id)
+       is distinct from row(old.organization_id, old.proposal_id) then
+    raise exception 'lojas_vinculo_imutavel' using errcode = '23514';
+  end if;
+  if not exists (select 1 from public.crm_proposals
+                  where organization_id = new.organization_id and id = new.proposal_id) then
+    raise exception 'lojas_vinculo_invalido' using errcode = '23503';
+  end if;
+  return new;
+end $f$;
+revoke execute on function public.fn_lojas_conferir_proposta() from public, anon, authenticated, service_role;
+
+-- ─── 2 · a provisionadora (ADR-0002, D2) ───────────────────────────────────
+-- Sem parâmetro, idempotente, só `service_role`.
+create or replace function public.fn_lojas_provisionar()
+returns void
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $f$
+begin
+  create table if not exists public.lojas (
+    id uuid not null default gen_random_uuid(),
+    organization_id uuid not null references public.organizations(id) on delete cascade,
+    nome text not null,
+    codigo text,
+    endereco text,
+    telefone text,
+    ativa boolean not null default true,
+    -- A loja que vale quando nada mais diz qual é. No máximo uma por
+    -- organização (índice parcial abaixo); trocar é `fn_lojas_definir_padrao`.
+    padrao boolean not null default false,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now(),
+    constraint lojas_pkey primary key (id),
+    -- Alvo das chaves compostas: estoque, número e proposta nunca apontam para
+    -- loja de outra organização.
+    constraint lojas_org_id_key unique (organization_id, id),
+    constraint lojas_nome_check check (length(btrim(nome)) between 1 and 120),
+    constraint lojas_codigo_check check (codigo is null or length(btrim(codigo)) between 1 and 40),
+    constraint lojas_endereco_check check (endereco is null or length(endereco) <= 300),
+    constraint lojas_telefone_check check (telefone is null or length(telefone) <= 40),
+    -- Loja padrão desativada mandaria orçamento para um lugar que não atende.
+    constraint lojas_padrao_ativa_check check (not padrao or ativa)
+  );
+  create unique index if not exists lojas_uma_padrao_por_org
+    on public.lojas (organization_id) where padrao;
+  create unique index if not exists lojas_codigo_por_org
+    on public.lojas (organization_id, lower(codigo)) where codigo is not null;
+  create unique index if not exists lojas_nome_por_org
+    on public.lojas (organization_id, lower(nome));
+
+  create table if not exists public.estoque_por_loja (
+    organization_id uuid not null references public.organizations(id) on delete cascade,
+    loja_id uuid not null,
+    product_id uuid not null,
+    quantidade integer not null default 0,
+    updated_at timestamptz not null default now(),
+    constraint estoque_por_loja_pkey primary key (loja_id, product_id),
+    constraint estoque_por_loja_loja_fkey foreign key (organization_id, loja_id)
+      references public.lojas (organization_id, id) on delete cascade,
+    -- `catalog_products_org_id_key` (organization_id, id) já existe no núcleo.
+    constraint estoque_por_loja_produto_fkey foreign key (organization_id, product_id)
+      references public.catalog_products (organization_id, id) on delete cascade,
+    constraint estoque_por_loja_quantidade_check check (quantidade >= 0)
+  );
+  create index if not exists estoque_por_loja_produto_idx
+    on public.estoque_por_loja (organization_id, product_id);
+
+  create table if not exists public.loja_do_numero (
+    organization_id uuid not null references public.organizations(id) on delete cascade,
+    channel_session_id uuid not null,
+    loja_id uuid not null,
+    updated_at timestamptz not null default now(),
+    constraint loja_do_numero_pkey primary key (channel_session_id),
+    -- `channel_sessions_org_id_unique` (organization_id, id) já existe no núcleo.
+    constraint loja_do_numero_numero_fkey foreign key (organization_id, channel_session_id)
+      references public.channel_sessions (organization_id, id) on delete cascade,
+    constraint loja_do_numero_loja_fkey foreign key (organization_id, loja_id)
+      references public.lojas (organization_id, id) on delete cascade
+  );
+  create index if not exists loja_do_numero_loja_idx
+    on public.loja_do_numero (organization_id, loja_id);
+
+  create table if not exists public.proposta_da_loja (
+    organization_id uuid not null references public.organizations(id) on delete cascade,
+    proposal_id uuid not null references public.crm_proposals(id) on delete cascade,
+    loja_id uuid not null,
+    updated_at timestamptz not null default now(),
+    constraint proposta_da_loja_pkey primary key (proposal_id),
+    -- RESTRICT: apagar a loja apagaria de onde saíram os orçamentos dela. A
+    -- tela oferece desativar; excluir só a loja que nunca orçou.
+    constraint proposta_da_loja_loja_fkey foreign key (organization_id, loja_id)
+      references public.lojas (organization_id, id) on delete restrict
+  );
+  create index if not exists proposta_da_loja_loja_idx
+    on public.proposta_da_loja (organization_id, loja_id);
+
+  drop trigger if exists trg_lojas_conferir_proposta on public.proposta_da_loja;
+  create trigger trg_lojas_conferir_proposta
+    before insert or update on public.proposta_da_loja
+    for each row execute function public.fn_lojas_conferir_proposta();
+
+  -- RLS por organização; leitura da sessão, escrita só do servidor.
+  alter table public.lojas enable row level security;
+  execute format('drop policy if exists %I on public.%I', 'tenant_isolation_' || 'lojas' || '_all', 'lojas');
+  execute format('create policy %I on public.%I for all using (organization_id in (select * from public.fn_user_org_ids())) with check (organization_id in (select * from public.fn_user_org_ids()))', 'tenant_isolation_' || 'lojas' || '_all', 'lojas');
+  revoke all on table public.lojas from anon, authenticated, service_role;
+  grant select on table public.lojas to authenticated;
+  grant select, insert, update, delete on table public.lojas to service_role;
+
+  alter table public.estoque_por_loja enable row level security;
+  execute format('drop policy if exists %I on public.%I', 'tenant_isolation_' || 'estoque_por_loja' || '_all', 'estoque_por_loja');
+  execute format('create policy %I on public.%I for all using (organization_id in (select * from public.fn_user_org_ids())) with check (organization_id in (select * from public.fn_user_org_ids()))', 'tenant_isolation_' || 'estoque_por_loja' || '_all', 'estoque_por_loja');
+  revoke all on table public.estoque_por_loja from anon, authenticated, service_role;
+  grant select on table public.estoque_por_loja to authenticated;
+  grant select, insert, update, delete on table public.estoque_por_loja to service_role;
+
+  alter table public.loja_do_numero enable row level security;
+  execute format('drop policy if exists %I on public.%I', 'tenant_isolation_' || 'loja_do_numero' || '_all', 'loja_do_numero');
+  execute format('create policy %I on public.%I for all using (organization_id in (select * from public.fn_user_org_ids())) with check (organization_id in (select * from public.fn_user_org_ids()))', 'tenant_isolation_' || 'loja_do_numero' || '_all', 'loja_do_numero');
+  revoke all on table public.loja_do_numero from anon, authenticated, service_role;
+  grant select on table public.loja_do_numero to authenticated;
+  grant select, insert, update, delete on table public.loja_do_numero to service_role;
+
+  alter table public.proposta_da_loja enable row level security;
+  execute format('drop policy if exists %I on public.%I', 'tenant_isolation_' || 'proposta_da_loja' || '_all', 'proposta_da_loja');
+  execute format('create policy %I on public.%I for all using (organization_id in (select * from public.fn_user_org_ids())) with check (organization_id in (select * from public.fn_user_org_ids()))', 'tenant_isolation_' || 'proposta_da_loja' || '_all', 'proposta_da_loja');
+  revoke all on table public.proposta_da_loja from anon, authenticated, service_role;
+  grant select on table public.proposta_da_loja to authenticated;
+  grant select, insert, update, delete on table public.proposta_da_loja to service_role;
+
+  comment on table public.lojas is
+    'Lojas e filiais (módulo opcional, ADR-0002): os pontos de venda da organização, com no máximo uma padrão.';
+  comment on table public.estoque_por_loja is
+    'Lojas e filiais: quantidade de cada produto do catálogo em cada loja. O total do catálogo segue em catalog_products.quantidade.';
+  comment on table public.loja_do_numero is
+    'Lojas e filiais: qual loja atende cada número conectado (channel_sessions). Sem linha, vale a loja padrão.';
+  comment on table public.proposta_da_loja is
+    'Lojas e filiais: de qual loja saiu cada orçamento (crm_proposals), 1:1.';
+
+  perform public.fn_proteger_modulo_provisionado();
+end
+$f$;
+revoke execute on function public.fn_lojas_provisionar() from public, anon, authenticated;
+grant execute on function public.fn_lojas_provisionar() to service_role;
+
+-- ─── 3 · a loja padrão troca numa transação só ─────────────────────────────
+-- O índice parcial aceita uma padrão por organização; trocar em dois UPDATEs
+-- soltos deixaria a organização sem padrão se o segundo falhasse. Aqui a
+-- antiga sai e a nova entra juntas, e só loja ATIVA da organização vira padrão.
+-- `p_loja` nulo tira a padrão. A organização vem do servidor (cookie validado).
+create or replace function public.fn_lojas_definir_padrao(p_org uuid, p_loja uuid)
+returns boolean
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $f$
+begin
+  if to_regclass('public.lojas') is null then
+    raise exception 'lojas_nao_instalado' using errcode = 'P0002';
+  end if;
+  if p_loja is not null and not exists (
+    select 1 from public.lojas where organization_id = p_org and id = p_loja and ativa
+  ) then
+    return false;
+  end if;
+  update public.lojas set padrao = false, updated_at = now()
+   where organization_id = p_org and padrao and (p_loja is null or id <> p_loja);
+  if p_loja is not null then
+    update public.lojas set padrao = true, updated_at = now()
+     where organization_id = p_org and id = p_loja and not padrao;
+  end if;
+  return true;
+end $f$;
+revoke execute on function public.fn_lojas_definir_padrao(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.fn_lojas_definir_padrao(uuid, uuid) to service_role;
+
+-- ─── 4 · a chave da empresa ────────────────────────────────────────────────
+-- Escrita atômica de `settings.lojas.enabled`, sem sobrescrever o resto do
+-- `settings` — o mesmo desenho de `fn_cadencias_configurar`.
+create or replace function public.fn_lojas_configurar(p_organization_id uuid, p_enabled boolean)
+returns boolean
+language plpgsql
+set search_path = public, pg_temp
+as $f$
+begin
+  if p_enabled is null then raise exception 'lojas_configuracao_invalida'; end if;
+  update public.organizations set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{lojas}',
+    (case when jsonb_typeof(settings->'lojas') = 'object' then settings->'lojas' else '{}'::jsonb end)
+      || jsonb_build_object('enabled', p_enabled), true)
+   where id = p_organization_id;
+  return found;
+end $f$;
+revoke execute on function public.fn_lojas_configurar(uuid, boolean) from public, anon, authenticated;
+grant execute on function public.fn_lojas_configurar(uuid, boolean) to service_role;
+
+-- ─── 5 · o relatório de atendimentos de UMA loja ───────────────────────────
+-- A mesma conta de `fn_relatorio_atendimentos` (migration 9484), recortada às
+-- conversas dos números da loja (`loja_do_numero`). SECURITY INVOKER, chamada
+-- com o client da SESSÃO: a RLS de conversas, mensagens, demandas e do módulo
+-- decide o escopo, como no relatório do núcleo, e `p_org` filtra junto.
+--
+-- Desfechos e motivos: `demandas` não aponta para a conversa, então a demanda
+-- conta para a loja quando o CONTATO dela conversou num número da loja.
+--
+-- ⚠️ É cópia do corpo do núcleo com o recorte. Quando `fn_relatorio_atendimentos`
+-- mudar a régua, esta muda junto (o teste `lib/lojas/relatorio.test.ts` confere
+-- que as chaves da resposta são as mesmas).
+create or replace function public.fn_lojas_relatorio_atendimentos(
+  p_org uuid,
+  p_de timestamptz,
+  p_ate timestamptz,
+  p_fuso text,
+  p_loja uuid
+) returns jsonb
+language plpgsql
+stable
+security invoker
+set search_path = public, pg_temp
+as $f$
+declare
+  v jsonb;
+begin
+  if to_regclass('public.loja_do_numero') is null then
+    raise exception 'lojas_nao_instalado' using errcode = 'P0002';
+  end if;
+  with
+  numeros as (
+    select n.channel_session_id
+      from public.loja_do_numero n
+     where n.organization_id = p_org and n.loja_id = p_loja
+  ),
+  abertas as (
+    select c.id, c.contact_id, c.sector_id, c.assigned_to_user_id,
+           coalesce(c.service_started_at, c.created_at) as inicio
+      from public.conversations c
+     where c.organization_id = p_org
+       and not c.is_group
+       and c.channel_session_id in (select channel_session_id from numeros)
+       and coalesce(c.service_started_at, c.created_at) >= p_de
+       and coalesce(c.service_started_at, c.created_at) < p_ate
+  ),
+  encerradas as (
+    select c.id, c.contact_id, c.sector_id, c.assigned_to_user_id,
+           coalesce(c.service_started_at, c.created_at) as inicio,
+           c.service_closed_at as fim
+      from public.conversations c
+     where c.organization_id = p_org
+       and not c.is_group
+       and c.channel_session_id in (select channel_session_id from numeros)
+       and c.service_closed_at >= p_de
+       and c.service_closed_at < p_ate
+  ),
+  primeira as (
+    select a.id, a.sector_id, a.assigned_to_user_id,
+           extract(epoch from (s.saida - e.entrada))::numeric as segundos
+      from abertas a
+      cross join lateral (
+        select min(m.sent_at) as entrada
+          from public.messages m
+         where m.organization_id = p_org
+           and m.conversation_id = a.id
+           and m.direction = 'inbound'
+           and m.sent_at >= a.inicio
+      ) e
+      cross join lateral (
+        select min(m.sent_at) as saida
+          from public.messages m
+         where m.organization_id = p_org
+           and m.conversation_id = a.id
+           and m.direction = 'outbound'
+           and m.sent_by_user_id is not null
+           and e.entrada is not null
+           and m.sent_at >= e.entrada
+      ) s
+     where e.entrada is not null and s.saida is not null
+  ),
+  resolucao as (
+    select e.id, e.sector_id, e.assigned_to_user_id,
+           extract(epoch from (e.fim - e.inicio))::numeric as segundos
+      from encerradas e
+     where e.fim >= e.inicio
+  ),
+  dias as (
+    select d::date as dia
+      from generate_series(
+        (p_de at time zone p_fuso)::date::timestamp,
+        ((p_ate - interval '1 microsecond') at time zone p_fuso)::date::timestamp,
+        interval '1 day'
+      ) as d
+  ),
+  serie as (
+    select dias.dia,
+           (select count(*) from abertas a where (a.inicio at time zone p_fuso)::date = dias.dia) as abertos,
+           (select count(*) from encerradas e where (e.fim at time zone p_fuso)::date = dias.dia) as encerrados
+      from dias
+  ),
+  setores as (
+    select k.sector_id,
+           (select s.name from public.attendant_sectors s
+             where s.organization_id = p_org and s.id = k.sector_id) as nome,
+           (select count(*) from abertas a where a.sector_id is not distinct from k.sector_id) as abertos,
+           (select count(*) from encerradas e where e.sector_id is not distinct from k.sector_id) as encerrados,
+           (select round(avg(p.segundos)) from primeira p where p.sector_id is not distinct from k.sector_id) as primeira_resposta_media,
+           (select round(avg(r.segundos)) from resolucao r where r.sector_id is not distinct from k.sector_id) as resolucao_media
+      from (select sector_id from abertas union select sector_id from encerradas) k
+  ),
+  atendentes as (
+    select k.user_id,
+           (select count(*) from abertas a where a.assigned_to_user_id is not distinct from k.user_id) as abertos,
+           (select count(*) from encerradas e where e.assigned_to_user_id is not distinct from k.user_id) as encerrados,
+           (select round(avg(p.segundos)) from primeira p where p.assigned_to_user_id is not distinct from k.user_id) as primeira_resposta_media,
+           (select round(avg(r.segundos)) from resolucao r where r.assigned_to_user_id is not distinct from k.user_id) as resolucao_media
+      from (select assigned_to_user_id as user_id from abertas
+            union select assigned_to_user_id from encerradas) k
+  ),
+  demandas_da_loja as (
+    select d.id, d.desfecho, d.motivo_de_encerramento_id
+      from public.demandas d
+     where d.organization_id = p_org
+       and d.fechada_em >= p_de
+       and d.fechada_em < p_ate
+       and exists (
+         select 1 from public.conversations c
+          where c.organization_id = p_org
+            and c.contact_id = d.contact_id
+            and c.channel_session_id in (select channel_session_id from numeros)
+       )
+  ),
+  desfechos as (
+    select dl.desfecho, count(*) as quantidade
+      from demandas_da_loja dl
+     where dl.desfecho is not null
+     group by dl.desfecho
+  ),
+  motivos as (
+    select m.nome as motivo, count(*) as quantidade
+      from demandas_da_loja dl
+      join public.motivos_de_encerramento m
+        on m.organization_id = p_org and m.id = dl.motivo_de_encerramento_id
+     group by m.nome
+  )
+  select jsonb_build_object(
+    'abertos', (select count(*) from abertas),
+    'encerrados', (select count(*) from encerradas),
+    'primeira_resposta', jsonb_build_object(
+      'media', (select round(avg(segundos)) from primeira),
+      'mediana', (select round(percentile_cont(0.5) within group (order by segundos)::numeric) from primeira),
+      'amostra', (select count(*) from primeira)
+    ),
+    'resolucao', jsonb_build_object(
+      'media', (select round(avg(segundos)) from resolucao),
+      'mediana', (select round(percentile_cont(0.5) within group (order by segundos)::numeric) from resolucao),
+      'amostra', (select count(*) from resolucao)
+    ),
+    'por_dia', coalesce((select jsonb_agg(jsonb_build_object(
+        'dia', to_char(dia, 'YYYY-MM-DD'), 'abertos', abertos, 'encerrados', encerrados) order by dia)
+      from serie), '[]'::jsonb),
+    'por_setor', coalesce((select jsonb_agg(jsonb_build_object(
+        'sector_id', sector_id, 'nome', nome, 'abertos', abertos, 'encerrados', encerrados,
+        'primeira_resposta_media', primeira_resposta_media, 'resolucao_media', resolucao_media)
+        order by abertos desc, encerrados desc)
+      from setores), '[]'::jsonb),
+    'por_atendente', coalesce((select jsonb_agg(jsonb_build_object(
+        'user_id', user_id, 'abertos', abertos, 'encerrados', encerrados,
+        'primeira_resposta_media', primeira_resposta_media, 'resolucao_media', resolucao_media)
+        order by encerrados desc, abertos desc)
+      from atendentes), '[]'::jsonb),
+    'desfechos', coalesce((select jsonb_object_agg(desfecho, quantidade) from desfechos), '{}'::jsonb),
+    'motivos', coalesce((select jsonb_agg(jsonb_build_object('motivo', motivo, 'quantidade', quantidade)
+        order by quantidade desc, motivo) from motivos), '[]'::jsonb)
+  ) into v;
+  return v;
+end $f$;
+revoke execute on function public.fn_lojas_relatorio_atendimentos(uuid, timestamptz, timestamptz, text, uuid) from public, anon;
+grant execute on function public.fn_lojas_relatorio_atendimentos(uuid, timestamptz, timestamptz, text, uuid) to authenticated, service_role;
+
+notify pgrst, 'reload schema';
+
+-- ---- saúde do número oficial (migration 9496) ----
+-- Não cria função. Depende de channel_sessions. Cabeçalho completo (DIRC) na migration 9496.
+--
+-- ─── Por que colunas, e não `channel_sessions.metadata` (DIRC) ─────────────
+--
+-- D (duplicar): vive aqui mesmo — é estado do NÚMERO, um por conexão, e a Meta
+-- é a fonte; nós guardamos a última leitura, com a data. Não há outra tabela que
+-- já saiba isso. I/R: nada a integrar nem referenciar. C (calcular): só pela
+-- Graph, com credencial e rede — não dá para ler no resumo de campanha nem na
+-- lista de conexões a cada render.
+--
+-- E não `metadata`: dois escritores concorrentes (webhook e tela) no mesmo jsonb
+-- fariam read-modify-write e um apagaria o outro; e o resumo de campanha leria
+-- um caminho de jsonb sem schema (anti-pattern 6). Coluna tipada resolve os dois
+-- com o mesmo custo, no molde das `meta_webhook_override_*` vizinhas.
+--
+-- Aditiva e idempotente. Nada lê as colunas antes de o código novo subir, e o
+-- código novo tolera a coluna ausente (clone que ainda não aplicou).
+
+alter table public.channel_sessions add column if not exists meta_quality_rating text;
+alter table public.channel_sessions add column if not exists meta_messaging_limit_tier text;
+alter table public.channel_sessions add column if not exists meta_account_event text;
+alter table public.channel_sessions add column if not exists meta_saude_atualizada_em timestamptz;
+
+-- Auto-curativo antes da constraint: valor fora da lista vira UNKNOWN (o mesmo
+-- que o código faria), e o ADD não falha num clone que gravou algo à mão.
+update public.channel_sessions
+   set meta_quality_rating = 'UNKNOWN'
+ where meta_quality_rating is not null
+   and meta_quality_rating not in ('GREEN', 'YELLOW', 'RED', 'UNKNOWN');
+
+alter table public.channel_sessions drop constraint if exists channel_sessions_meta_quality_rating_check;
+alter table public.channel_sessions add constraint channel_sessions_meta_quality_rating_check
+  check (meta_quality_rating in ('GREEN', 'YELLOW', 'RED', 'UNKNOWN'));
+
+comment on column public.channel_sessions.meta_quality_rating is
+  'Qualidade do número oficial na Meta (GREEN/YELLOW/RED/UNKNOWN), última leitura (webhook phone_number_quality_update ou Graph API). Migration 9496.';
+comment on column public.channel_sessions.meta_messaging_limit_tier is
+  'Limite de conversas iniciadas pela empresa em 24h (messaging_limit_tier: TIER_1K, TIER_10K, TIER_100K, TIER_UNLIMITED...). Vocabulário aberto da Meta, sem CHECK. Migration 9496.';
+comment on column public.channel_sessions.meta_account_event is
+  'Último evento account_update da conta do WhatsApp Business (ex.: ACCOUNT_RESTRICTION). Vocabulário aberto, sem CHECK. Migration 9496.';
+comment on column public.channel_sessions.meta_saude_atualizada_em is
+  'Quando a saúde do número oficial foi lida pela última vez. Migration 9496.';
+
+notify pgrst, 'reload schema';
+
+-- ---- perfis de tela (migration 9497) ----
+-- Não cria função. Depende de organizations, user_organizations, fn_set_updated_at() e
+-- fn_user_org_ids(). Fica acima da VARREDURA anon do apêndice. Cabeçalho completo na migration 9497.
+--
+-- ─── Por que coluna em `user_organizations` e não tabela de vínculo (DIRC) ──
+--
+-- R (referenciar): cada membro tem NO MÁXIMO um perfil, e o perfil é lido junto
+-- com o vínculo (o snapshot de permissões já lê `user_organizations`). Uma
+-- tabela N:N pediria um segundo SELECT por navegação e uma regra para "dois
+-- perfis no mesmo membro" que ninguém pediu. A coluna é um ponteiro com FK — não
+-- duplica o perfil nem o papel.
+--
+-- ─── Por que `destinos text[]` e não tabela de itens ───────────────────────
+--
+-- A lista é sempre lida e escrita JUNTO com o perfil, nunca consultada por
+-- item, e o vocabulário (hrefs do catálogo) vive no TypeScript: é a rota que
+-- recusa href fora do catálogo (422), e a leitura descarta o que o catálogo não
+-- conhece mais (porta removida não quebra o menu). Não é FK para lugar nenhum:
+-- o catálogo não é tabela.
+
+create table if not exists public.perfis_de_tela (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  nome text not null,
+  destinos text[] not null default '{}',
+  created_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.perfis_de_tela drop constraint if exists perfis_de_tela_nome_tamanho;
+alter table public.perfis_de_tela add constraint perfis_de_tela_nome_tamanho
+  check (char_length(btrim(nome)) between 1 and 60);
+alter table public.perfis_de_tela drop constraint if exists perfis_de_tela_destinos_tamanho;
+alter table public.perfis_de_tela add constraint perfis_de_tela_destinos_tamanho
+  check (cardinality(destinos) between 1 and 200);
+
+-- O alvo da FK composta: (organização, id) é único porque `id` já é.
+create unique index if not exists perfis_de_tela_org_id_uniq
+  on public.perfis_de_tela (organization_id, id);
+create unique index if not exists perfis_de_tela_org_nome_uniq
+  on public.perfis_de_tela (organization_id, lower(btrim(nome)));
+
+comment on table public.perfis_de_tela is
+  'Perfis de tela: quais destinos de navegação um membro VÊ, sobre o que o papel já permite. Apresentação, nunca autorização. Escrita só pelo servidor, com papel admin (migration 9497).';
+
+drop trigger if exists trg_perfis_de_tela_updated_at on public.perfis_de_tela;
+create trigger trg_perfis_de_tela_updated_at
+  before update on public.perfis_de_tela
+  for each row execute function public.fn_set_updated_at();
+
+alter table public.perfis_de_tela enable row level security;
+drop policy if exists tenant_isolation_perfis_de_tela_all on public.perfis_de_tela;
+create policy tenant_isolation_perfis_de_tela_all on public.perfis_de_tela
+  for all
+  using (organization_id in (select * from public.fn_user_org_ids()))
+  with check (organization_id in (select * from public.fn_user_org_ids()));
+
+-- A sessão LÊ (o snapshot de permissões monta o menu com ela); escrever é
+-- `admin`, conferido na rota com o service role. Sem o revoke, o ALTER DEFAULT
+-- PRIVILEGES do baseline daria CRUD a qualquer agente.
+revoke all on public.perfis_de_tela from anon;
+revoke all on public.perfis_de_tela from authenticated;
+grant select on public.perfis_de_tela to authenticated;
+grant all on public.perfis_de_tela to service_role;
+
+-- ─── O vínculo ──────────────────────────────────────────────────────────────
+
+alter table public.user_organizations add column if not exists perfil_de_tela_id uuid;
+
+-- Auto-curativo antes da FK: ponteiro para perfil inexistente ou de OUTRA
+-- organização vira null (o mesmo que "sem perfil"), e o ADD não falha.
+update public.user_organizations u
+   set perfil_de_tela_id = null
+ where u.perfil_de_tela_id is not null
+   and not exists (
+     select 1 from public.perfis_de_tela p
+      where p.id = u.perfil_de_tela_id and p.organization_id = u.organization_id
+   );
+
+alter table public.user_organizations drop constraint if exists user_organizations_perfil_de_tela_fk;
+alter table public.user_organizations add constraint user_organizations_perfil_de_tela_fk
+  foreign key (organization_id, perfil_de_tela_id)
+  references public.perfis_de_tela (organization_id, id)
+  on delete set null (perfil_de_tela_id);
+
+create index if not exists idx_user_orgs_perfil_de_tela
+  on public.user_organizations (organization_id, perfil_de_tela_id)
+  where perfil_de_tela_id is not null;
+
+comment on column public.user_organizations.perfil_de_tela_id is
+  'Perfil de tela do membro (perfis_de_tela). Null = vê tudo que o papel permite. Apresentação, nunca autorização. Migration 9497.';
+
+notify pgrst, 'reload schema';
+
+-- ---- clique em link rastreado pontua (migration 9499) ----
+-- Espelho de supabase/migrations/20261125110100_9499_pontuar_clique_em_link.sql.
+-- Idempotente e auto-curativo: função com create or replace; o CHECK de evento
+-- recriado por nome só ACRESCENTA 'link_clicado' (nenhuma linha existente o viola).
+-- O fato link.clicked nasce 'pending' quando o link tem contato (consumidor:
+-- leads.pontuacao-por-regra) e 'done' sem contato (registro).
+
+create or replace function public.fn_registrar_clique_de_saida(
+  p_org uuid, p_link uuid, p_dispositivo text, p_navegador text, p_ip_hash text
+) returns uuid
+language plpgsql security definer set search_path = public, pg_temp as $$
+declare
+  v_clique uuid;
+  v_contato uuid;
+  v_rotulo text;
+begin
+  select l.contact_id, l.rotulo into v_contato, v_rotulo
+    from public.links_de_saida l
+   where l.organization_id = p_org and l.id = p_link and not l.anonimizado;
+  if not found then
+    return null;
+  end if;
+  insert into public.cliques_de_links_de_saida (organization_id, link_id, dispositivo, navegador, ip_hash)
+    values (p_org, p_link, coalesce(p_dispositivo, 'desconhecido'), p_navegador, p_ip_hash)
+  returning id into v_clique;
+  if coalesce(p_dispositivo, 'desconhecido') <> 'robo' then
+    insert into event_log (organization_id, event_type, entity_kind, entity_id, status, payload)
+      values (p_org, 'link.clicked', 'link_de_saida', p_link,
+              case when v_contato is null then 'done' else 'pending' end,
+              jsonb_build_object('link_id', p_link, 'clique_id', v_clique,
+                                 'contact_id', v_contato, 'rotulo', v_rotulo));
+  end if;
+  return v_clique;
+end;
+$$;
+revoke execute on function public.fn_registrar_clique_de_saida(uuid, uuid, text, text, text) from public, anon, authenticated;
+grant execute on function public.fn_registrar_clique_de_saida(uuid, uuid, text, text, text) to service_role;
+
+-- O vocabulário da regra ganha o clique: `link_clicado` foi somado no bloco ÚNICO
+-- de `regras_de_pontuacao_evento_check` (apêndice da 9492) — uma constraint, um bloco.
+
+notify pgrst, 'reload schema';
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --

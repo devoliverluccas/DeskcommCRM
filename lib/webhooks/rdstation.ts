@@ -344,7 +344,7 @@ function semChavesDeAnuncio(metadata: Record<string, string>): Record<string, st
  * `last_conversion`, que sobrepõe os anteriores por ser a conversão mais
  * recente. Mesma lista de chaves do caminho genérico (`CHAVES_DE_ANUNCIO`), e
  * mesmo destino: `source_metadata`, de onde a rota estampa a atribuição do
- * contato. Só as SETE chaves conhecidas entram — o resto do envelope continua
+ * contato. Só as chaves da lista entram — o resto do envelope continua
  * saindo como sempre saiu.
  */
 function chavesDeAnuncio(

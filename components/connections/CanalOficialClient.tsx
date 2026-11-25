@@ -18,6 +18,7 @@ import { useT } from "@/hooks/i18n/useT";
 import { ChannelAiAccess } from "./ChannelAiAccess";
 import { ConectarPeloFacebook } from "./ConectarPeloFacebook";
 import { ParaIntegrar } from "./ParaIntegrar";
+import { SaudeDoNumeroOficial } from "./SaudeDoNumeroOficial";
 
 /** Campo somente-leitura com botão de copiar — o que o operador cola na Meta. */
 function ParaColar({
@@ -113,6 +114,10 @@ export function CanalOficialClient() {
             WABA <span className="font-mono">{estado.wabaId}</span> · {t("número")}{" "}
             <span className="font-mono">{estado.phoneNumberId}</span>
           </p>
+          {/* Saúde do número (item 5.5): nota, limite e o que fazer quando cai. */}
+          <div className="mt-4">
+            <SaudeDoNumeroOficial />
+          </div>
         </Card>
       ) : null}
       {estado?.channel_session_id && <ChannelAiAccess channelId={estado.channel_session_id} />}

@@ -45,6 +45,13 @@ import {
   ingestMetaInbound,
   ingestMetaReaction,
 } from "@/lib/channels/meta/ingest";
+import {
+  atualizarSaudePelaGraph,
+  gravarSaudeDoNumero,
+  normalizarLimite,
+  normalizarQualidade,
+  qualidadeDoEvento,
+} from "@/lib/channels/meta/saude-do-numero";
 import { metaSessionByWebhookToken } from "@/lib/channels/meta/session";
 import {
   MOTIVO_CONTATO_ANONIMIZADO,
@@ -307,6 +314,37 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
           phone_number_id: e.phoneNumberId,
         });
       }
+      continue;
+    }
+
+    if (e.kind === "number_quality") {
+      // Saúde do número (item 5.5): nota e limite vão às colunas da conexão, e a
+      // queda para amarela/vermelha abre aviso na Central — tudo dentro de
+      // `gravarSaudeDoNumero`, que não lança (5xx aqui = reentrega em loop).
+      const qualidade = normalizarQualidade(e.quality) ?? qualidadeDoEvento(e.event);
+      const alvo = { organizationId: session.organizationId, channelSessionId: session.id };
+      let desfecho: string = await gravarSaudeDoNumero(admin, alvo, {
+        qualidade,
+        limite: normalizarLimite(e.currentLimit),
+        numeroExibido: e.displayPhoneNumber,
+      });
+      // `UNFLAGGED` diz só que a nota SAIU da baixa — não diz para onde. Quem
+      // sabe é a Graph; sem resposta dela, a nota guardada fica como estava.
+      if (!qualidade && (e.event ?? "").toUpperCase() === "UNFLAGGED" && desfecho !== "saude:outro_numero") {
+        desfecho = (await atualizarSaudePelaGraph(admin, alvo)).desfecho;
+      }
+      desfechos.push(desfecho);
+      continue;
+    }
+
+    if (e.kind === "account_update") {
+      desfechos.push(
+        await gravarSaudeDoNumero(
+          admin,
+          { organizationId: session.organizationId, channelSessionId: session.id },
+          { eventoDaConta: e.event, numeroExibido: e.phoneNumber },
+        ),
+      );
       continue;
     }
 

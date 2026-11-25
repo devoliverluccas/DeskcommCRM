@@ -159,14 +159,6 @@ const NASCE_DONE_NA_ORIGEM: Record<string, { onde: string[]; porque: string }> =
       "inserido com `status='done'` no mesmo statement (o turno do Operador é registro " +
       "por decisão explícita, documentada no cabeçalho do módulo).",
   },
-  "link.clicked": {
-    onde: ["supabase/migrations/20261124140300_9490_links_rastreados_de_saida.sql"],
-    porque:
-      "fase 4, item 4.4: `fn_registrar_clique_de_saida` insere o fato com `status='done'` no " +
-      "mesmo statement — é REGISTRO do clique de gente num link de saída, sem consumidor hoje. " +
-      "Quem criar o gatilho de automação \"clicou no link\" registra o handler e troca para " +
-      "`pending` no mesmo PR (e tira esta linha).",
-  },
   "voice_call.ended": {
     onde: ["lib/wacalls/events-bridge.ts"],
     porque:
@@ -367,6 +359,25 @@ describe("evento-fato (registro) não fica `pending`", () => {
       "tipo com consumidor na lista de registro: ele nasceria `done` e o handler " +
         "registrado nunca rodaria.",
     ).toEqual([]);
+  });
+
+  it("`link.clicked` é consumido (pontuação) e nasce `pending` só com contato", () => {
+    // Até a 9499 ele nascia `done` (NASCE_DONE_NA_ORIGEM). Agora a pontuação por
+    // regra o drena: se o handler sumisse do registry, a linha `pending` ficaria
+    // pendurada para sempre — e se o SQL voltasse a escrever só `'done'`, o
+    // handler nunca rodaria.
+    ensureHandlersRegistered();
+    const donos = getRegisteredHandlers()
+      .filter((h) => h.events.includes("link.clicked"))
+      .map((h) => h.key);
+    expect(donos).toContain("leads.pontuacao-por-regra");
+    const sql = readFileSync(
+      join(DIR_MIGRACOES, "20261125110100_9499_pontuar_clique_em_link.sql"),
+      "utf8",
+    );
+    expect(sql).toMatch(
+      /'link\.clicked'[\s\S]{0,200}?case\s+when\s+v_contato\s+is\s+null\s+then\s+'done'\s+else\s+'pending'\s+end/,
+    );
   });
 
   it("todo tipo do registro é realmente emitido (a lista não envelhece)", () => {

@@ -257,6 +257,17 @@ describe("chaves de anúncio do envelope do RD Station", () => {
     },
   );
 
+  it("`ttclid` e `_ga` seguem para source_metadata sem decidir a atribuição", () => {
+    const env = envelopeComAnuncio("ttclid", "TT_CLIQUE", "conversao");
+    const lead = (env.leads as Array<Record<string, unknown>>)[0]!;
+    lead._ga = "GA1.1.111.222";
+    const m = mapRdStationPayload(env);
+    expect(m.source_metadata.ttclid).toBe("TT_CLIQUE");
+    expect(m.source_metadata._ga).toBe("GA1.1.111.222");
+    expect(m.custom_fields.ttclid).toBeUndefined();
+    expect(extrairAtribuicaoDoInbound(m.source_metadata)).toBeNull();
+  });
+
   it("CONTROLE: envelope sem chave de anúncio não inventa atribuição", () => {
     const m = mapRdStationPayload(rdEnvelope());
     expect(m.source_metadata).toEqual({});

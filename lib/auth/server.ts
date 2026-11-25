@@ -35,7 +35,9 @@ import {
 } from "@/lib/auth/politica-mfa";
 import { normalizarIdioma } from "@/lib/i18n/idiomas";
 import { STATUS_OPERANTE, ehOperante } from "@/lib/organizacao/operante";
+import { aplicarPerfilDeTela, destinosDoEmbed } from "@/lib/navigation/perfis-de-tela";
 import type { AuthUser, Role, UserOrgMembership, ActiveOrg } from "./types";
+import { escolherMembroAtivo } from "./membro-ativo";
 
 const ACTIVE_ORG_COOKIE = "active_org";
 
@@ -95,22 +97,9 @@ async function localeDaOrgAtiva(memberships: UserOrgMembership[]): Promise<strin
  * `ORDER BY`, isto aqui é um sorteio — e desde que o idioma passou a vir junto
  * da organização ativa, o sorteio decide TAMBÉM em que língua o sistema abre.
  * As duas coisas andam juntas: não tire a ordenação de lá sem resolver isto.
+ *
+ * A regra mora em `./membro-ativo` — o registro de acessos usa a mesma.
  */
-function escolherMembroAtivo(
-  memberships: UserOrgMembership[],
-  cookieOrg: string | undefined,
-): UserOrgMembership | null {
-  if (memberships.length === 0) return null;
-  if (cookieOrg) {
-    // Com cookie, MANTÉM mesmo a suspensa: é por ela que a pessoa chega ao hub
-    // `/account-suspended` para pagar, pedir LGPD ou trocar de empresa.
-    const achado = memberships.find((o) => o.organization_id === cookieOrg);
-    if (achado) return achado;
-  }
-  // Sem cookie, a primeira OPERANTE na mesma ordem (`accepted_at`,
-  // `organization_id`); a primeira de todas só quando nenhuma opera.
-  return memberships.find((o) => ehOperante(o.org_status)) ?? memberships[0] ?? null;
-}
 
 /**
  * Loads the AuthUser for the current request. Returns null if unauthenticated.
@@ -240,7 +229,7 @@ async function lerPermissoes(
           // issue #1341 acabou de engordar), e o alias traz só as portas da EMPRESA.
           // `timezone` veio do main (fuso da organização nas listas, #1290) e convive
           // com o alias: um embed por relação, sem renomear o que já existia.
-          "organization_id, role, interface_settings, senha_provisoria, accepted_at, organizations!user_organizations_organization_id_fkey(display_name, locale, timezone, currency, country, status, suspended_kind), interface_da_empresa:organizations!user_organizations_organization_id_fkey(interface_settings)",
+          "organization_id, role, interface_settings, senha_provisoria, accepted_at, organizations!user_organizations_organization_id_fkey(display_name, locale, timezone, currency, country, status, suspended_kind), interface_da_empresa:organizations!user_organizations_organization_id_fkey(interface_settings), perfil_de_tela:perfis_de_tela!user_organizations_perfil_de_tela_fk(destinos)",
         )
         .eq("user_id", userId)
         .is("revoked_at", null)
@@ -298,7 +287,13 @@ async function lerPermissoes(
       // EMPRESA ∩ VÍNCULO (migration 0367): a empresa escolhe o universo de
       // portas da instalação, o vínculo escolhe menos dentro dele. Até aqui o
       // vínculo decidia sozinho, então a escolha da empresa não existia.
-      interface_settings: combinarInterfaces(empresa?.interface_settings, row.interface_settings),
+      // PERFIL DE TELA (9497): só ESTREITA o que empresa ∩ vínculo já mostram —
+      // nunca abre porta. Sem perfil, `destinosDoEmbed` é nulo e nada muda.
+      interface_settings: aplicarPerfilDeTela(
+        combinarInterfaces(empresa?.interface_settings, row.interface_settings),
+        destinosDoEmbed((row as { perfil_de_tela?: unknown }).perfil_de_tela),
+        row.role as Role,
+      ),
       locale: org?.locale ?? null,
       timezone: org?.timezone ?? null,
       currency: org?.currency ?? null,

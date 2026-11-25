@@ -352,9 +352,10 @@ describe("POST /api/v1/channels/official — reconectar é ressuscitar", () => {
     const { POST } = await import("@/app/api/v1/channels/official/route");
     await POST(reqOficial());
 
-    // DUAS escritas na MESMA linha: a conexão e, depois, a PROCEDÊNCIA (#4074).
-    // A segunda não cria linha nem mexe em credencial — é só `meta_connection_origin`.
-    expect(db.escritas.map((e) => e.tipo)).toEqual(["update", "update"]);
+    // TRÊS escritas na MESMA linha: a conexão, a PROCEDÊNCIA (#4074) e a SAÚDE
+    // do número (5.5, a nota e o limite que a validação já trouxe). Nenhuma das
+    // duas últimas cria linha nem mexe em credencial.
+    expect(db.escritas.map((e) => e.tipo)).toEqual(["update", "update", "update"]);
     expect(patchDe(db, 1)).toEqual({ meta_connection_origin: "token_manual" });
     expect(db.linhas).toHaveLength(1);
   });
@@ -380,7 +381,8 @@ describe("POST /api/v1/channels/official — reconectar é ressuscitar", () => {
 
     expect(res.status).toBe(200);
     // insert da conexão + update da procedência na linha que o insert criou (#4074).
-    expect(db.escritas.map((e) => e.tipo)).toEqual(["insert", "update"]);
+    // A conexão nasce (insert); procedência e saúde do número vêm depois.
+    expect(db.escritas.map((e) => e.tipo)).toEqual(["insert", "update", "update"]);
     expect(patchDe(db, 1)).toEqual({ meta_connection_origin: "token_manual" });
   });
 
@@ -399,9 +401,9 @@ describe("POST /api/v1/channels/official — reconectar é ressuscitar", () => {
     const res = await POST(reqOficial());
 
     expect(res.status).toBe(200);
-    // [sem a coluna, com a coluna, procedência] — a 3ª é a origem (#4074), que
-    // também não existe neste clone e por isso é tentada e não derruba nada.
-    expect(db.escritas.map((e) => e.recusada)).toEqual([true, false, false]);
+    // [sem a coluna, com a coluna, procedência, saúde] — a 3ª é a origem (#4074)
+    // e a 4ª a saúde do número (5.5): best-effort, nenhuma derruba a conexão.
+    expect(db.escritas.map((e) => e.recusada)).toEqual([true, false, false, false]);
     expect(patchDe(db, 2)).toEqual({ meta_connection_origin: "token_manual" });
     expect(patchDe(db, 0)).toHaveProperty("archived_at", null);
     expect(patchDe(db, 1)).not.toHaveProperty("archived_at");

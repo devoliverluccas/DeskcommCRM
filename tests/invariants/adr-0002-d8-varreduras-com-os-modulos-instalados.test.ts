@@ -283,6 +283,31 @@ const PROVA_DE_MODULO: Record<string, { readonly arquivo: string; readonly razao
       "lista org-scoped: vizinho vê zero movimentações. A leitura é medida aqui; a decisão de " +
       "NÃO redigir (razão `manter` do #1504) mora no redact-unificado, e é outra régua.",
   },
+  // Item 5.4 — as quatro tabelas de `fn_lojas_provisionar()` (migration 9495).
+  lojas: {
+    arquivo: "tests/invariants/lojas-modulo.test.ts",
+    razao:
+      "JWT real com duas organizações semeadas: a sessão de A lê exatamente a loja de A (contagem 1) e zero " +
+      "de B; a sessão não insere, não edita nem apaga (42501) e anon não lê.",
+  },
+  estoque_por_loja: {
+    arquivo: "tests/invariants/lojas-modulo.test.ts",
+    razao:
+      "Estoque semeado em A e em B: contagem 1 pela sessão de A e zero de B; a chave composta recusa produto " +
+      "ou loja de outra organização mesmo pela escrita do servidor (23503).",
+  },
+  loja_do_numero: {
+    arquivo: "tests/invariants/lojas-modulo.test.ts",
+    razao:
+      "Vínculo semeado em A e em B: a sessão de A lê só o de A; a chave composta com channel_sessions recusa " +
+      "número de outra organização (23503), e a sessão não grava.",
+  },
+  proposta_da_loja: {
+    arquivo: "tests/invariants/lojas-modulo.test.ts",
+    razao:
+      "Vínculo semeado em A e em B: contagem 1 pela sessão de A e zero de B; o gatilho recusa proposta de outra " +
+      "organização e a troca de proposta, e a loja com orçamento não se apaga (RESTRICT).",
+  },
   ouvidoria_manifestacoes: {
     arquivo: "tests/invariants/ouvidoria-registro-privado.test.ts",
     razao:

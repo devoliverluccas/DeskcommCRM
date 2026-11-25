@@ -151,6 +151,29 @@ describe("GET /auth/callback", () => {
     expect(vi.mocked(ensureTenantForUser)).not.toHaveBeenCalled();
   });
 
+  it("entrada com Google grava IP e navegador no login, como a entrada por senha (registro de acessos)", async () => {
+    const { GET } = await comSupabase({ troca: { data: { user: USUARIO }, error: null } });
+    vi.mocked(vinculoAtivo).mockResolvedValue("org-existente");
+
+    await GET(
+      new NextRequest("http://localhost:3000/auth/callback?code=abc", {
+        headers: {
+          "x-forwarded-for": "203.0.113.7, 10.0.0.1",
+          "user-agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) Version/18.0 Mobile Safari/604.1",
+        },
+      }),
+    );
+
+    expect(vi.mocked(audit)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "auth.login_success",
+        actorUserId: USUARIO.id,
+        ip: "203.0.113.7",
+        userAgent: expect.stringContaining("iPhone"),
+      }),
+    );
+  });
+
   it("conta nova sem convite em instalação so_convite: recusa pela política, sem provisionar", async () => {
     const { GET } = await comSupabase({ troca: { data: { user: USUARIO }, error: null } });
     vi.mocked(modoDeCadastro).mockResolvedValue("so_convite");

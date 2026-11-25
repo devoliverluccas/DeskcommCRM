@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { roleAtLeast } from "@/lib/auth/types";
+import { lojasDaTela } from "@/lib/lojas/leitura";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 import { ProposalsClient } from "./_client";
 
@@ -19,5 +21,8 @@ export default async function ProposalsPage() {
     (!user.support ||
       (user.support.status === "active" && user.support.access_mode === "full"));
 
-  return <ProposalsClient key={activeOrg.orgId} podeCriar={podeCriar} />;
+  // Filtro "Loja" (item 5.4): vazio sem o módulo `lojas`, e aí o filtro não existe.
+  const lojas = (await lojasDaTela(createAdminClient(), activeOrg.orgId)).map((l) => ({ id: l.id, nome: l.nome }));
+
+  return <ProposalsClient key={activeOrg.orgId} podeCriar={podeCriar} lojas={lojas} />;
 }

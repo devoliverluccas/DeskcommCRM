@@ -255,6 +255,18 @@ describe("chaves de anúncio do Respondi", () => {
     expect(atribuicao?.sourceId).toBe("IwAR1abc");
   });
 
+  it("as perguntas `ttclid` e `ga_client_id` vão para source_metadata, sem atribuição", () => {
+    const base = comPergunta("ttclid", "TT_CLIQUE");
+    const m = mapRespondiPayload({
+      ...base,
+      respondent: { ...base.respondent, answers: { ...base.respondent.answers, ga_client_id: "111.222" } },
+    });
+    expect(m.source_metadata.ttclid).toBe("TT_CLIQUE");
+    expect(m.source_metadata.ga_client_id).toBe("111.222");
+    expect(m.custom_fields.respondi_q_ttclid).toBeUndefined();
+    expect(extrairAtribuicaoDoInbound(m.source_metadata)).toBeNull();
+  });
+
   it("CONTROLE: formulário sem pergunta de anúncio não inventa atribuição", () => {
     const m = mapRespondiPayload(FIXTURE);
     expect(extrairAtribuicaoDoInbound(m.source_metadata)).toBeNull();

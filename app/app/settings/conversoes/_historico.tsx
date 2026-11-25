@@ -242,7 +242,10 @@ export function HistoricoDeEnvios({
                       <LinkDoNegocio className="underline underline-offset-2" leadId={l.leadId}>
                         {t("Abrir negócio")}
                       </LinkDoNegocio>
-                      {situacao !== "entregue" && (
+                      {/* GA4/TikTok (`ga4:*`, `tiktok:*`) têm a nova tentativa AUTOMÁTICA,
+                          mas a rota de reenvio manual só conhece os eventos do envio
+                          principal: oferecer o botão ali seria um 400 garantido. */}
+                      {situacao !== "entregue" && !/^(ga4|tiktok):/.test(l.evento) && (
                         <ReprocessarConversao leadId={l.leadId} idioma={idioma} evento={l.evento} />
                       )}
                     </div>

@@ -23,10 +23,10 @@ import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
 
 import { traduzir } from "@/lib/i18n/dicionario";
 import type { Idioma } from "@/lib/i18n/idiomas";
-import { InstagramLogo, MessengerLogo, TelegramLogo, WhatsappLogo } from "@/lib/ui/icons";
+import { Globe, InstagramLogo, MessengerLogo, TelegramLogo, WhatsappLogo } from "@/lib/ui/icons";
 
 /** As redes que o produto sabe desenhar. Rede nova entra aqui E em `channelBrand`. */
-export type CanalConhecido = "whatsapp" | "instagram" | "messenger" | "telegram";
+export type CanalConhecido = "whatsapp" | "instagram" | "messenger" | "telegram" | "site";
 
 export interface MarcaDeCanal {
   /** `unknown` é o fallback: sem ícone, cor neutra, rótulo genérico. */
@@ -74,6 +74,18 @@ const MARCAS: Record<CanalConhecido, MarcaDeCanal> = {
     rotulo: "Telegram",
     cor: "var(--color-canal-telegram)",
     Icone: TelegramLogo,
+  },
+  /**
+   * Chat do site (fase 5, item 5.3). Não é rede de ninguém: é a bolha no site
+   * da própria empresa. Fica FORA de `CANAIS_NA_PALETA` (não tem cor de marca
+   * a escolher) e usa o token de informação do tema, que já é legível nos dois
+   * temas — um `--color-canal-site` pediria mexer no globals.css só por isto.
+   */
+  site: {
+    id: "site",
+    rotulo: "Chat do site",
+    cor: "var(--color-info)",
+    Icone: Globe,
   },
 };
 

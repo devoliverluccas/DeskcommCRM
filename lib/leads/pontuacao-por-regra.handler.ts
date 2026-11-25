@@ -2,7 +2,8 @@
  * O CONSUMIDOR da pontuação por regra (fase 4, item 4.5).
  *
  * Lê fatos que o sistema já emite no `event_log` (mensagem recebida, agendamento
- * criado, etapa alterada, etiqueta acrescentada, orçamento enviado/aceito),
+ * criado, etapa alterada, etiqueta acrescentada, orçamento enviado/aceito, clique
+ * de gente num link rastreado de saída),
  * casa com as regras ATIVAS da organização e grava uma linha no extrato por
  * (regra, fato) — pela `fn_pontuacao_registrar`, que confere organização,
  * contato e teto sob trava e ignora a segunda chegada do mesmo fato.
@@ -158,6 +159,20 @@ async function resolverFato(
         atributos: { tags: pedido.tags },
       };
     }
+    case "link_clicado":
+      // Uma vez por LINK: o link de saída já é POR contato (único por
+      // organização + contato + destino + rótulo), então isto é "uma vez por
+      // link por contato". Clicar de novo — ou o mesmo contato abrir no celular
+      // e no computador — não acumula: o interesse foi demonstrado uma vez. Quem
+      // quer valorizar outro link manda outro link (outro destino ou rótulo).
+      return {
+        evento: pedido.evento,
+        contactId: pedido.contactId,
+        leadId: null,
+        chave: `link_clicado:${pedido.linkId}`,
+        ocorridoEm,
+        atributos: { rotulo: pedido.rotulo },
+      };
   }
 }
 

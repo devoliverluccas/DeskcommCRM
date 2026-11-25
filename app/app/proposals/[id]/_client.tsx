@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { showApiError } from "@/components/feedback/ApiErrorToast";
@@ -138,7 +138,18 @@ function camposRecusados(details: Record<string, unknown> | undefined): string[]
   return Object.keys(mapa).map(campoRecusado);
 }
 
-export function ProposalEditorClient({ id, podeEditar, podeRevisar = false }: { id: string; podeEditar: boolean; podeRevisar?: boolean }) {
+export function ProposalEditorClient({
+  id,
+  podeEditar,
+  podeRevisar = false,
+  abaixoDoTitulo = null,
+}: {
+  id: string;
+  podeEditar: boolean;
+  podeRevisar?: boolean;
+  /** O que um módulo põe logo abaixo do título (item 5.4: a loja do orçamento). */
+  abaixoDoTitulo?: ReactNode;
+}) {
   const t = useT();
   const [proposta, setProposta] = useState<Proposta | null>(null);
   const [salvando, setSalvando] = useState(false);
@@ -457,6 +468,7 @@ export function ProposalEditorClient({ id, podeEditar, podeRevisar = false }: { 
           onChange={(e) => setProposta((p) => p && { ...p, titulo: e.target.value })}
           placeholder={t("Título da proposta")}
         />
+        {abaixoDoTitulo}
       </header>
 
       {erro && (

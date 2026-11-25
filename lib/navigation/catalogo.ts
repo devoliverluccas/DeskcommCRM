@@ -836,6 +836,17 @@ export const NAV_CATALOG = [
     healthDot: true,
   },
   {
+    // Fase 5, item 5.3 (migration 9494): a bolha de conversa no site da empresa.
+    // A descrição cita "widget" e "site" porque é por esses nomes que se procura no ⌘K.
+    href: "/app/connections/chat-do-site",
+    label: "Chat do site",
+    description: "Uma bolha de conversa no seu site (widget): as mensagens chegam ao Inbox.",
+    icon: "PlugsConnected",
+    group: "canais",
+    minRole: "admin",
+    sidebar: true,
+  },
+  {
     // Módulo opcional (ADR-0002, #4227): a porta só existe depois que o dono da
     // instalação instala `amigo` em `/admin/modulos`. Mesmo filtro de cadências.
     href: "/app/integrations/amigo",
@@ -943,6 +954,19 @@ export const NAV_CATALOG = [
     section: "Sua empresa",
     minRole: "admin",
     modulo: "cadencias",
+  },
+  {
+    // Item 5.4: módulo de TABELA (ADR-0002). A porta só existe onde quem
+    // administra a instalação instalou `lojas` em `/admin/modulos`; é nesta
+    // tela que a empresa liga o uso e cadastra as lojas.
+    href: "/app/settings/lojas",
+    label: "Lojas e filiais",
+    description: "As lojas da empresa, a loja padrão e qual loja atende cada número.",
+    icon: "Storefront",
+    group: "organizacao",
+    section: "Sua empresa",
+    minRole: "admin",
+    modulo: "lojas",
   },
   {
     href: "/app/honorarios",
@@ -1482,6 +1506,18 @@ export const NAV_CATALOG = [
     label: "Servidor MCP externo",
     description: "O endereço e a chave do sistema de fora que a IA da empresa pode consultar.",
     icon: "Plugs",
+    group: "organizacao",
+    section: "Dados e acesso",
+    minRole: "admin",
+  },
+  {
+    // Item 5.6 (migration 9497): perfis de tela — o que cada membro VÊ no menu,
+    // sobre o que o papel permite. "Dados e acesso" cai em "Equipe e segurança"
+    // no menu de Configurações. `admin`: é quem cria e atribui.
+    href: "/app/settings/perfis-de-tela",
+    label: "Perfis de tela",
+    description: "Quais áreas do menu cada pessoa vê. O papel continua decidindo o que ela pode abrir.",
+    icon: "Signpost",
     group: "organizacao",
     section: "Dados e acesso",
     minRole: "admin",

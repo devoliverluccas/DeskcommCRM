@@ -218,6 +218,10 @@ const TEXTO_DO_MODULO: Record<ModuloOpcional, { nome: string; oQueFaz: string }>
     oQueFaz:
       "O catálogo acompanha sozinho o feed que o sistema de estoque da revenda publica: a cada 2 horas cria, atualiza e desativa produtos, sem apagar nenhum.",
   },
+  lojas: {
+    nome: "Lojas e filiais",
+    oQueFaz: "Cadastro das lojas, estoque de cada produto por loja, a loja de cada número e de cada orçamento, e o filtro por loja nos relatórios.",
+  },
   menu_de_atendimento: {
     nome: "Menu de atendimento sem IA",
     oQueFaz: "A primeira mensagem recebe um menu com opções numeradas e o cliente escolhe por número — fila, pessoa ou arquivo — sem nenhuma resposta gerada por IA.",
@@ -445,6 +449,7 @@ const DO_SERVIDOR: RecursoOpcional[] = [
 ];
 
 const DA_EMPRESA: RecursoOpcional[] = [
+  { id: "lojas_da_empresa", nome: "Lojas e filiais da empresa", oQueFaz: "As lojas da empresa, o estoque por loja e a loja de cada número e de cada orçamento.", nivel: "organizacao", padrao: "desligado", quemDecide: "admin", href: "/app/settings/lojas", modulo: "lojas", capacidade: "lojas", ler: (f) => f.settings === null || f.modulos === null ? "nao_lido" : capacidadesLigadas(f.settings, f.modulos).includes("lojas") ? "ligado" : "desligado" },
   { id: "cadencias_da_empresa", nome: "Cadências de e-mail da empresa", oQueFaz: "Sequências opcionais com inscrição manual e descadastro, usando o e-mail da instalação.", nivel: "organizacao", padrao: "desligado", quemDecide: "admin", href: "/app/settings/cadencias", modulo: "cadencias", capacidade: "cadencias", ler: (f) => f.settings === null || f.modulos === null ? "nao_lido" : capacidadesLigadas(f.settings, f.modulos).includes("cadencias") ? "ligado" : "desligado" },
   {
     id: "conversa_fica_com_quem_atendeu",

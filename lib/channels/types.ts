@@ -30,7 +30,14 @@ export type ChannelProvider =
    * telefone: é o `chat_id` que o próprio bot recebe no update. Ver
    * `./adapters/telegram.ts` e a ausência dele em `PROVIDERS_DE_TELEFONE`.
    */
-  | "telegram";
+  | "telegram"
+  /**
+   * Chat do site (fase 5, item 5.3, migration 9494): a bolha que a empresa cola
+   * no próprio site. Não há plataforma do outro lado — a mensagem fica gravada
+   * e o visitante a busca. O endereço é o visitante (hash do token dele), nunca
+   * telefone. Ver `./adapters/webchat.ts` e `./webchat/`.
+   */
+  | "webchat";
 
 /**
  * Os providers que transportam MENSAGEM — o subconjunto sobre o qual a matriz

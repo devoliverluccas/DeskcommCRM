@@ -199,6 +199,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
             "message_template_status_update",
             "smb_message_echoes",
             "smb_app_state_sync",
+            // Saúde do número (item 5.5): a nota, o limite de conversas e a
+            // situação da conta. Sem assinar, a tela só sabe o que a Graph
+            // responde quando é aberta.
+            "phone_number_quality_update",
+            "account_update",
           ],
         }
       : null,

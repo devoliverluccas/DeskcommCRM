@@ -317,6 +317,7 @@ export function ProdutosClient({
   podeEditar,
   capacidadeLigada = false,
   apresentacaoLigada = false,
+  lojasLigadas = false,
   fonteDoFeed = null,
   categorias = [],
   filtros = SEM_FILTROS,
@@ -335,6 +336,8 @@ export function ProdutosClient({
   /** A chave da empresa (`capacidade_do_produto`). Desligada, o campo não aparece. */
   capacidadeLigada?: boolean;
   apresentacaoLigada?: boolean;
+  /** Módulo `lojas` instalado e ligado pela empresa (item 5.4): a edição mostra o estoque por loja. */
+  lojasLigadas?: boolean;
   /** A seção do módulo `catalogo_por_feed`; `null` com o módulo desligado. */
   fonteDoFeed?: React.ReactNode;
   /** As categorias que existem no catálogo (`fn_categorias_do_catalogo`). */
@@ -503,6 +506,7 @@ export function ProdutosClient({
             capacidadeLigada={capacidadeLigada}
             urlsDasFotos={urlsDasFotos}
             apresentacaoLigada={apresentacaoLigada}
+            lojasLigadas={lojasLigadas}
             aoFechar={() => setEditando(null)}
           />
         ) : null}

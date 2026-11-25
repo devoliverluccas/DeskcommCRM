@@ -40,6 +40,9 @@ export const CAPACIDADES_DA_ORGANIZACAO = [
   "cadencias",
   "apresentacao_do_catalogo",
   "capacidade_do_produto",
+  // Item 5.4: lojas e filiais. Exige o módulo de TABELA `lojas` instalado E a
+  // chave da empresa `settings.lojas.enabled` — o mesmo desenho de `cadencias`.
+  "lojas",
 ] as const;
 export type CapacidadeDaOrganizacao = (typeof CAPACIDADES_DA_ORGANIZACAO)[number];
 
@@ -60,6 +63,7 @@ const MODULO_DA_CAPACIDADE: Record<CapacidadeDaOrganizacao, ModuloOpcional | nul
   cadencias: "cadencias",
   apresentacao_do_catalogo: null,
   capacidade_do_produto: null,
+  lojas: "lojas",
 };
 
 function objeto(v: unknown): Record<string, unknown> | null {
@@ -100,6 +104,11 @@ export function capacidadesLigadas(
   }
   if (objeto(objeto(settings)?.catalogo)?.apresentacao === true) daEmpresa.push("apresentacao_do_catalogo");
   if (objeto(objeto(settings)?.catalogo)?.capacidade === true) daEmpresa.push("capacidade_do_produto");
+  const lojas = objeto(objeto(settings)?.lojas);
+  const moduloDeLojas = MODULO_DA_CAPACIDADE.lojas;
+  if (lojas?.enabled === true && moduloDeLojas && modulos.includes(moduloDeLojas)) {
+    daEmpresa.push("lojas");
+  }
   return daEmpresa;
 }
 

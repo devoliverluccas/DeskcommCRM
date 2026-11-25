@@ -54,6 +54,8 @@ interface Rascunho {
   evento: EventoDePontuacao;
   stageId: string;
   tag: string;
+  /** Rótulo do link (opcional) — só para `link_clicado`. */
+  rotulo: string;
   pontos: string;
   teto: string;
 }
@@ -63,6 +65,7 @@ const RASCUNHO_VAZIO: Rascunho = {
   evento: "respondeu_followup",
   stageId: "",
   tag: "",
+  rotulo: "",
   pontos: "10",
   teto: "",
 };
@@ -70,6 +73,7 @@ const RASCUNHO_VAZIO: Rascunho = {
 function condicaoDo(r: Rascunho): Record<string, string> {
   if (r.evento === "etapa_alcancada") return { stage_id: r.stageId };
   if (r.evento === "tag_aplicada") return { tag: r.tag.trim() };
+  if (r.evento === "link_clicado" && r.rotulo.trim()) return { rotulo: r.rotulo.trim() };
   return {};
 }
 
@@ -79,6 +83,7 @@ function rascunhoDa(regra: RegraDePontuacao): Rascunho {
     evento: regra.evento,
     stageId: typeof regra.condicao.stage_id === "string" ? regra.condicao.stage_id : "",
     tag: typeof regra.condicao.tag === "string" ? regra.condicao.tag : "",
+    rotulo: typeof regra.condicao.rotulo === "string" ? regra.condicao.rotulo : "",
     pontos: String(regra.pontos),
     teto: regra.teto_por_contato === null ? "" : String(regra.teto_por_contato),
   };
@@ -118,6 +123,11 @@ export function PainelDePontuacao({
     }
     if (regra.evento === "tag_aplicada") {
       return typeof regra.condicao.tag === "string" ? regra.condicao.tag : null;
+    }
+    if (regra.evento === "link_clicado") {
+      return typeof regra.condicao.rotulo === "string"
+        ? t("rótulo {r}").replace("{r}", regra.condicao.rotulo)
+        : t("qualquer link");
     }
     return null;
   }
@@ -168,7 +178,9 @@ export function PainelDePontuacao({
         nome: r.nome.trim(),
         pontos: Number(r.pontos),
         teto_por_contato: r.teto === "" ? null : Number(r.teto),
-        ...(r.evento === "etapa_alcancada" || r.evento === "tag_aplicada" ? { condicao: condicaoDo(r) } : {}),
+        ...(r.evento === "etapa_alcancada" || r.evento === "tag_aplicada" || r.evento === "link_clicado"
+          ? { condicao: condicaoDo(r) }
+          : {}),
       });
       setEditando(null);
       toast.success(t("Regra salva."));
@@ -269,7 +281,7 @@ export function PainelDePontuacao({
           </Button>
           <p className="text-xs text-text-muted">
             {t(
-              "Cada fato pontua uma vez: a mesma etapa por negócio, a mesma tag por contato, o mesmo orçamento por proposta. Pontos negativos tiram.",
+              "Cada fato pontua uma vez: a mesma etapa por negócio, a mesma tag por contato, o mesmo orçamento por proposta, o mesmo link por contato. Pontos negativos tiram.",
             )}
           </p>
         </div>
@@ -348,6 +360,17 @@ function CamposDaRegra({
             maxLength={60}
             placeholder={t("Ex.: vip")}
             onChange={(e) => mudar({ tag: e.target.value })}
+          />
+        </div>
+      ) : rascunho.evento === "link_clicado" ? (
+        <div className="space-y-1.5">
+          <Label htmlFor={`${idPrefixo}-rotulo`}>{t("Rótulo do link (opcional)")}</Label>
+          <Input
+            id={`${idPrefixo}-rotulo`}
+            value={rascunho.rotulo}
+            maxLength={60}
+            placeholder={t("Qualquer link")}
+            onChange={(e) => mudar({ rotulo: e.target.value })}
           />
         </div>
       ) : (

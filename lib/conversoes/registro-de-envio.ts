@@ -24,13 +24,21 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { logger } from "@/lib/logger";
 import type { NomeDoEvento, PlataformaDeAnuncio } from "@/lib/plataformas-de-anuncio/types";
 
+import type { ChaveAnalitica } from "./analitica";
+
 export type StatusDeEnvio = "sent" | "skipped" | "error";
+
+/**
+ * O `event_name` do livro-razão: o evento do envio principal, ou a chave da
+ * plataforma de análise (`ga4:Purchase`…) — ver o cabeçalho de `analitica.ts`.
+ */
+export type EventoNoLivroRazao = NomeDoEvento | ChaveAnalitica;
 
 export interface RegistroDeEnvio {
   organizationId: string;
   leadId: string;
   plataforma: PlataformaDeAnuncio;
-  evento: NomeDoEvento;
+  evento: EventoNoLivroRazao;
   status: StatusDeEnvio;
   /** Slug estável. A tela traduz; o banco guarda o slug. */
   motivo: string | null;
@@ -51,7 +59,7 @@ export async function lerRegistro(
   admin: SupabaseClient,
   organizationId: string,
   leadId: string,
-  evento: NomeDoEvento,
+  evento: EventoNoLivroRazao,
 ) {
   const { data, error } = await admin
     .from("ad_conversion_dispatches")

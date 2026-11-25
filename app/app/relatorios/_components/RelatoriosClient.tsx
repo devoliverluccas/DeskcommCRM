@@ -48,12 +48,19 @@ export function RelatoriosClient({
   currentUserId,
   funis,
   fuso,
+  lojas = [],
 }: {
   podeGerenciar: boolean;
   currentUserId: string;
   /** Funis do recorte dos ganhos da aba Desempenho (#4918). */
   funis: Array<{ id: string; name: string }>;
   fuso: string;
+  /**
+   * As lojas do filtro "Loja" da aba Atendimentos (item 5.4). Vazia — o módulo
+   * `lojas` não instalado, a empresa não ligou ou não cadastrou loja —, o
+   * filtro não aparece e o relatório é o da organização inteira.
+   */
+  lojas?: Array<{ id: string; nome: string }>;
 }) {
   const t = useT();
   const router = useRouter();
@@ -84,6 +91,10 @@ export function RelatoriosClient({
       trocar({ p: valor, de: null, ate: null });
     }
   }
+
+  // Só uma loja que está na lista vale: um id velho na URL não vira filtro mudo.
+  const lojaDaUrl = sp.get("loja");
+  const loja = lojas.some((l) => l.id === lojaDaUrl) ? lojaDaUrl : null;
 
   const rascunhoValido = !!rascunho.de && !!rascunho.ate && rascunho.de <= rascunho.ate;
 
@@ -143,6 +154,24 @@ export function RelatoriosClient({
               </button>
             </form>
           )}
+          {aba === "atendimentos" && lojas.length > 0 && (
+            <label className="flex flex-col gap-1">
+              <span className="text-xs text-text-muted">{t("Loja")}</span>
+              <select
+                value={loja ?? ""}
+                onChange={(e) => trocar({ loja: e.target.value === "" ? null : e.target.value })}
+                className={`${CAMPO} min-w-44`}
+                data-testid="relatorios-loja"
+              >
+                <option value="">{t("Todas as lojas")}</option>
+                {lojas.map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.nome}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
         </div>
 
         <TabsList className="w-full justify-start overflow-x-auto sm:w-auto">
@@ -161,7 +190,7 @@ export function RelatoriosClient({
         <MetricsClient canCompare={podeGerenciar} currentUserId={currentUserId} funis={funis} />
       </TabsContent>
       <TabsContent value="atendimentos" className="mt-4">
-        {aba === "atendimentos" && <AbaAtendimentos periodo={periodo} />}
+        {aba === "atendimentos" && <AbaAtendimentos periodo={periodo} loja={loja} />}
       </TabsContent>
       {podeGerenciar && (
         <TabsContent value="sla" className="mt-4">

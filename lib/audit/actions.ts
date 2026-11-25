@@ -1821,6 +1821,34 @@ export const AUDIT_ACTIONS = [
   "venda.apagada",
   // #5128 — a escolha de tipos de link do contato por organização.
   "settings.links_de_contato_updated",
+  // Registro de acessos (item 5.2): a planilha de acessos da empresa foi baixada.
+  // Leva IP e aparelho de colegas, então o GESTO fica registrado, como o export de
+  // contatos. Metadata: total de linhas, o período e se filtrou uma pessoa — nunca
+  // a pessoa filtrada nem o conteúdo.
+  "audit.access_log_exported",
+  // Perfis de tela (item 5.6, migration 9497): o que cada membro VÊ no menu,
+  // sobre o que o papel permite. Metadata: nome e quantas áreas (perfil); o
+  // perfil novo ou `null` (membro). Apresentação, não permissão.
+  "perfil_de_tela.criado",
+  "perfil_de_tela.alterado",
+  "perfil_de_tela.removido",
+  "team.perfil_de_tela_changed",
+  // Lojas e filiais (item 5.4, módulo de tabela `lojas`, migration 9495).
+  // Metadata: nome/código da loja e os campos mudados; no estoque, loja, produto
+  // e a quantidade; no número e no orçamento, a loja escolhida (ou `null`).
+  "loja.settings_updated",
+  "loja.criada",
+  "loja.alterada",
+  "loja.removida",
+  "loja.padrao_definida",
+  "loja.estoque_alterado",
+  "loja.numero_vinculado",
+  "loja.proposta_vinculada",
+  // Chat do site (item 5.3, migration 9494): a configuração da janela foi
+  // salva (nome, saudação, cor, posição, domínios, ligado). Criar a conexão
+  // audita `channel.connected`. Metadata: o que mudou e quantos domínios —
+  // nunca a chave pública inteira.
+  "channel.webchat_updated",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

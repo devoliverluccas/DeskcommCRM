@@ -23,6 +23,7 @@ import { fusoDaOrganizacao, somarDiasNoFuso } from "@/lib/propostas/data-no-fuso
 import { sePropostasDesligadas } from "@/lib/propostas/porta";
 import { listarModelosDaOrganizacao } from "@/lib/propostas/modelos/catalogo-da-organizacao";
 import { resolverModelo } from "@/lib/propostas/modelos/resolver";
+import { registrarLojaDaPropostaNaCriacao } from "@/lib/lojas/proposta";
 import { z } from "zod";
 
 /**
@@ -249,6 +250,15 @@ export async function POST(req: NextRequest): Promise<Response> {
   // Vocabulário fechado da timeline (lib/leads/activity-vocabulary.ts) e
   // escritor canônico (lib/leads/activity-emitter.ts) — mesmo caminho que o
   // resto do CRM usa para gravar em crm_lead_activities, nunca um insert cru.
+  // Lojas e filiais (item 5.4): a proposta registra a loja — a do número da
+  // conversa, senão a padrão. Sem o módulo não faz nada e nunca derruba a criação.
+  await registrarLojaDaPropostaNaCriacao(
+    createAdminClient(),
+    authz.organizationId,
+    proposta.id,
+    input.conversation_id ?? null,
+  );
+
   await emitLeadActivity(supabase, {
     organizationId: authz.organizationId,
     leadId: input.lead_id,

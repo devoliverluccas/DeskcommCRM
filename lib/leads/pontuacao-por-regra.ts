@@ -22,16 +22,17 @@
  * gatilho do banco e a rota de mover emitem o mesmo fato), o dreno reprocessa
  * depois de uma queda — e o contato continua com UMA linha. A chave também é a
  * regra de negócio: a etapa alcançada pontua uma vez por negócio, a etiqueta uma
- * vez por contato, o orçamento uma vez por proposta.
+ * vez por contato, o orçamento uma vez por proposta, o link uma vez por link (e
+ * o link de saída já é POR contato — ver `links_de_saida_idempotencia_uniq`).
  */
 import { z } from "zod";
 
 /**
  * O vocabulário FECHADO de eventos que uma regra escuta — o MESMO do CHECK de
- * `regras_de_pontuacao.evento` (migration 9492). Só entra aqui fato que o
- * sistema já emite; "link clicado" ficou de fora porque não existe evento de
- * clique em link no repositório (a conversão de anúncio por clique é outra
- * coisa: é a origem da conversa, não um clique do contato num link nosso).
+ * `regras_de_pontuacao.evento` (migrations 9492 e 9499). Só entra aqui fato que
+ * o sistema já emite. `link_clicado` é o clique de GENTE num link rastreado de
+ * saída (`/l/<codigo>`, migration 9490) que tem contato; a conversão de anúncio
+ * por clique é outra coisa (é a origem da conversa, não um clique num link nosso).
  */
 export const EVENTOS_DE_PONTUACAO = [
   "mensagem_recebida",
@@ -41,6 +42,7 @@ export const EVENTOS_DE_PONTUACAO = [
   "orcamento_aceito",
   "etapa_alcancada",
   "tag_aplicada",
+  "link_clicado",
 ] as const;
 
 export type EventoDePontuacao = (typeof EVENTOS_DE_PONTUACAO)[number];
@@ -54,6 +56,7 @@ export const ROTULO_DO_EVENTO: Readonly<Record<EventoDePontuacao, string>> = {
   orcamento_aceito: "Orçamento aceito",
   etapa_alcancada: "Etapa alcançada",
   tag_aplicada: "Tag aplicada",
+  link_clicado: "Clicou num link",
 };
 
 /**
@@ -74,6 +77,9 @@ export const TIPOS_DO_EVENT_LOG: Readonly<Record<EventoDePontuacao, readonly str
   orcamento_aceito: ["proposal.accepted"],
   etapa_alcancada: ["lead.stage_changed"],
   tag_aplicada: ["lead.tag_added", "contact.tag_added"],
+  // Nasce `pending` em `fn_registrar_clique_de_saida` (9499) só quando o clique
+  // é de gente E o link tem contato; sem contato o fato nasce `done`.
+  link_clicado: ["link.clicked"],
 };
 
 export const EVENTOS_DO_EVENT_LOG: readonly string[] = [
@@ -102,6 +108,10 @@ export const CONDICAO_POR_EVENTO = {
   orcamento_aceito: semCondicao,
   etapa_alcancada: z.object({ stage_id: z.uuid() }).strict(),
   tag_aplicada: z.object({ tag: z.string().trim().min(1).max(60) }).strict(),
+  // Opcional: sem rótulo, qualquer link pontua; com rótulo, só o link marcado
+  // com ele (`{{link:https://…|rótulo}}` — o rótulo é a "campanha" do link). O
+  // limite é o do CHECK `links_de_saida_rotulo_valido`.
+  link_clicado: z.object({ rotulo: z.string().trim().min(1).max(60).optional() }).strict(),
 } as const satisfies Record<EventoDePontuacao, z.ZodType>;
 
 export type CondicaoDe<E extends EventoDePontuacao> = z.infer<(typeof CONDICAO_POR_EVENTO)[E]>;
@@ -225,13 +235,16 @@ export interface FatoPontuavel {
   /** A chave de idempotência do FATO (sem a regra — o banco junta os dois). */
   chave: string;
   ocorridoEm: string;
-  atributos: { stageId?: string; tags?: readonly string[] };
+  atributos: { stageId?: string; tags?: readonly string[]; rotulo?: string | null };
 }
 
 /** A tag como o casamento a compara: sem espaço nas pontas, sem caixa. */
 export function normalizarTag(tag: string): string {
   return tag.trim().toLocaleLowerCase("pt-BR");
 }
+
+/** O rótulo do link como o casamento o compara — mesma régua da tag. */
+export const normalizarRotulo = normalizarTag;
 
 /**
  * A chave do fato para UMA regra.
@@ -260,6 +273,11 @@ export function regraCasa(
   if (regra.evento === "tag_aplicada") {
     const alvo = normalizarTag(condicao.tag ?? "");
     return (fato.atributos.tags ?? []).some((t) => normalizarTag(t) === alvo);
+  }
+  if (regra.evento === "link_clicado") {
+    if (condicao.rotulo === undefined) return true;
+    const doLink = fato.atributos.rotulo;
+    return typeof doLink === "string" && normalizarRotulo(doLink) === normalizarRotulo(condicao.rotulo);
   }
   return true;
 }
@@ -298,7 +316,8 @@ export type PedidoDoFato =
   | { evento: "agendamento_marcado"; agendamentoId: string }
   | { evento: "orcamento_enviado" | "orcamento_aceito"; propostaId: string; leadId: string | null; contactId: string | null }
   | { evento: "etapa_alcancada"; leadId: string; stageId: string }
-  | { evento: "tag_aplicada"; leadId: string | null; contactId: string | null; tags: string[] };
+  | { evento: "tag_aplicada"; leadId: string | null; contactId: string | null; tags: string[] }
+  | { evento: "link_clicado"; linkId: string; contactId: string; rotulo: string | null };
 
 export interface LinhaDoEvento {
   id: string;
@@ -356,6 +375,16 @@ export function pedidosDoEvento(row: LinhaDoEvento, escutados: ReadonlySet<Event
         contactId: doNegocio ? null : texto(row.entity_id),
         tags,
       });
+      break;
+    }
+    case "link.clicked": {
+      // Só o fato com contato pontua; o sem contato nem deveria chegar aqui
+      // (nasce `done`), e se chegar sai sem pedido.
+      const linkId = texto(row.entity_id) ?? texto(p.link_id);
+      const contactId = texto(p.contact_id);
+      if (linkId && contactId && escutados.has("link_clicado")) {
+        pedidos.push({ evento: "link_clicado", linkId, contactId, rotulo: texto(p.rotulo) });
+      }
       break;
     }
   }

@@ -31,6 +31,7 @@ import { conversaoDeEtapaMetaHandler } from "@/lib/conversoes/etapa-meta.handler
 import { conversaoDeNascimentoMetaHandler } from "@/lib/conversoes/nascimento-meta.handler";
 import { conversaoDeCliqueMetaHandler } from "@/lib/conversoes/clique-meta.handler";
 import { conversaoDeVendaHandler } from "@/lib/conversoes/envio.handler";
+import { conversaoAnaliticaHandler } from "@/lib/conversoes/analitica.handler";
 import { avisoDeEtapaHandler } from "@/lib/leads/aviso-de-etapa.handler";
 import { avisoAoDonoDaCarteira } from "@/lib/carteira/aviso-ao-dono";
 import { comandaDoGanhoHandler } from "@/lib/financeiro/comanda-do-ganho.handler";
@@ -131,5 +132,8 @@ export function ensureHandlersRegistered(): void {
   registerHandler(conversaoDeEtapaMetaHandler);
   registerHandler(conversaoDeNascimentoMetaHandler);
   registerHandler(conversaoDeCliqueMetaHandler);
+  // GA4 e TikTok: consumidor próprio, para a retentativa de um não reprocessar
+  // o envio principal (ver o cabeçalho de `analitica.handler.ts`).
+  registerHandler(conversaoAnaliticaHandler);
   _registered = true;
 }

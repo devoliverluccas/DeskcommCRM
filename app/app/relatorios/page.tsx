@@ -5,7 +5,9 @@ import { redirect } from "next/navigation";
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { ROLE_RANK } from "@/lib/auth/types";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { lojasDaTela } from "@/lib/lojas/leitura";
 import { fusoDoRelatorio } from "@/lib/relatorios/janela";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
 import { RelatoriosClient } from "./_components/RelatoriosClient";
@@ -38,6 +40,8 @@ export default async function RelatoriosPage() {
     .eq("organization_id", activeOrg.orgId)
     .order("position");
   const funis = (funisDaOrg ?? []) as Array<{ id: string; name: string }>;
+  // Filtro "Loja" da aba Atendimentos (item 5.4): vazio sem o módulo `lojas`.
+  const lojas = (await lojasDaTela(createAdminClient(), activeOrg.orgId)).map((l) => ({ id: l.id, nome: l.nome }));
 
   return (
     <div className="flex h-full flex-col gap-5 md:p-2">
@@ -53,6 +57,7 @@ export default async function RelatoriosPage() {
           currentUserId={user.id}
           funis={funis}
           fuso={fusoDoRelatorio(activeOrg.timezone)}
+          lojas={lojas}
         />
       </Suspense>
     </div>

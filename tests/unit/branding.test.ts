@@ -1021,6 +1021,11 @@ const HOSTS_DECLARADOS: Record<string, EntradaDeHost> = {
     motivo:
       "coletor do Measurement Protocol do GA4 (`lib/plataformas-de-anuncio/ga4/conversions.ts`), para onde a venda e o lead vão quando a organização conecta o Google Analytics 4 (9488). Endereço do protocolo oficial; a propriedade é do cliente, o domínio é do Google.",
   },
+  "schemas.openxmlformats.org": {
+    categoria: "FORNECEDOR",
+    motivo:
+      "namespace XML do formato XLSX (Office Open XML) em `lib/audit/planilha-xlsx.ts`, que gera a planilha do Registro de acessos (5.2). Não é chamada de rede: é o identificador que o padrão ECMA-376 exige dentro do arquivo.",
+  },
   "business-api.tiktok.com": {
     categoria: "FORNECEDOR",
     motivo:

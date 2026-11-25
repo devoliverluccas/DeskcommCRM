@@ -148,7 +148,7 @@ describe("POST — criar (manager)", () => {
   it("zero pontos, evento fora do vocabulário e tag sem alvo: 422", async () => {
     papel("manager");
     expect((await POST(req({ nome: "x", evento: "mensagem_recebida", pontos: 0 }))).status).toBe(422);
-    expect((await POST(req({ nome: "x", evento: "link_clicado", pontos: 1 }))).status).toBe(422);
+    expect((await POST(req({ nome: "x", evento: "pagina_visitada", pontos: 1 }))).status).toBe(422);
     expect((await POST(req({ nome: "x", evento: "tag_aplicada", pontos: 1, condicao: {} }))).status).toBe(422);
     expect(createAdminClient).not.toHaveBeenCalled();
   });

@@ -259,3 +259,77 @@ describe("aplicarPontuacao — o consumidor", () => {
     ).rejects.toThrow("caiu");
   });
 });
+
+/**
+ * CLIQUE EM LINK RASTREADO (migration 9499). O fato `link.clicked` nasce
+ * `pending` só para clique de gente num link com contato; o payload traz
+ * `link_id`, `contact_id` e `rotulo`. Um link pontua UMA vez — e o link de
+ * saída já é por contato, então "uma vez por link por contato".
+ */
+describe("link_clicado", () => {
+  const LINK = "55555555-5555-4555-8555-555555555555";
+  const clique = (payload: Record<string, unknown> = {}, cliqueId = "k1") =>
+    linhaDoEvento(
+      "link.clicked",
+      { link_id: LINK, clique_id: cliqueId, contact_id: CONTATO, rotulo: "Black Friday", ...payload },
+      LINK,
+    );
+
+  it("está no vocabulário, com rótulo e assinando `link.clicked`", () => {
+    expect(EVENTOS_DE_PONTUACAO).toContain("link_clicado");
+    expect(ROTULO_DO_EVENTO.link_clicado).toBe("Clicou num link");
+    expect(TIPOS_DO_EVENT_LOG.link_clicado).toEqual(["link.clicked"]);
+    expect(pontuacaoPorRegraHandler.events).toContain("link.clicked");
+  });
+
+  it("schema: condição opcional por rótulo — vazio vale, texto vale, branco e chave estranha não", () => {
+    const base = { nome: "Clicou", evento: "link_clicado", pontos: 5 };
+    expect(criarRegraSchema.safeParse(base).success).toBe(true);
+    expect(criarRegraSchema.safeParse({ ...base, condicao: { rotulo: "bf" } }).success).toBe(true);
+    expect(criarRegraSchema.safeParse({ ...base, condicao: { rotulo: "  " } }).success).toBe(false);
+    expect(criarRegraSchema.safeParse({ ...base, condicao: { rotulo: "x".repeat(61) } }).success).toBe(false);
+    expect(criarRegraSchema.safeParse({ ...base, condicao: { tag: "vip" } }).success).toBe(false);
+  });
+
+  it("pedidosDoEvento: só com contato e só se alguma regra escuta", () => {
+    const todos = new Set(EVENTOS_DE_PONTUACAO);
+    expect(pedidosDoEvento(clique(), todos)).toEqual([
+      { evento: "link_clicado", linkId: LINK, contactId: CONTATO, rotulo: "Black Friday" },
+    ]);
+    expect(pedidosDoEvento(clique({ contact_id: null }), todos)).toEqual([]);
+    expect(pedidosDoEvento(clique(), new Set(["mensagem_recebida"] as const))).toEqual([]);
+  });
+
+  it("regraCasa: sem rótulo casa qualquer link; com rótulo, só o rótulo (sem caixa nem espaço)", () => {
+    const f = fato({ evento: "link_clicado", chave: `link_clicado:${LINK}`, atributos: { rotulo: "Black Friday" } });
+    expect(regraCasa(regra({ evento: "link_clicado" }), f)).toBe(true);
+    expect(regraCasa(regra({ evento: "link_clicado", condicao: { rotulo: " black friday" } }), f)).toBe(true);
+    expect(regraCasa(regra({ evento: "link_clicado", condicao: { rotulo: "natal" } }), f)).toBe(false);
+    const semRotulo = fato({ evento: "link_clicado", atributos: { rotulo: null } });
+    expect(regraCasa(regra({ evento: "link_clicado", condicao: { rotulo: "natal" } }), semRotulo)).toBe(false);
+    expect(regraCasa(regra({ evento: "link_clicado" }), semRotulo)).toBe(true);
+  });
+
+  it("consumidor: pontua o contato do payload, chave pelo link — clicar de novo não acumula", async () => {
+    const { db, extrato } = bancoFalso([regra({ id: "r-link", evento: "link_clicado", pontos: 15 })]);
+    const primeira = await aplicarPontuacao(db, clique({}, "k1"));
+    const segunda = await aplicarPontuacao(db, clique({}, "k2"));
+    expect(primeira).toEqual({ casados: 1, gravados: 1, pontos: 15 });
+    expect(segunda).toEqual({ casados: 1, gravados: 0, pontos: 0 });
+    expect([...extrato.keys()]).toEqual([`r-link|link_clicado:${LINK}`]);
+    expect(db.registrar).toHaveBeenCalledWith(
+      expect.objectContaining({ organizationId: ORG, contactId: CONTATO, leadId: null, chave: `link_clicado:${LINK}` }),
+    );
+    expect(db.contatoDoNegocio).not.toHaveBeenCalled();
+  });
+
+  it("consumidor: regra com rótulo de outra campanha não pontua; sem regra de link nada é consultado", async () => {
+    const { db } = bancoFalso([regra({ id: "r-natal", evento: "link_clicado", condicao: { rotulo: "natal" } })]);
+    expect(await aplicarPontuacao(db, clique())).toEqual({ casados: 0, gravados: 0, pontos: 0 });
+    expect(db.registrar).not.toHaveBeenCalled();
+
+    const vazio = bancoFalso([]);
+    expect((await aplicarPontuacao(vazio.db, clique())).casados).toBe(0);
+    expect(vazio.db.regrasAtivas).toHaveBeenCalledWith(ORG, ["link_clicado"]);
+  });
+});

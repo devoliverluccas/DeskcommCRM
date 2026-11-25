@@ -15,7 +15,10 @@ import { type NextRequest } from "next/server";
 import { fail, ok } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { lerLojaDoFiltro } from "@/lib/lojas/filtro";
+import { lojasLigadas } from "@/lib/lojas/modulo";
 import { fusoDoRelatorio } from "@/lib/relatorios/janela";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { nomesDosAtendentes } from "@/lib/users/nome-do-atendente";
 
@@ -94,12 +97,30 @@ export async function GET(req: NextRequest): Promise<Response> {
   if (!periodo.ok) return fail("validation_failed", t(MENSAGEM_DO_PERIODO[periodo.motivo]), 422, { requestId });
   const { janela } = periodo;
 
-  const { data, error } = await supabase.rpc("fn_relatorio_atendimentos", {
-    p_org: orgId,
-    p_de: janela.from,
-    p_ate: janela.to,
-    p_fuso: janela.tz,
-  });
+  // Filtro "Loja" (item 5.4): só com o módulo `lojas` instalado e ligado pela
+  // empresa. Sem ele o parâmetro não existe — 404, nunca um número "da loja"
+  // que na verdade é da organização inteira.
+  const loja = lerLojaDoFiltro(new URL(req.url).searchParams);
+  if (loja === "invalida") return fail("validation_failed", t("Dados inválidos."), 422, { requestId });
+  if (loja !== null && !(await lojasLigadas(createAdminClient(), orgId))) {
+    return fail("not_found", t("Módulo indisponível."), 404, { requestId });
+  }
+
+  const { data, error } =
+    loja === null
+      ? await supabase.rpc("fn_relatorio_atendimentos", {
+          p_org: orgId,
+          p_de: janela.from,
+          p_ate: janela.to,
+          p_fuso: janela.tz,
+        })
+      : await supabase.rpc("fn_lojas_relatorio_atendimentos", {
+          p_org: orgId,
+          p_de: janela.from,
+          p_ate: janela.to,
+          p_fuso: janela.tz,
+          p_loja: loja,
+        });
   if (error) return fail("internal_error", error.message, 500, { requestId });
 
   const bruto = (data ?? {}) as Record<string, unknown>;
@@ -131,7 +152,13 @@ export async function GET(req: NextRequest): Promise<Response> {
     })),
     por_atendente: porAtendente,
     desfechos: (bruto.desfechos ?? {}) as Record<string, number>,
-    motivos: await motivosDeEncerramento(supabase, orgId, janela),
+    motivos:
+      loja === null
+        ? await motivosDeEncerramento(supabase, orgId, janela)
+        : ((bruto.motivos ?? []) as Array<Record<string, unknown>>).map((m) => ({
+            motivo: String(m.motivo),
+            quantidade: numero(m.quantidade),
+          })),
   };
 
   return ok({ janela: { de: janela.de, ate: janela.ate, tz: janela.tz }, ...relatorio }, { requestId });

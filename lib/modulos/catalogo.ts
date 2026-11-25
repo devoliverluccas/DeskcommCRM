@@ -78,6 +78,16 @@ export const CATALOGO_DE_MODULOS: readonly ModuloCatalogo[] = [
       "e a IA marca, remarca e cancela pelo Amigo. Cada empresa cadastra o próprio token. " +
       "Contribuição de @jadsonlsouza, PR #4227.",
   },
+  {
+    // Item 5.4: as tabelas de lojas, estoque por loja, loja de cada número e
+    // loja de cada orçamento nascem só aqui (`fn_lojas_provisionar`).
+    slug: "lojas",
+    nome: "Lojas e filiais",
+    descricao:
+      "Cadastro das lojas da empresa, estoque de cada produto por loja, a loja que atende cada " +
+      "número e a loja de cada orçamento, com filtro por loja nos relatórios. Cada empresa liga o " +
+      "uso em Configurações › Lojas.",
+  },
 ];
 
 export function moduloDoCatalogo(slug: string): ModuloCatalogo | undefined {
