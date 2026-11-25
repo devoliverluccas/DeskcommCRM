@@ -1844,11 +1844,6 @@ export const AUDIT_ACTIONS = [
   "loja.estoque_alterado",
   "loja.numero_vinculado",
   "loja.proposta_vinculada",
-  // Chat do site (item 5.3, migration 9494): a configuração da janela foi
-  // salva (nome, saudação, cor, posição, domínios, ligado). Criar a conexão
-  // audita `channel.connected`. Metadata: o que mudou e quantos domínios —
-  // nunca a chave pública inteira.
-  "channel.webchat_updated",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

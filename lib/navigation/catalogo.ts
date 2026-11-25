@@ -836,17 +836,6 @@ export const NAV_CATALOG = [
     healthDot: true,
   },
   {
-    // Fase 5, item 5.3 (migration 9494): a bolha de conversa no site da empresa.
-    // A descrição cita "widget" e "site" porque é por esses nomes que se procura no ⌘K.
-    href: "/app/connections/chat-do-site",
-    label: "Chat do site",
-    description: "Uma bolha de conversa no seu site (widget): as mensagens chegam ao Inbox.",
-    icon: "PlugsConnected",
-    group: "canais",
-    minRole: "admin",
-    sidebar: true,
-  },
-  {
     // Módulo opcional (ADR-0002, #4227): a porta só existe depois que o dono da
     // instalação instala `amigo` em `/admin/modulos`. Mesmo filtro de cadências.
     href: "/app/integrations/amigo",

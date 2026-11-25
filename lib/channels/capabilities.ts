@@ -266,39 +266,6 @@ export const CHANNEL_CAPABILITIES: Record<ProviderDeMensagem, ChannelCapabilitie
     mensagemInterativa: false,
     marcaLidasPorMensagem: false,
   },
-  /**
-   * Chat do site (fase 5, item 5.3, migration 9494).
-   *
-   * Não há plataforma do outro lado: o adapter só carimba o id e a mensagem
-   * fica gravada para o visitante buscar (`./webchat/`). Por isso não existe
-   * janela de 24h, modelo aprovado, custo por mensagem nem risco de
-   * banimento — nenhuma das duas famílias de restrição se aplica.
-   *
-   * `minIntervalMs: null`: ninguém impõe ritmo ao que o visitante lê.
-   * `voiceNote: "none"`: a janela do site não toca nota de voz; o agente
-   * responde em texto e o gravador do Inbox some (`recusaNotaDeVoz`).
-   * `mensagemInterativa: false`: a v1 do script não desenha botões — o fluxo
-   * manda o texto numerado, que chega sempre.
-   * `marcaLidasPorMensagem: false`: não há "visto" a devolver ao visitante.
-   */
-  webchat: {
-    freeformOutsideWindow: true,
-    requiresTemplates: false,
-    canManageTemplates: false,
-    banRisk: false,
-    minIntervalMs: null,
-    voiceNote: "none",
-    groups: "none",
-    costPerMessage: false,
-    alteraMensagemEnviada: false,
-    podeReagir: false,
-    transmissao: false,
-    phonebook: false,
-    statusUpdates: false,
-    reportaConversao: false,
-    mensagemInterativa: false,
-    marcaLidasPorMensagem: false,
-  },
 };
 
 /**
@@ -334,8 +301,6 @@ export const CHANNEL_PROVIDER_DATAFY: ChannelProvider = "datafy";
 export const CHANNEL_PROVIDER_WACALLS: ChannelProvider = "wacalls";
 /** Bot do Telegram (Bot API, #3440) — canal de mensagem sem telefone. */
 export const CHANNEL_PROVIDER_TELEGRAM: ChannelProvider = "telegram";
-/** Chat do site (fase 5, item 5.3) — canal de mensagem sem telefone e sem plataforma. */
-export const CHANNEL_PROVIDER_WEBCHAT: ChannelProvider = "webchat";
 
 /**
  * O provider em que o NÚMERO é a conexão: pareado por QR, a linha só vira
@@ -404,9 +369,6 @@ export const PROVIDERS_DE_MENSAGEM = [
   // fala com quem o iniciou. `PROVIDERS_DE_TELEFONE` fica de fora de propósito,
   // e o motivo está lá embaixo.
   "telegram",
-  // Chat do site (fase 5): conversa com quem está na página. Fora de
-  // `PROVIDERS_DE_TELEFONE` pelo mesmo motivo do Telegram — não alcança número.
-  "webchat",
 ] as const satisfies readonly ProviderDeMensagem[];
 
 /**
@@ -434,7 +396,7 @@ export const PROVIDERS_DE_TELEFONE = [
   "meta_cloud",
   "zernio",
   "datafy",
-] as const satisfies readonly Exclude<(typeof PROVIDERS_DE_MENSAGEM)[number], "zernio_social" | "telegram" | "webchat">[];
+] as const satisfies readonly Exclude<(typeof PROVIDERS_DE_MENSAGEM)[number], "zernio_social" | "telegram">[];
 
 /**
  * `true` quando a linha de `channel_sessions` é um canal de mensagem.
@@ -524,9 +486,7 @@ export function canalConhecidoSemMensagem(provider: string | null | undefined): 
  * não num `false` falso na capability de janela: mentir na janela mudaria o
  * que o atendimento pode fazer só para esconder a campanha.
  */
-// O chat do site (fase 5) também: o visitante só lê enquanto está na página, e
-// uma campanha por ali seria gravar recado para quem talvez nunca volte.
-const PROVIDERS_SEM_CAMPANHA = ["telegram", "webchat"] as const satisfies readonly ProviderDeMensagem[];
+const PROVIDERS_SEM_CAMPANHA = ["telegram"] as const satisfies readonly ProviderDeMensagem[];
 
 /**
  * O canal de campanha por E-MAIL (#3441, fatia E2a).

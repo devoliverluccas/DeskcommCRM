@@ -161,17 +161,6 @@ const LEITURAS_LEGITIMAS: ReadonlyArray<{
       "quem já atendia: a proteção que existe para não mexer no webhook de " +
       "ninguém passaria a autorizar exatamente isso.",
   },
-  {
-    arquivo: "lib/channels/webchat/sessao.ts",
-    funcao: "conexaoPelaChave",
-    filtros: ["provider", "webchat_public_key", "archived_at"],
-    motivo:
-      "A rota PÚBLICA do chat do site só tem a chave do snippet: é esta consulta " +
-      "que DESCOBRE a organização, a partir da linha. Não há organization_id " +
-      "confiável antes dela (vir do corpo seria o anti-pattern 10). A chave tem " +
-      "índice único em TODA a tabela (migration 9494), então duas linhas não " +
-      "existem e o maybeSingle() não cai no PGRST116.",
-  },
 ];
 
 /** A consulta é EXATAMENTE a declarada (arquivo + função + conjunto de filtros)? */

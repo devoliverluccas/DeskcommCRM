@@ -51,9 +51,6 @@ import { SOCIAL_NETWORKS } from "./social/catalog";
 export const CANAIS_DE_CONVERSA = [
   "whatsapp",
   "telegram",
-  // Chat do site (fase 5, migration 9494): canal nosso, sem plataforma — não
-  // existe no catálogo social e não poderia ser derivado dele.
-  "webchat",
   ...SOCIAL_NETWORKS.filter((rede) => rede.inbox).map((rede) => rede.id),
 ] as const satisfies readonly string[];
 

@@ -9590,21 +9590,15 @@ alter table public.channel_sessions
   add column if not exists telegram_bot_id text,
   add column if not exists telegram_token_encrypted bytea;
 
--- webchat (migration 9494, chat do site) — as colunas do provider novo
--- nascem ANTES das constraints abaixo, que as referenciam.
-alter table public.channel_sessions
-  add column if not exists webchat_public_key text,
-  add column if not exists webchat_config jsonb;
-
 alter table public.channel_sessions
   drop constraint if exists channel_sessions_provider_check;
 
 alter table public.channel_sessions
   add constraint channel_sessions_provider_check
-  -- 'wacalls' (0233), 'zernio_social' (0368), 'datafy' (0387), 'telegram'
-  -- (9342) e 'webchat' (9494) somados AQUI — UM bloco só por constraint (não duplicar drop+add
+  -- 'wacalls' (0233), 'zernio_social' (0368), 'datafy' (0387) e 'telegram'
+  -- (9342) somados AQUI — UM bloco só por constraint (não duplicar drop+add
   -- por migration).
-  check (provider = any (array['waha'::text, 'meta_cloud'::text, 'zernio'::text, 'wacalls'::text, 'zernio_social'::text, 'datafy'::text, 'telegram'::text, 'webchat'::text]));
+  check (provider = any (array['waha'::text, 'meta_cloud'::text, 'zernio'::text, 'wacalls'::text, 'zernio_social'::text, 'datafy'::text, 'telegram'::text]));
 
 alter table public.channel_sessions
   drop constraint if exists channel_sessions_provider_ref_check;
@@ -9619,9 +9613,7 @@ alter table public.channel_sessions
     (provider = 'wacalls'    and wacalls_session_id    is not null) or
     (provider = 'datafy'     and datafy_phone_number_id is not null) or
     -- Bot do Telegram (migration 9342): endereça pelo id do robô.
-    (provider = 'telegram'   and telegram_bot_id      is not null) or
-    -- Chat do site (migration 9494): endereça pela chave pública.
-    (provider = 'webchat'    and webchat_public_key   is not null)
+    (provider = 'telegram'   and telegram_bot_id      is not null)
   );
 
 comment on column public.channel_sessions.zernio_account_id is
@@ -35720,7 +35712,7 @@ comment on column public.contacts.social_identity is
 -- primeira conexão de rede social.
 alter table public.conversations drop constraint if exists conversations_channel_check;
 alter table public.conversations add constraint conversations_channel_check
-  check (channel in ('whatsapp', 'instagram', 'facebook', 'telegram', 'webchat'));
+  check (channel in ('whatsapp', 'instagram', 'facebook', 'telegram'));
 
 
 -- APÊNDICE 20260921030100_0369_prospeccao_nativa.sql
@@ -86519,43 +86511,6 @@ create trigger trg_crm_lead_activities_fato_de_proposta
   when (new.type in ('proposal_sent', 'proposal_accepted'))
   execute function public.fn_crm_lead_activities_fato_de_proposta();
 
-
--- ---- chat do site: chave pública, configuração e índice (migration 9494) ----
--- Espelho de supabase/migrations/20261125100100_9494_canal_chat_do_site.sql.
--- O vocabulário (`provider`, `provider_ref_check`, `conversations.channel`) e as
--- colunas entram nos blocos ÚNICOS lá em cima; este bloco só acrescenta a forma,
--- o índice e os comentários. O visitante NÃO tem tabela: é contato sem telefone
--- (`contacts.social_identity = webchat:<sessão>:<sha256 do token>`).
-alter table public.channel_sessions
-  add column if not exists webchat_public_key text,
-  add column if not exists webchat_config jsonb;
-
-do $webchat_forma$
-begin
-  alter table public.channel_sessions drop constraint if exists channel_sessions_webchat_forma_check;
-  alter table public.channel_sessions add constraint channel_sessions_webchat_forma_check check (
-    (webchat_public_key is null or webchat_public_key ~ '^[A-Za-z0-9_-]{32,64}$')
-    and (webchat_config is null or jsonb_typeof(webchat_config) = 'object')
-  );
-end
-$webchat_forma$;
-
-create unique index if not exists channel_sessions_webchat_public_key_unique
-  on public.channel_sessions (webchat_public_key)
-  where webchat_public_key is not null;
-
-do $canal_chat_do_site$
-begin
-  if to_regclass('public.channel_sessions') is not null then
-    comment on column public.channel_sessions.webchat_public_key is
-      'Chave PÚBLICA do chat do site (vai no data-chave do snippet). Só identifica a conexão; a proteção é Origin conferido + limite por IP/visitante. Lida por lib/channels/webchat/sessao.ts.';
-    comment on column public.channel_sessions.webchat_config is
-      'Configuração do chat do site (nome, saudação, cor, posição, domínios permitidos, ligado). Schema central em lib/channels/webchat/config.ts; ninguém lê path solto.';
-  end if;
-end
-$canal_chat_do_site$;
-
-notify pgrst, 'reload schema';
 
 -- ---- lojas e filiais como módulo oficial de tabela (migration 9495) ----
 --

@@ -11,9 +11,6 @@ export function channelBrand(
       return "whatsapp";
     case "telegram":
       return "telegram";
-    // Chat do site (fase 5): a "rede" é o próprio site da empresa.
-    case "webchat":
-      return "site";
     case "zernio_social":
       if (session.social_platform === "instagram") return "instagram";
       if (session.social_platform === "facebook") return "messenger";

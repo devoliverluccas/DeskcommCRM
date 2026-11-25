@@ -32,9 +32,7 @@ export const AI_TEST_SOCIAL_IDENTITIES_KEY = "ai_test_social_identities" as cons
  * de uma conta de 24 dígitos hexadecimais.
  */
 export const REDES_COM_TESTADOR_SOCIAL: readonly string[] = CANAIS_DE_CONVERSA.filter(
-  // `webchat` (chat do site, fase 5): o visitante é anônimo por desenho — não
-  // há conta de rede a cadastrar como testadora.
-  (canal) => canal !== "whatsapp" && canal !== "telegram" && canal !== "webchat",
+  (canal) => canal !== "whatsapp" && canal !== "telegram",
 );
 
 /** Teto da lista por canal — é lista de teste, não de público. O mesmo teto vive na RPC. */

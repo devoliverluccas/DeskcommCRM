@@ -73,14 +73,6 @@ export function origemDoNegocioPeloCanal(canal: string | null | undefined): Orig
       motivo: "primeira mensagem recebida no Telegram",
     };
   }
-  // Chat do site (fase 5, item 5.3): canal nosso, fora do catálogo social.
-  if (canal === "webchat") {
-    return {
-      rotulo: "Chat do site",
-      source: "webchat",
-      motivo: "primeira mensagem recebida no chat do site",
-    };
-  }
   const rede = SOCIAL_NETWORKS.find((r) => r.inbox && r.id === canal);
   if (!rede) return ORIGEM_DO_WHATSAPP;
   return {

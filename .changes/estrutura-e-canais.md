@@ -1,7 +1,7 @@
 ---
 impacto: capacidade_nova
 secao: adicionado
-titulo: Configurações numa página, registro de acessos, chat do site, lojas e filiais, saúde do número oficial e perfis de tela
+titulo: Configurações numa página, registro de acessos, lojas e filiais, saúde do número oficial e perfis de tela
 ---
 
 Configurações ganhou um menu lateral próprio, com busca e cinco grupos: Sua conta,
@@ -13,11 +13,6 @@ senha e verificação em duas etapas, com o aparelho ("Chrome no Windows") e o I
 mascarado para quem não é admin. A lista exporta em planilha. As entradas e as
 saídas passam a ser gravadas na empresa ativa da sessão. A entrada com Google
 também guarda IP e navegador.
-
-Em Conexões › Chat do site, a empresa liga uma bolha de conversa no próprio site:
-ela escolhe saudação, cor, posição e os domínios em que o chat aparece, e copia o
-código que vai no site. Quem escreve vira contato e a conversa chega ao Inbox. O
-agente de IA responde se estiver liberado no canal.
 
 O módulo opcional "Lojas e filiais", instalado pelo dono do servidor e ligado pela
 empresa, cadastra lojas, guarda o estoque de cada uma, liga cada número a uma loja
