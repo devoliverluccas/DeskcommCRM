@@ -1844,6 +1844,13 @@ export const AUDIT_ACTIONS = [
   "loja.estoque_alterado",
   "loja.numero_vinculado",
   "loja.proposta_vinculada",
+  // Chat no site (Spec 36, F1): a conexão de chat criada, editada e com a chave pública
+  // girada. Metadata leva só o canal e, na edição, os NOMES dos campos alterados.
+  "channel.webchat_created",
+  "channel.webchat_updated",
+  "channel.webchat_key_rotated",
+  // Pausa do chat: emitida só quando o valor MUDA. Metadata leva o canal e o novo valor.
+  "channel.webchat_paused",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */
